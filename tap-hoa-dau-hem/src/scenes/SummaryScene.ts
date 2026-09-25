@@ -51,7 +51,22 @@ export class SummaryScene extends Phaser.Scene {
       txt(this, W / 2, y + 8, `🏆 Bán chạy nhất: ${p.icon} ${p.name} (${sum.bestSeller.qty})`, { size: 14, bold: true, origin: [0.5, 0], color: HEX.ink });
       y += 34;
     }
-    if (sum.left > sum.served && sum.served + sum.left > 0) {
+    const missed = sum.missed ?? [];
+    if (missed.length > 0) {
+      const list = missed
+        .slice(0, 3)
+        .map((m) => `${product(m.productId).name} (${m.qty})`)
+        .join(', ');
+      const t = txt(this, W / 2, y + 6, `📦 Khách hỏi mà hết hàng: ${list}\nNhập thêm những món này nhé!`, {
+        size: 13,
+        bold: true,
+        color: HEX.red,
+        origin: [0.5, 0],
+        align: 'center',
+        wrap: 290,
+      });
+      y += t.height + 10;
+    } else if (sum.left > sum.served && sum.served + sum.left > 0) {
       const tip = txt(this, W / 2, y + 6, 'Mẹo: khách bỏ về nhiều? Nhập đủ các món và nạp kệ thường xuyên.', { size: 12, color: HEX.muted, origin: [0.5, 0], align: 'center', wrap: 280 });
       y += tip.height + 10;
     }

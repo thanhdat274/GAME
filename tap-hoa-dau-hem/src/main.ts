@@ -7,7 +7,10 @@ import { MorningScene } from './scenes/MorningScene';
 import { ShopScene } from './scenes/ShopScene';
 import { SummaryScene } from './scenes/SummaryScene';
 import { TitleScene } from './scenes/TitleScene';
+import { installRoundedRectFix } from './ui/roundrect';
 import { H, W, ZOOM } from './ui/theme';
+
+installRoundedRectFix();
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

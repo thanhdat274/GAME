@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
 import type { Customer } from '../core/customers';
+import type { CustomerType } from '../core/data';
 import { DATA, product } from '../core/data';
 import { DaySession, endDay } from '../core/day';
 import { formatClock, formatMoney, shelfQty } from '../core/state';
 import { G, persist } from '../game';
-import { bill, customerSprite, drawShopInterior, productIcon } from '../ui/art';
+import { bill, customerSprite, drawShopInterior, productIcon, setWalkFrame } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
 import { ShelfView, slotCenter } from '../ui/shelves';
 import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sound';
@@ -25,11 +26,19 @@ interface CustomerView {
   bar: Bar;
 }
 
+interface Walker {
+  sprite: Phaser.GameObjects.Image;
+  type: CustomerType;
+}
+
 export class ShopScene extends Phaser.Scene {
   private session!: DaySession;
   private hud!: Hud;
   private shelves!: ShelfView;
   private views = new Map<number, CustomerView>();
+  /** Nhân vật đang đi (để đổi khung hình bước chân). */
+  private walkers = new Set<Walker>();
+  private walkFrame: 0 | 1 = 0;
   private panelLayer!: Phaser.GameObjects.Container;
   private panelMode: string = '';
   private trayText: Phaser.GameObjects.Text | null = null;
@@ -45,6 +54,7 @@ export class ShopScene extends Phaser.Scene {
   create(): void {
     setupCamera(this);
     this.views.clear();
+    this.walkers.clear();
     this.panelMode = '';
     this.pauseLayer = null;
     this.ending = false;
@@ -63,6 +73,14 @@ export class ShopScene extends Phaser.Scene {
     this.panelLayer = this.add.container(0, 0).setDepth(300);
 
     this.wireEvents();
+    this.time.addEvent({
+      delay: 150,
+      loop: true,
+      callback: () => {
+        this.walkFrame = this.walkFrame === 0 ? 1 : 0;
+        for (const w of this.walkers) if (w.sprite.active) setWalkFrame(w.sprite, w.type, this.walkFrame);
+      },
+    });
     this.renderPanel(true);
     this.shelves.render(s, this.shelfOpts());
 
@@ -164,9 +182,9 @@ export class ShopScene extends Phaser.Scene {
       if (Math.abs(v.sprite.x - x) > 1) {
         this.tweens.killTweensOf(v.sprite);
         const dur = Math.abs(v.sprite.x - x) * 6;
-        v.sprite.setFlipX(x > v.sprite.x);
-        this.tweens.add({ targets: v.sprite, x, duration: dur, ease: 'Linear' });
-        this.tweens.add({ targets: v.sprite, y: FEET_Y - 3, yoyo: true, repeat: Math.floor(dur / 160), duration: 80 });
+        v.sprite.setFlipX(x > v.sprite.x).setY(FEET_Y);
+        const walker = this.startWalking(v.sprite, c.type);
+        this.tweens.add({ targets: v.sprite, x, duration: dur, ease: 'Linear', onComplete: () => this.stopWalking(walker) });
       }
     });
   }
@@ -182,18 +200,34 @@ export class ShopScene extends Phaser.Scene {
       floatText(this, fx, v.sprite.y - 72, `${face} ${says}`.trim(), reason === 'served' ? HEX.green : HEX.red, 14);
       if (reason !== 'served') play('wrong');
       this.tweens.killTweensOf(v.sprite);
-      v.sprite.setFlipX(true);
+      v.sprite.setFlipX(true).setY(FEET_Y);
+      const walker = this.startWalking(v.sprite, c.type);
       this.tweens.add({
         targets: v.sprite,
         x: DOOR_X + 20,
         alpha: 0,
         duration: 700,
         delay: 250,
-        onComplete: () => v.sprite.destroy(),
+        onComplete: () => {
+          this.walkers.delete(walker);
+          v.sprite.destroy();
+        },
       });
     }
     this.layoutQueue();
     this.renderPanel(true);
+  }
+
+  private startWalking(sprite: Phaser.GameObjects.Image, type: CustomerType): Walker {
+    for (const w of this.walkers) if (w.sprite === sprite) this.walkers.delete(w);
+    const w = { sprite, type };
+    this.walkers.add(w);
+    return w;
+  }
+
+  private stopWalking(w: Walker): void {
+    this.walkers.delete(w);
+    if (w.sprite.active) setWalkFrame(w.sprite, w.type, 0);
   }
 
   private flyItem(productId: string, shelf: number, slot: number, c: Customer): void {

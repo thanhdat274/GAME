@@ -35,8 +35,13 @@ export function densityAt(minute: number): number {
 }
 
 /** Thời gian trung bình (giây thật) giữa hai khách. */
-export function meanSpawnSeconds(minute: number, ratingMul: number): number {
-  return DATA.balance.baseSpawnSeconds / (densityAt(minute) * ratingMul);
+export function meanSpawnSeconds(minute: number, ratingMul: number, day = 99): number {
+  return DATA.balance.baseSpawnSeconds / (densityAt(minute) * ratingMul * newShopMultiplier(day));
+}
+
+/** Tiệm mới mở ít người biết: ngày đầu ít khách hơn. */
+export function newShopMultiplier(day: number): number {
+  return DATA.balance.newShopRamp[day - 1] ?? 1;
 }
 
 export function pickCustomerType(rng: Rng, types: CustomerType[] = DATA.customers): CustomerType {
@@ -47,7 +52,7 @@ export function pickCustomerType(rng: Rng, types: CustomerType[] = DATA.customer
 export function generateOrder(type: CustomerType, level: number, rng: Rng): OrderLine[] {
   const cats = unlockedCategories(level);
   const products = unlockedProducts(level);
-  const countWeights = [0.5, 0.35, 0.15].slice(0, type.maxItems);
+  const countWeights = DATA.balance.orderLineWeights.slice(0, type.maxItems);
   const count = rng.weightedIndex(countWeights) + 1;
   const lines: OrderLine[] = [];
   for (let i = 0; i < count; i++) {
@@ -59,7 +64,7 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng): Orde
     // Món rẻ (mì gói, muối) được mua thường xuyên hơn món đắt (dầu ăn).
     const p = pool[rng.weightedIndex(pool.map((x) => 1 / Math.sqrt(x.price)))];
     // Món rẻ thì hay mua nhiều hơn.
-    const maxQty = p.price <= 5000 ? 3 : p.price <= 15000 ? 2 : 1;
+    const maxQty = DATA.balance.qtyByPrice.find((q) => p.price <= q.maxPrice)?.maxQty ?? 1;
     lines.push({ productId: p.id, qty: rng.int(1, maxQty), picked: 0 });
   }
   if (lines.length === 0) lines.push({ productId: rng.pick(products).id, qty: 1, picked: 0 });

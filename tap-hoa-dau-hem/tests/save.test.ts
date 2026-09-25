@@ -56,6 +56,15 @@ describe('lưu game', () => {
     expect(state.settings).toEqual({ sound: false, autoChange: true });
   });
 
+  it('bản lưu cũ đang giữa ngày (chưa có "missed") vẫn tải được', () => {
+    const old = createNewGame() as unknown as { today: Record<string, unknown>; yesterdayMissed?: unknown };
+    delete old.today.missed;
+    delete old.yesterdayMissed;
+    const state = migrate({ version: 1, state: old as unknown as Record<string, unknown> });
+    expect(state.today.missed).toEqual({});
+    expect(state.yesterdayMissed).toEqual({});
+  });
+
   it('từ chối bản lưu mới hơn game', () => {
     expect(() => migrate({ version: 99, state: {} })).toThrow();
   });

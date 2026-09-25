@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Bậc kho
-Sức chứa kho SHALL bằng sức chứa gốc theo bậc (kệ gỗ 20, kệ sắt 40, kho lớn 70 ô) cộng thêm 10 ô cho mỗi kệ kho đặt trên mặt bằng.
+Sức chứa kho SHALL bằng sức chứa gốc theo bậc (kệ gỗ 30, kệ sắt 50, kho lớn 80 ô) cộng thêm 10 ô cho mỗi kệ kho đặt trên mặt bằng.
 
 #### Scenario: Nâng cấp kho
 - **WHEN** người chơi level 8 trả 250.000đ nâng lên kệ sắt
-- **THEN** sức chứa gốc từ 20 lên 40 ô
+- **THEN** sức chứa gốc từ 30 lên 50 ô
 
 #### Scenario: Thêm kệ kho
 - **WHEN** người chơi đặt 2 kệ kho lên sân sau

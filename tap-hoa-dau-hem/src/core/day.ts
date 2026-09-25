@@ -97,7 +97,7 @@ export class DaySession {
       if (this.nextSpawnIn <= 0) {
         if (this.queue.length < b.maxQueue) {
           this.spawn();
-          const mean = meanSpawnSeconds(this.state.clock, ratingSpawnMultiplier(averageRating(this.state)));
+          const mean = meanSpawnSeconds(this.state.clock, ratingSpawnMultiplier(averageRating(this.state)), this.state.day);
           this.nextSpawnIn = Math.max(1, this.rng.exponential(mean));
         } else {
           this.nextSpawnIn = 0.5;
@@ -142,6 +142,7 @@ export class DaySession {
     c.status = 'picking';
     const anyOnShelf = c.order.some((l) => this.availableOnShelf(l.productId) > 0);
     if (!anyOnShelf) {
+      this.recordMissed(c);
       this.leave(c, 'nothing');
       return;
     }
@@ -156,6 +157,15 @@ export class DaySession {
       }),
     );
     return n;
+  }
+
+  /** Ghi nhận phần khách muốn mua nhưng kệ đã hết (để gợi ý nhập hàng hôm sau). */
+  private recordMissed(c: Customer): void {
+    const missed = this.state.today.missed;
+    for (const l of c.order) {
+      const lack = l.qty - l.picked;
+      if (lack > 0 && this.availableOnShelf(l.productId) === 0) missed[l.productId] = (missed[l.productId] ?? 0) + lack;
+    }
   }
 
   isRefilling(shelf: number, slot: number): number | null {
@@ -197,10 +207,14 @@ export class DaySession {
     if (!c || c.status !== 'picking') return;
     const total = orderTotal(c);
     if (total === 0) {
+      this.recordMissed(c);
       this.leave(c, 'nothing');
       return;
     }
-    if (!orderComplete(c)) c.penalty += 1;
+    if (!orderComplete(c)) {
+      c.penalty += 1;
+      this.recordMissed(c);
+    }
     c.total = total;
     c.bill = customerPayment(total, this.rng);
     c.changeDue = c.bill - total;
@@ -342,10 +356,14 @@ export function endDay(state: GameState): DaySummary {
     avgRating: t.ratingCount ? t.ratingSum / t.ratingCount : 0,
     expGained: t.expGained,
     bestSeller: best,
+    missed: Object.entries(t.missed)
+      .map(([productId, qty]) => ({ productId, qty }))
+      .sort((a, b) => b.qty - a.qty),
     levelUps,
     capReached: isAtCap(state) && state.exp >= nextCapExp(),
   };
   state.yesterdaySold = { ...t.sold };
+  state.yesterdayMissed = { ...t.missed };
   state.phase = 'summary';
   state.lastSummary = summary;
   return summary;

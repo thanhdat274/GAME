@@ -19,6 +19,8 @@ export interface DayStats {
   ratingCount: number;
   expGained: number;
   sold: Record<string, number>;
+  /** Số món khách hỏi mà kệ đã hết (nhu cầu bị bỏ lỡ). */
+  missed: Record<string, number>;
 }
 
 export interface DaySummary {
@@ -34,6 +36,8 @@ export interface DaySummary {
   avgRating: number;
   expGained: number;
   bestSeller: { productId: string; qty: number } | null;
+  /** Các món bị hỏi mà hết hàng, nhiều nhất trước. */
+  missed: { productId: string; qty: number }[];
   levelUps: number[];
   capReached: boolean;
 }
@@ -58,6 +62,7 @@ export interface GameState {
   shelves: Slot[][];
   ratings: number[];
   yesterdaySold: Record<string, number>;
+  yesterdayMissed: Record<string, number>;
   today: DayStats;
   lastGrandmaDay: number;
   seenIntro: boolean;
@@ -71,7 +76,7 @@ export interface GameState {
 export const MAX_SHELVES = 3;
 
 export function emptyStats(): DayStats {
-  return { revenue: 0, cogs: 0, tips: 0, overpaid: 0, served: 0, happy: 0, left: 0, ratingSum: 0, ratingCount: 0, expGained: 0, sold: {} };
+  return { revenue: 0, cogs: 0, tips: 0, overpaid: 0, served: 0, happy: 0, left: 0, ratingSum: 0, ratingCount: 0, expGained: 0, sold: {}, missed: {} };
 }
 
 export function createNewGame(): GameState {
@@ -90,6 +95,7 @@ export function createNewGame(): GameState {
     ),
     ratings: [],
     yesterdaySold: {},
+    yesterdayMissed: {},
     today: emptyStats(),
     lastGrandmaDay: -99,
     seenIntro: false,

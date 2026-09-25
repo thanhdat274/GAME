@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DATA } from '../src/core/data';
 import { DaySession, endDay, grandmaHelp, openShop, startNextDay } from '../src/core/day';
-import type { Customer } from '../src/core/customers';
+import { meanSpawnSeconds, newShopMultiplier, type Customer } from '../src/core/customers';
 import { createNewGame, type GameState } from '../src/core/state';
 import { makeChange } from '../src/core/change';
 
@@ -221,6 +221,51 @@ describe('phiên bán hàng', () => {
       expect(d.autoChange()).toBe(true);
       expect(s.today.tips).toBe(tips0);
     }
+  });
+});
+
+describe('nhu cầu bị bỏ lỡ', () => {
+  it('kệ trống: ghi lại món khách hỏi mà hết, sang ngày sau hiện ở "hôm qua"', () => {
+    const s = createNewGame();
+    openShop(s);
+    const d = new DaySession(s, 31);
+    let wanted = 0;
+    d.events.on('customerLeft', (e) => {
+      if (e.reason === 'nothing') wanted += e.customer.order.reduce((a, l) => a + l.qty, 0);
+    });
+    for (let i = 0; i < 300; i++) d.tick(0.1);
+    const total = Object.values(s.today.missed).reduce((a, b) => a + b, 0);
+    expect(total).toBe(wanted);
+    expect(total).toBeGreaterThan(0);
+    const sum = endDay(s);
+    expect(sum.missed[0].qty).toBeGreaterThanOrEqual(sum.missed[sum.missed.length - 1].qty);
+    expect(s.yesterdayMissed).toEqual(s.today.missed);
+  });
+
+  it('tính tiền thiếu món vì kệ hết: ghi phần còn thiếu', () => {
+    const s = stockedGame();
+    const d = new DaySession(s, 10);
+    let c = untilFront(d);
+    for (let guard = 0; guard < 80 && !(c.order.length >= 2); guard++) {
+      pickAll(d, c);
+      c = untilFront(d);
+    }
+    const [first, second] = c.order;
+    // Làm trống món thứ hai trên kệ.
+    for (const row of s.shelves) for (const slot of row) if (slot.productId === second.productId) slot.qty = 0;
+    const pos = findSlot(s, first.productId)!;
+    d.pick(pos[0], pos[1]);
+    d.checkout();
+    expect(s.today.missed[second.productId]).toBe(second.qty);
+  });
+});
+
+describe('tiệm mới mở', () => {
+  it('ngày 1 và 2 ít khách hơn, từ ngày 3 bình thường', () => {
+    expect(newShopMultiplier(1)).toBe(0.6);
+    expect(newShopMultiplier(2)).toBe(0.8);
+    expect(newShopMultiplier(3)).toBe(1);
+    expect(meanSpawnSeconds(600, 1, 1)).toBeGreaterThan(meanSpawnSeconds(600, 1, 3));
   });
 });
 

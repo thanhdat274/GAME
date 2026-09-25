@@ -56,9 +56,9 @@ describe('nhập hàng', () => {
   it('kho đầy thì từ chối', () => {
     const s = createNewGame();
     s.money = 10_000_000;
-    // Gạo size 2: 110 bao = 11 lần 10 → 22 ô > 20.
-    expect(checkCart(s, { gao: 110 })).toMatchObject({ ok: false, reason: 'space' });
-    expect(checkCart(s, { gao: 100 }).ok).toBe(true);
+    // Gạo size 2: 160 bao = 16 lần 10 → 32 ô > 30.
+    expect(checkCart(s, { gao: 160 })).toMatchObject({ ok: false, reason: 'space' });
+    expect(checkCart(s, { gao: 150 }).ok).toBe(true);
   });
 
   it('không mua được món chưa mở khóa', () => {
@@ -115,6 +115,30 @@ describe('kệ hàng', () => {
     const s = createNewGame();
     s.warehouse = { mi_goi: 5 };
     expect(() => assignSlot(s, 2, 0, 'mi_goi')).toThrow();
+  });
+
+  it('tự bày: món mới vẫn có ô dù kệ đã kín (lấy ô của món chiếm nhiều ô)', () => {
+    const s = createNewGame();
+    s.level = 4;
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 6; c++) s.shelves[r][c] = { productId: r === 0 ? 'mi_goi' : 'muoi', qty: 5 };
+    s.warehouse = { pin: 6, xa_phong: 3 };
+    autoArrange(s);
+    const onShelf = (id: string) => s.shelves.flat().filter((x) => x.productId === id && x.qty > 0).length;
+    expect(onShelf('pin')).toBe(1);
+    expect(onShelf('xa_phong')).toBe(1);
+    expect(onShelf('mi_goi')).toBeGreaterThan(0);
+    expect(onShelf('muoi')).toBeGreaterThan(0);
+    // Hàng của ô bị lấy lại quay về kho, không mất.
+    const total = (id: string) => s.shelves.flat().filter((x) => x.productId === id).reduce((a, x) => a + x.qty, 0) + (s.warehouse[id] ?? 0);
+    expect(total('mi_goi') + total('muoi')).toBe(90);
+  });
+
+  it('tự bày dọn ô đã hết hàng cả trên kệ lẫn trong kho', () => {
+    const s = createNewGame();
+    s.shelves[0][0] = { productId: 'gao', qty: 0 };
+    s.warehouse = { muoi: 5 };
+    autoArrange(s);
+    expect(s.shelves.flat().some((x) => x.productId === 'gao')).toBe(false);
   });
 
   it('tự bày lấp ô trống bằng hàng trong kho', () => {

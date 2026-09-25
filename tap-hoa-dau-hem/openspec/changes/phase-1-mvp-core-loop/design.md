@@ -51,7 +51,7 @@ Dùng mulberry32 với seed theo ngày để tái hiện bug và test cân bằn
 Khách trả bằng tờ lớn nhất phù hợp (ví dụ đơn 13.000đ → trả 20.000đ). Người chơi chạm các tờ 1k/2k/5k/10k/20k/50k/100k/200k vào khay rồi bấm "Đưa". Đúng số tiền → thành công; thời gian < 4s và không bấm nhầm → tip 1.000–3.000đ. Thiếu → khách phàn nàn (-sao); thừa → mất phần thừa. Có nút "Tự tính" mở khóa ở level 3 cho người chơi lười (không có tip).
 
 ### D6. Kinh tế khởi điểm (mặc định, nằm trong balance.json)
-- Tiền đầu: 300.000đ. Kho: 20 ô. 2 kệ × 6 ô, mỗi ô chứa tối đa 5 đơn vị cùng loại.
+- Tiền đầu: 300.000đ. Kho: 30 ô (tăng từ 20 sau chơi thử bằng bot: Lv4 có 14 món, 20 ô gây thiếu hàng liên tục). 2 kệ × 6 ô, mỗi ô chứa tối đa 5 đơn vị cùng loại.
 - Lãi gộp mục tiêu 20–40%/món. Một ngày chơi tốt lãi 60–120k ở level 1.
 - EXP: +1 mỗi món bán, +3 mỗi khách hài lòng. Mốc level: L2 = 120, L3 = 350, L4 = 700 EXP tích lũy.
 - Sao tiệm: trung bình trượt 20 khách gần nhất (1–5 sao).

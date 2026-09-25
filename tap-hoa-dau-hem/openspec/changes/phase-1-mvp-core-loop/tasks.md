@@ -7,7 +7,7 @@
 
 ## 2. Lõi dữ liệu và trạng thái
 
-- [x] 2.1 Viết kiểu `GameState` và hàm `createNewGame()` (300.000đ, level 1, ngày 1, kho 20 ô, 2 kệ × 6 ô)
+- [x] 2.1 Viết kiểu `GameState` và hàm `createNewGame()` (300.000đ, level 1, ngày 1, kho 30 ô, 2 kệ × 6 ô)
 - [x] 2.2 Viết `products.json` với 14 mặt hàng và hàm kiểm tra dữ liệu (test báo lỗi thiếu trường / giá bán < giá nhập)
 - [x] 2.3 Viết `levels.json`, `customers.json`, `balance.json` theo design D6
 - [x] 2.4 Viết event bus có kiểu và RNG mulberry32 có seed, kèm test
@@ -66,7 +66,7 @@
 
 ## 10. Đồ họa và cảm giác
 
-- [ ] 10.1 Thay asset tạm bằng pixel art: mặt tiền tiệm, kệ, quầy, 14 icon hàng, 4 kiểu khách, 9 tờ tiền
+- [x] 10.1 Pixel art vẽ bằng ma trận ký tự: 14 icon hàng 16x16 (src/ui/pixelart.ts), khách có 2 khung bước chân; kệ/quầy/mặt tiền/tờ tiền vẽ bằng code theo cùng bảng màu
 - [x] 10.2 Tween nhỏ cho nút bấm, rung nhẹ (navigator.vibrate) khi thối sai trên điện thoại
 - [x] 10.3 Kiểm thử toàn bộ 1 ngày trên 375x812 và trên desktop, đo 60fps
 

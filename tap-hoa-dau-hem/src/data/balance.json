@@ -1,6 +1,6 @@
 {
   "startMoney": 300000,
-  "warehouseCells": 20,
+  "warehouseCells": 30,
   "slotsPerShelf": 6,
   "slotCapacity": 5,
   "daySeconds": 180,
@@ -18,6 +18,13 @@
   "expPerItem": 1,
   "expPerHappy": 3,
   "ratingWindow": 20,
+  "newShopRamp": [0.6, 0.8],
+  "suggest": { "buffer": 1.25, "newCheap": 10, "newPricey": 5, "cheapPrice": 8000 },
+  "orderLineWeights": [0.6, 0.3, 0.1],
+  "qtyByPrice": [
+    { "maxPrice": 5000, "maxQty": 2 },
+    { "maxPrice": 15000, "maxQty": 2 }
+  ],
   "grandmaGift": 50000,
   "grandmaCooldownDays": 3,
   "denominations": [1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000],

@@ -1,5 +1,5 @@
-import { DATA, product } from './data';
-import { shelfCount, unlockedProducts, type GameState } from './state';
+import { DATA, product, type Product } from './data';
+import { shelfCount, totalQty, unlockedProducts, type GameState } from './state';
 
 export type Cart = Record<string, number>;
 
@@ -53,6 +53,42 @@ export function buyStock(state: GameState, cart: Cart): BuyCheck {
   return check;
 }
 
+/** Số lượng nên có của một món: bán + thiếu hôm qua (có dự phòng); món chưa có số liệu dùng mức ước tính. */
+export function suggestedTarget(state: GameState, p: Product): number {
+  const cfg = DATA.balance.suggest;
+  const demand = (state.yesterdaySold[p.id] ?? 0) + (state.yesterdayMissed[p.id] ?? 0);
+  const base = demand > 0 ? demand : p.price <= cfg.cheapPrice ? cfg.newCheap : cfg.newPricey;
+  return Math.ceil(base * cfg.buffer) + 1;
+}
+
+/**
+ * Giỏ hàng gợi ý: bù mỗi món lên mức suggestedTarget. Khi thiếu tiền hoặc chỗ kho thì chia đều theo
+ * tỉ lệ còn thiếu của từng món, để không món nào bị bỏ trống hoàn toàn.
+ */
+export function suggestCart(state: GameState): Cart {
+  const items = unlockedProducts(state.level).map((p) => {
+    const target = suggestedTarget(state, p);
+    return { p, target, want: Math.max(0, target - totalQty(state, p.id)), blocked: false };
+  });
+  const cart: Cart = {};
+  for (;;) {
+    let best: (typeof items)[number] | null = null;
+    for (const it of items) {
+      if (it.blocked || it.want <= (cart[it.p.id] ?? 0)) continue;
+      const missing = (it.want - (cart[it.p.id] ?? 0)) / it.target;
+      if (!best || missing > (best.want - (cart[best.p.id] ?? 0)) / best.target) best = it;
+    }
+    if (!best) break;
+    cart[best.p.id] = (cart[best.p.id] ?? 0) + 1;
+    if (!checkCart(state, cart).ok) {
+      cart[best.p.id]--;
+      if (cart[best.p.id] === 0) delete cart[best.p.id];
+      best.blocked = true;
+    }
+  }
+  return cart;
+}
+
 function takeFromWarehouse(state: GameState, productId: string, want: number): number {
   const have = state.warehouse[productId] ?? 0;
   const got = Math.min(have, want);
@@ -99,31 +135,56 @@ export function canRefill(state: GameState, shelf: number, slot: number): boolea
   return s.qty < DATA.balance.slotCapacity && (state.warehouse[s.productId] ?? 0) > 0;
 }
 
-/** Tự bày: nạp các ô đang có hàng, rồi lấp ô trống bằng món còn trong kho (món bán chạy hôm qua trước). */
+/**
+ * Tự bày: nạp các ô đang có hàng; mỗi món còn trong kho mà chưa có ô thì được một ô
+ * (dùng ô trống, hết ô trống thì lấy lại một ô của món đang chiếm nhiều ô); ô trống còn lại
+ * chia cho món bán chạy (bán + thiếu hôm qua) nhiều nhất.
+ */
 export function autoArrange(state: GameState): void {
   const rows = shelfCount(state.level);
-  for (let r = 0; r < rows; r++) for (let c = 0; c < state.shelves[r].length; c++) refillSlot(state, r, c);
-  const onShelf = new Set<string>();
-  for (let r = 0; r < rows; r++) for (const s of state.shelves[r]) if (s.productId && s.qty > 0) onShelf.add(s.productId);
-  const candidates = Object.keys(state.warehouse)
-    .filter((id) => (state.warehouse[id] ?? 0) > 0)
-    .sort((a, b) => {
-      const aNew = onShelf.has(a) ? 1 : 0;
-      const bNew = onShelf.has(b) ? 1 : 0;
-      if (aNew !== bNew) return aNew - bNew;
-      return (state.yesterdaySold[b] ?? 0) - (state.yesterdaySold[a] ?? 0);
-    });
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < state.shelves[r].length; c++) {
-      const s = state.shelves[r][c];
-      if (s.productId && s.qty > 0) continue;
-      const next = candidates.find((id) => (state.warehouse[id] ?? 0) > 0);
-      if (!next) return;
-      assignSlot(state, r, c, next);
-      // Đẩy món vừa bày xuống cuối để các món khác cũng có chỗ.
-      candidates.splice(candidates.indexOf(next), 1);
-      if ((state.warehouse[next] ?? 0) > 0) candidates.push(next);
+  const slots: { r: number; c: number }[] = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < state.shelves[r].length; c++) slots.push({ r, c });
+  const at = (p: { r: number; c: number }) => state.shelves[p.r][p.c];
+  const demand = (id: string) => (state.yesterdaySold[id] ?? 0) + (state.yesterdayMissed[id] ?? 0);
+
+  // Ô đã hết hàng mà kho cũng hết thì dọn đi để dùng cho món khác.
+  for (const p of slots) {
+    const s = at(p);
+    if (s.productId && s.qty === 0 && (state.warehouse[s.productId] ?? 0) === 0) clearSlot(state, p.r, p.c);
+  }
+  for (const p of slots) refillSlot(state, p.r, p.c);
+
+  const slotsOf = (id: string) => slots.filter((p) => at(p).productId === id);
+  const inWarehouse = () =>
+    Object.keys(state.warehouse)
+      .filter((id) => (state.warehouse[id] ?? 0) > 0)
+      .sort((a, b) => demand(b) - demand(a));
+
+  // 1) Mỗi món có hàng đều phải có ít nhất một ô.
+  for (const id of inWarehouse()) {
+    if (slotsOf(id).length > 0) continue;
+    let target = slots.find((p) => !at(p).productId);
+    if (!target) {
+      // Lấy ô ít hàng nhất của món đang chiếm nhiều ô nhất.
+      const counts = new Map<string, number>();
+      for (const p of slots) {
+        const pid = at(p).productId;
+        if (pid) counts.set(pid, (counts.get(pid) ?? 0) + 1);
+      }
+      target = slots
+        .filter((p) => (counts.get(at(p).productId!) ?? 0) >= 2)
+        .sort((a, b) => (counts.get(at(b).productId!)! - counts.get(at(a).productId!)!) || at(a).qty - at(b).qty)[0];
     }
+    if (!target) break;
+    assignSlot(state, target.r, target.c, id);
+  }
+
+  // 2) Ô trống còn lại: ưu tiên món còn nhiều trong kho và bán chạy.
+  for (const p of slots) {
+    if (at(p).productId) continue;
+    const next = inWarehouse().sort((a, b) => slotsOf(a).length - slotsOf(b).length || demand(b) - demand(a))[0];
+    if (!next) return;
+    assignSlot(state, p.r, p.c, next);
   }
 }
 

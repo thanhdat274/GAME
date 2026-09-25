@@ -7,7 +7,7 @@ Chưa có game. Cần một bản MVP chơi được trên điện thoại để
 - Tạo project Vite + TypeScript + Phaser 3, chạy dạng PWA, màn hình dọc, tự co giãn theo điện thoại.
 - Màn hình tiêu đề "Tạp Hóa Đầu Hẻm" (Chơi tiếp / Chơi mới / Cách chơi / Âm thanh).
 - Danh mục 14 mặt hàng khởi điểm (đồ khô, ăn vặt, đồ dùng) định nghĩa bằng JSON.
-- Buổi sáng nhập hàng từ "Mối sỉ Cô Tư" với ngân sách và giới hạn kho 20 ô.
+- Buổi sáng nhập hàng từ "Mối sỉ Cô Tư" với ngân sách và giới hạn kho 30 ô, nút "Gợi ý" tự điền giỏ hàng.
 - Tiệm 2 kệ (6 ô/kệ), kéo hàng từ kho lên kệ.
 - Khách đi vào, có bong bóng yêu cầu 1–3 món, thanh kiên nhẫn; chạm món trên kệ để lấy.
 - Tự động thối tiền (mặc định); tắt đi để chơi mini-game thối tiền bằng các tờ tiền Việt Nam, thối đúng + nhanh được tip.

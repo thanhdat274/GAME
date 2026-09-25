@@ -7,6 +7,10 @@ Hệ thống SHALL sinh khách theo đường cong mật độ trong ngày (đô
 - **WHEN** đồng hồ game ở 17:30
 - **THEN** khoảng cách trung bình giữa hai khách ngắn hơn so với 14:30
 
+#### Scenario: Tiệm mới mở
+- **WHEN** đang là ngày 1 hoặc ngày 2
+- **THEN** lượng khách bằng 60% (ngày 1) và 80% (ngày 2) so với bình thường
+
 #### Scenario: Quầy đầy
 - **WHEN** đã có 3 khách chờ
 - **THEN** không sinh thêm khách cho tới khi có chỗ

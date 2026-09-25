@@ -6,7 +6,7 @@ const PAGES = [
   {
     icon: '🛒',
     title: '1. Nhập hàng buổi sáng',
-    body: 'Mỗi sáng mua hàng từ mối sỉ Cô Tư. Xem "Còn" và "Hôm qua bán" để nhập vừa đủ. Kho chỉ có 20 ô, và nhớ chừa tiền nhé!',
+    body: 'Mỗi sáng mua hàng từ mối sỉ Cô Tư. Xem "Hôm qua bán" và "thiếu" (khách hỏi mà hết) để nhập vừa đủ, hoặc bấm 🪄 Gợi ý để game tự tính. Kho có 30 ô.',
   },
   {
     icon: '🧺',

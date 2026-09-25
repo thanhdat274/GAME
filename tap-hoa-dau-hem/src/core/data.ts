@@ -66,6 +66,14 @@ export interface Balance {
   expPerItem: number;
   expPerHappy: number;
   ratingWindow: number;
+  /** Hệ số lượng khách những ngày đầu (tiệm mới mở): [ngày 1, ngày 2, ...]. */
+  newShopRamp: number[];
+  /** Gợi ý nhập hàng: hệ số dự phòng và ước tính cho món chưa có số liệu. */
+  suggest: { buffer: number; newCheap: number; newPricey: number; cheapPrice: number };
+  /** Xác suất khách mua 1, 2, 3 món khác nhau. */
+  orderLineWeights: number[];
+  /** Số lượng tối đa mỗi món theo giá (món đắt hơn mọi mốc thì 1). */
+  qtyByPrice: { maxPrice: number; maxQty: number }[];
   grandmaGift: number;
   grandmaCooldownDays: number;
   denominations: number[];

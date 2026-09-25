@@ -39,7 +39,13 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
   // Bổ sung trường thiếu bằng giá trị mặc định (an toàn khi thêm trường không đổi version).
   const base = createNewGame();
   const loaded = state as Partial<GameState>;
-  return { ...base, ...loaded, settings: { ...base.settings, ...loaded.settings }, version: CURRENT_VERSION } as GameState;
+  return {
+    ...base,
+    ...loaded,
+    settings: { ...base.settings, ...loaded.settings },
+    today: { ...base.today, ...loaded.today },
+    version: CURRENT_VERSION,
+  } as GameState;
 }
 
 function defaultStore(): KeyValueStore | null {

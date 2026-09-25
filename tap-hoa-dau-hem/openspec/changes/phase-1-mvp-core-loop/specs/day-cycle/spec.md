@@ -12,11 +12,15 @@ Mỗi ngày SHALL đi qua các pha theo thứ tự: Buổi sáng (nhập hàng +
 - **THEN** không sinh khách mới, các khách đang chờ vẫn được phục vụ xong, rồi chuyển sang Tổng kết
 
 ### Requirement: Tổng kết cuối ngày
-Màn tổng kết SHALL hiển thị doanh thu, tiền vốn hàng đã bán, lãi gộp, tip, số khách hài lòng/bỏ về, sao trung bình, EXP nhận được và món bán chạy nhất.
+Màn tổng kết SHALL hiển thị doanh thu, tiền vốn hàng đã bán, lãi gộp, tip, số khách hài lòng/bỏ về, sao trung bình, EXP nhận được, món bán chạy nhất và tối đa 3 món khách hỏi mà hết hàng (kèm số lượng).
 
 #### Scenario: Ngày có lãi
 - **WHEN** ngày kết thúc với doanh thu 150.000đ và vốn 110.000đ
 - **THEN** màn tổng kết hiển thị lãi gộp 40.000đ màu xanh
+
+#### Scenario: Có món bị hết hàng
+- **WHEN** trong ngày có 8 lần khách hỏi mì gói mà kệ đã hết
+- **THEN** tổng kết hiện "📦 Khách hỏi mà hết hàng: Mì gói (8)" và sáng hôm sau màn nhập hàng ghi "thiếu 8"
 
 #### Scenario: Sang ngày mới
 - **WHEN** người chơi bấm "Ngày mới"

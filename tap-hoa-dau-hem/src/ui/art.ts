@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { CustomerType, Product } from '../core/data';
+import { PALETTE, PRODUCT_SPRITES, type Sprite } from './pixelart';
 import { C, H, HEX, W, emoji, txt, ZOOM } from './theme';
 
 /** Kích thước một "điểm ảnh" pixel art trong tọa độ logic. */
@@ -13,8 +14,8 @@ function color(hex: string): number {
  * Vẽ nhân vật pixel art 12x20 điểm ảnh bằng Graphics rồi lưu thành texture (nét, không nhòe).
  * Asset tạm thời cho tới khi có sprite vẽ tay.
  */
-export function customerTexture(scene: Phaser.Scene, t: CustomerType): string {
-  const key = `cust_${t.id}`;
+export function customerTexture(scene: Phaser.Scene, t: CustomerType, frame: 0 | 1 = 0): string {
+  const key = frame === 0 ? `cust_${t.id}` : `cust_${t.id}_${frame}`;
   if (scene.textures.exists(key)) return key;
   const u = PX * ZOOM;
   const g = scene.make.graphics({}, false);
@@ -44,11 +45,19 @@ export function customerTexture(scene: Phaser.Scene, t: CustomerType): string {
   px(10, 13, 1, 1, skin);
   if (t.id === 'hoc_sinh') px(5, 7, 2, 3, 0xd32f2f); // khăn quàng đỏ
   if (t.id === 'van_phong') px(5, 7, 2, 1, 0xffffff);
-  // Quần + giày
-  px(3, 14, 6, 4, pants);
-  px(5, 16, 2, 2, C.bg);
-  px(3, 18, 2, 2, dark);
-  px(7, 18, 2, 2, dark);
+  // Quần + giày (khung 1: bước chân, một chân đưa lên trước)
+  if (frame === 0) {
+    px(3, 14, 6, 4, pants);
+    px(5, 16, 2, 2, C.bg);
+    px(3, 18, 2, 2, dark);
+    px(7, 18, 2, 2, dark);
+  } else {
+    px(3, 14, 6, 3, pants);
+    px(2, 17, 3, 1, pants);
+    px(7, 17, 2, 2, pants);
+    px(1, 18, 2, 2, dark);
+    px(7, 19, 3, 1, dark);
+  }
   g.generateTexture(key, 12 * u, 20 * u);
   g.destroy();
   scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
@@ -56,7 +65,39 @@ export function customerTexture(scene: Phaser.Scene, t: CustomerType): string {
 }
 
 export function customerSprite(scene: Phaser.Scene, x: number, y: number, t: CustomerType): Phaser.GameObjects.Image {
+  customerTexture(scene, t, 1);
   return scene.add.image(x, y, customerTexture(scene, t)).setOrigin(0.5, 1).setScale(1 / ZOOM);
+}
+
+/** Đổi khung hình đi bộ của khách (gọi theo nhịp khi đang di chuyển). */
+export function setWalkFrame(img: Phaser.GameObjects.Image, t: CustomerType, frame: 0 | 1): void {
+  img.setTexture(frame === 0 ? `cust_${t.id}` : `cust_${t.id}_${frame}`);
+}
+
+/** Tạo texture từ sprite ma trận ký tự, 1 điểm ảnh = 1 pixel canvas (phóng bằng setScale số nguyên). */
+export function spriteTexture(scene: Phaser.Scene, key: string, rows: Sprite): string {
+  if (scene.textures.exists(key)) return key;
+  const h = rows.length;
+  const w = rows[0].length;
+  const tex = scene.textures.createCanvas(key, w, h);
+  if (!tex) return key;
+  const ctx = tex.getContext();
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const c = PALETTE[row[x]];
+      if (c === undefined) continue;
+      ctx.fillStyle = `#${c.toString(16).padStart(6, '0')}`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  });
+  tex.refresh();
+  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  return key;
+}
+
+export function productTexture(scene: Phaser.Scene, id: string): string | null {
+  const rows = PRODUCT_SPRITES[id];
+  return rows ? spriteTexture(scene, `icon_${id}`, rows) : null;
 }
 
 /** Người chơi (chủ tiệm) nhìn từ sau quầy. */
@@ -79,11 +120,17 @@ export function ownerTexture(scene: Phaser.Scene): string {
 /** Biểu tượng mặt hàng: hình tròn màu + emoji. */
 export function productIcon(scene: Phaser.Scene, x: number, y: number, p: Product, size = 36): Phaser.GameObjects.Container {
   const g = scene.add.graphics();
+  const base = Phaser.Display.Color.IntegerToColor(color(p.color));
+  const light = Phaser.Display.Color.Interpolate.ColorWithColor(base, Phaser.Display.Color.IntegerToColor(0xffffff), 100, 55);
   g.fillStyle(0x000000, 0.12).fillCircle(0, 2, size / 2);
-  g.fillStyle(color(p.color), 1).fillCircle(0, 0, size / 2);
-  g.lineStyle(2, 0xffffff, 0.7).strokeCircle(0, 0, size / 2 - 1);
-  const e = emoji(scene, 0, 1, p.icon, Math.round(size * 0.58));
-  return scene.add.container(x, y, [g, e]);
+  g.fillStyle(Phaser.Display.Color.GetColor(light.r, light.g, light.b), 1).fillCircle(0, 0, size / 2);
+  g.lineStyle(2, color(p.color), 0.9).strokeCircle(0, 0, size / 2 - 1);
+  const key = productTexture(scene, p.id);
+  if (!key) return scene.add.container(x, y, [g, emoji(scene, 0, 1, p.icon, Math.round(size * 0.58))]);
+  // Số pixel canvas cho mỗi điểm ảnh: số nguyên để hình không bị nhòe/méo.
+  const k = Math.max(1, Math.floor((size * 0.88 * ZOOM) / 16));
+  const img = scene.add.image(0, 0, key).setScale(k / ZOOM);
+  return scene.add.container(x, y, [g, img]);
 }
 
 const BILL_COLORS: Record<number, number> = {

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { DATA, product, type Product } from '../core/data';
 import { openShop } from '../core/day';
 import { shelfCount, totalQty, unlockedProducts, formatMoney } from '../core/state';
-import { assignSlot, autoArrange, buyStock, checkCart, clearSlot, refillSlot, warehouseCapacity, warehouseCellsUsed, type Cart } from '../core/stock';
+import { assignSlot, autoArrange, buyStock, checkCart, suggestCart, clearSlot, refillSlot, warehouseCapacity, warehouseCellsUsed, type Cart } from '../core/stock';
 import { G, persist } from '../game';
 import { productIcon } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
@@ -21,6 +21,8 @@ interface Row {
   p: Product;
   qty: Phaser.GameObjects.Text;
   info: Phaser.GameObjects.Text;
+  /** Nhãn đỏ "thiếu N" cạnh tên món. */
+  lack: Phaser.GameObjects.Text;
   minus: Button;
   plus: Button;
   plus10: Button;
@@ -147,7 +149,10 @@ export class MorningScene extends Phaser.Scene {
       const plus = new Button(this, 284, cy, { w: 34, h: 40, label: '+', color: C.green, size: 18, onTap: () => this.changeQty(p.id, 1) });
       const plus10 = new Button(this, 326, cy, { w: 42, h: 40, label: '+10', color: C.greenDark, size: 13, onTap: () => this.changeQty(p.id, 10) });
       this.list.add([minus, qty, plus, plus10]);
-      this.rows.push({ p, qty, info, minus, plus, plus10 });
+      const lack = txt(this, 60 + name.width + 6, y + 11, '', { size: 10, bold: true, color: HEX.white });
+      lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1);
+      this.list.add(lack);
+      this.rows.push({ p, qty, info, lack, minus, plus, plus10 });
       y += ROW_H;
     }
     this.listH = y + 10;
@@ -157,9 +162,21 @@ export class MorningScene extends Phaser.Scene {
     foot.fillStyle(C.hud, 1).fillRect(0, LIST_BOTTOM + 4, W, H - LIST_BOTTOM - 4);
     this.cartText = txt(this, 12, LIST_BOTTOM + 14, '', { size: 13, bold: true, color: HEX.cream });
     this.cartWarn = txt(this, 12, LIST_BOTTOM + 36, '', { size: 12, color: '#ffb4a8' });
-    const clear = new Button(this, 12 + 36, H - 26, { w: 72, h: 34, label: 'Xóa giỏ', color: C.grey, size: 12, onTap: () => this.clearCart() });
+    const suggest = new Button(this, 62, H - 26, {
+      w: 104,
+      h: 36,
+      label: '🪄 Gợi ý',
+      color: C.blue,
+      size: 13,
+      onTap: () => {
+        this.cart = suggestCart(G.state);
+        if (Object.keys(this.cart).length === 0) toast(this, 'Hàng còn đủ, hoặc hết tiền/chỗ kho rồi!', H * 0.5);
+        this.refresh();
+      },
+    });
+    const clear = new Button(this, 154, H - 26, { w: 68, h: 36, label: 'Xóa giỏ', color: C.grey, size: 12, onTap: () => this.clearCart() });
     this.buyBtn = new Button(this, W - 80, H - 40, { w: 140, h: 52, label: 'Nhập hàng', color: C.green, size: 16, onTap: () => this.buy() });
-    this.buyLayer.add([foot, this.cartText, this.cartWarn, clear, this.buyBtn]);
+    this.buyLayer.add([foot, this.cartText, this.cartWarn, suggest, clear, this.buyBtn]);
   }
 
   private enableListScroll(): void {
@@ -209,9 +226,10 @@ export class MorningScene extends Phaser.Scene {
     if (!res.ok) return;
     this.cart = {};
     play('cash');
-    toast(this, `Đã nhập hàng: -${formatMoney(res.total)}\nQua tab "Bày kệ" để bày hàng nhé!`, H * 0.5, C.greenDark);
+    toast(this, `Đã nhập hàng: -${formatMoney(res.total)}\nGiờ bày hàng lên kệ nhé!`, H * 0.5, C.greenDark);
     persist();
-    this.refresh();
+    // Nhập xong thì chuyển luôn sang bày kệ (bước tiếp theo trong buổi sáng).
+    this.setTab('arrange');
   }
 
   // ---------- Bày kệ ----------
@@ -354,7 +372,9 @@ export class MorningScene extends Phaser.Scene {
       for (const r of this.rows) {
         const q = this.cart[r.p.id] ?? 0;
         r.qty.setText(String(q));
+        const missed = s.yesterdayMissed[r.p.id] ?? 0;
         r.info.setText(`Còn: ${totalQty(s, r.p.id)} · Hôm qua bán: ${s.yesterdaySold[r.p.id] ?? 0}`);
+        r.lack.setText(`thiếu ${missed}`).setVisible(missed > 0);
         r.minus.setEnabled(q > 0);
       }
       const check = checkCart(s, this.cart);

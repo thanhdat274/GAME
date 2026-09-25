@@ -6,7 +6,7 @@ Sau giai đoạn 1, người chơi chạm trần level 4 với 3 kệ và 14 mó
 
 - Nâng giới hạn level từ 4 lên 9, thêm bảng mở khóa L5–L9.
 - **Mở rộng mặt bằng**: bản đồ tiệm dạng lưới với các ô đất bị khóa (mờ + ổ khóa). Mở khóa cần đủ level và tiền. Người chơi tự đặt kệ, tủ, kho lên ô đất.
-- **Kho**: nâng cấp theo bậc (kệ gỗ 20 → kệ sắt 40 → kho lớn 70 ô), màn quản lý kho.
+- **Kho**: nâng cấp theo bậc (kệ gỗ 30 → kệ sắt 50 → kho lớn 80 ô), màn quản lý kho.
 - **Tủ lạnh / tủ đông**: thiết bị đặt lên đất, có ô riêng cho đồ uống và đồ đông lạnh, tốn tiền điện mỗi ngày.
 - **Hàng tươi và hạn dùng**: trứng, bánh mì, rau, sữa có hạn 1–3 ngày; hàng hết hạn phải bỏ. Có "bán xả" giảm giá.
 - **Nhiều mối sỉ**: mối 2 rẻ hơn nhưng giao chiều hôm sau; giá sỉ dao động theo ngày; mua sỉ số lượng lớn được chiết khấu.

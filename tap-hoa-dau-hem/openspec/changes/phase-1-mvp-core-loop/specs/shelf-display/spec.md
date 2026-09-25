@@ -11,6 +11,13 @@ Tiệm SHALL có 2 kệ, mỗi kệ 6 ô; mỗi ô chứa một loại hàng, t�
 - **WHEN** người chơi thả loại hàng khác vào ô đang chứa hàng
 - **THEN** hàng cũ trả về kho và ô được gán loại mới
 
+### Requirement: Tự bày
+Nút "Tự bày" SHALL nạp đầy các ô đang có hàng, dọn ô đã hết cả trên kệ lẫn trong kho, bảo đảm mỗi món còn trong kho có ít nhất một ô (nếu hết ô trống thì lấy lại ô của món đang chiếm nhiều ô nhất, trả hàng về kho), rồi chia ô trống còn lại cho món bán chạy.
+
+#### Scenario: Kệ đã kín mà có món mới
+- **WHEN** 18 ô đều đang bày mì gói và muối, kho có pin và xà phòng, người chơi bấm "Tự bày"
+- **THEN** pin và xà phòng mỗi món có một ô, hàng trong ô bị thay trả về kho
+
 ### Requirement: Nạp lại kệ trong lúc bán
 Người chơi SHALL có thể chạm vào ô kệ đang vơi để nạp thêm từ kho trong pha bán hàng, mất 1 giây thao tác.
 
