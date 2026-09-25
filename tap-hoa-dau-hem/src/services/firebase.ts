@@ -1,16 +1,17 @@
-type Module = Record<string, (...args: any[]) => any>;
+import type { FirebaseApp } from 'firebase/app';
+import type { Auth } from 'firebase/auth';
+import type { Firestore } from 'firebase/firestore';
 
-const FIREBASE_VERSION = '12.19.0';
-const CDN = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
 const env = import.meta.env as ImportMetaEnv & Record<string, string | undefined>;
+export const AUTH_HINT_KEY = 'thdh.auth.hint';
 
 export interface FirebaseServices {
-  app: any;
-  auth: any;
-  db: any;
-  appSdk: Module;
-  authSdk: Module;
-  firestoreSdk: Module;
+  app: FirebaseApp;
+  auth: Auth;
+  db: Firestore;
+  appSdk: typeof import('firebase/app');
+  authSdk: typeof import('firebase/auth');
+  firestoreSdk: typeof import('firebase/firestore');
 }
 
 let services: Promise<FirebaseServices> | null = null;
@@ -23,14 +24,14 @@ export function firebaseConfigured(): boolean {
   return Boolean(env.VITE_FIREBASE_API_KEY && env.VITE_FIREBASE_PROJECT_ID && env.VITE_FIREBASE_APP_ID);
 }
 
+/** SDK is loaded only when cloud save is used. */
 export async function getFirebase(): Promise<FirebaseServices> {
-  if (!cloudSaveEnabled()) throw new Error('Đồng bộ cloud hiện đang tắt.');
-  if (!firebaseConfigured()) throw new Error('Chưa cấu hình Firebase cho bản game này.');
+  if (!cloudSaveEnabled()) throw new Error('Đồng bộ cloud hiện đang tắt hoặc chưa cấu hình Firebase.');
   if (!services) {
     services = Promise.all([
-      import(/* @vite-ignore */ `${CDN}/firebase-app.js`),
-      import(/* @vite-ignore */ `${CDN}/firebase-auth.js`),
-      import(/* @vite-ignore */ `${CDN}/firebase-firestore.js`),
+      import('firebase/app'),
+      import('firebase/auth'),
+      import('firebase/firestore'),
     ]).then(([appSdk, authSdk, firestoreSdk]) => {
       const config = {
         apiKey: env.VITE_FIREBASE_API_KEY,
@@ -41,14 +42,12 @@ export async function getFirebase(): Promise<FirebaseServices> {
         appId: env.VITE_FIREBASE_APP_ID,
       };
       const app = appSdk.initializeApp(config);
-      return {
-        app,
-        auth: authSdk.initializeAuth(app, { persistence: authSdk.browserLocalPersistence }),
-        db: firestoreSdk.getFirestore(app),
-        appSdk,
-        authSdk,
-        firestoreSdk,
-      };
+      const auth = authSdk.initializeAuth(app, {
+        persistence: authSdk.browserLocalPersistence,
+        popupRedirectResolver: authSdk.browserPopupRedirectResolver,
+      });
+      auth.languageCode = 'vi';
+      return { app, auth, db: firestoreSdk.getFirestore(app), appSdk, authSdk, firestoreSdk };
     }).catch((error) => {
       services = null;
       throw error;
@@ -59,7 +58,7 @@ export async function getFirebase(): Promise<FirebaseServices> {
 
 export function hasAuthHint(): boolean {
   try {
-    return localStorage.getItem('thdh.auth.hint') === 'google';
+    return localStorage.getItem(AUTH_HINT_KEY) === 'google';
   } catch {
     return false;
   }
@@ -67,11 +66,9 @@ export function hasAuthHint(): boolean {
 
 export function setAuthHint(enabled: boolean): void {
   try {
-    if (enabled) localStorage.setItem('thdh.auth.hint', 'google');
-    else localStorage.removeItem('thdh.auth.hint');
+    if (enabled) localStorage.setItem(AUTH_HINT_KEY, 'google');
+    else localStorage.removeItem(AUTH_HINT_KEY);
   } catch {
     // Private browsing may deny localStorage; sign-in still works for this session.
   }
 }
-
-export const firebaseSdkCdn = CDN;
