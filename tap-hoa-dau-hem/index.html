@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2b1d14" />
+    <meta name="description" content="Tạp Hóa Đầu Hẻm - game mở tiệm tạp hóa nhỏ: nhập hàng, bày kệ, bán hàng và thối tiền." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <title>Tạp Hóa Đầu Hẻm</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #2b1d14;
+        overflow: hidden;
+        overscroll-behavior: none;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #game {
+        position: fixed;
+        inset: 0;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      #rotate {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: #2b1d14;
+        color: #f6e3c4;
+        font: 600 20px system-ui, sans-serif;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+      }
+      #rotate .phone {
+        font-size: 56px;
+        animation: tilt 1.6s ease-in-out infinite;
+      }
+      @keyframes tilt {
+        50% {
+          transform: rotate(-90deg);
+        }
+      }
+      @media (orientation: landscape) and (pointer: coarse) and (max-height: 600px) {
+        #rotate {
+          display: flex;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="rotate"><div class="phone">📱</div>Xoay dọc điện thoại để chơi</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

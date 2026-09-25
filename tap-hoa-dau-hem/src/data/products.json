@@ -1,0 +1,16 @@
+[
+  { "id": "mi_goi", "name": "Mì gói", "category": "dry", "icon": "🍜", "color": "#f4c542", "cost": 3500, "price": 5000, "size": 1, "unlockLevel": 1 },
+  { "id": "gao", "name": "Gạo 1kg", "category": "dry", "icon": "🍚", "color": "#f1ede1", "cost": 16000, "price": 20000, "size": 2, "unlockLevel": 1 },
+  { "id": "nuoc_mam", "name": "Nước mắm", "category": "dry", "icon": "🐟", "color": "#b5651d", "cost": 18000, "price": 23000, "size": 1, "unlockLevel": 1 },
+  { "id": "dau_an", "name": "Dầu ăn", "category": "dry", "icon": "🛢️", "color": "#e8c547", "cost": 38000, "price": 45000, "size": 1, "unlockLevel": 1 },
+  { "id": "duong", "name": "Đường", "category": "dry", "icon": "🍯", "color": "#ffffff", "cost": 17000, "price": 21000, "size": 1, "unlockLevel": 1 },
+  { "id": "muoi", "name": "Muối", "category": "dry", "icon": "🧂", "color": "#cfd8dc", "cost": 5000, "price": 7000, "size": 1, "unlockLevel": 1 },
+  { "id": "snack", "name": "Snack khoai tây", "category": "snack", "icon": "🥔", "color": "#ffb74d", "cost": 6000, "price": 8000, "size": 1, "unlockLevel": 2 },
+  { "id": "keo", "name": "Kẹo", "category": "snack", "icon": "🍬", "color": "#f06292", "cost": 2000, "price": 3000, "size": 1, "unlockLevel": 2 },
+  { "id": "banh_quy", "name": "Bánh quy", "category": "snack", "icon": "🍪", "color": "#a1887f", "cost": 9000, "price": 12000, "size": 1, "unlockLevel": 2 },
+  { "id": "que_cay", "name": "Que cay", "category": "snack", "icon": "🌶️", "color": "#e53935", "cost": 3000, "price": 5000, "size": 1, "unlockLevel": 2 },
+  { "id": "xa_phong", "name": "Xà phòng", "category": "household", "icon": "🧼", "color": "#81d4fa", "cost": 12000, "price": 15000, "size": 1, "unlockLevel": 4 },
+  { "id": "kem_danh_rang", "name": "Kem đánh răng", "category": "household", "icon": "🦷", "color": "#4fc3f7", "cost": 20000, "price": 25000, "size": 1, "unlockLevel": 4 },
+  { "id": "giay_vs", "name": "Giấy vệ sinh", "category": "household", "icon": "🧻", "color": "#eceff1", "cost": 25000, "price": 32000, "size": 2, "unlockLevel": 4 },
+  { "id": "pin", "name": "Pin", "category": "household", "icon": "🔋", "color": "#66bb6a", "cost": 8000, "price": 10000, "size": 1, "unlockLevel": 4 }
+]

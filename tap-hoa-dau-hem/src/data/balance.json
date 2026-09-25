@@ -1,0 +1,33 @@
+{
+  "startMoney": 300000,
+  "warehouseCells": 20,
+  "slotsPerShelf": 6,
+  "slotCapacity": 5,
+  "daySeconds": 180,
+  "openMinute": 480,
+  "closeMinute": 1200,
+  "tickMs": 100,
+  "maxQueue": 3,
+  "baseSpawnSeconds": 5.5,
+  "queuePatienceRate": 0.5,
+  "wrongPickPenalty": 2,
+  "refillSeconds": 1,
+  "fastChangeSeconds": 4,
+  "tipMin": 1000,
+  "tipMax": 3000,
+  "expPerItem": 1,
+  "expPerHappy": 3,
+  "ratingWindow": 20,
+  "grandmaGift": 50000,
+  "grandmaCooldownDays": 3,
+  "denominations": [1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000],
+  "drawer": [1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000],
+  "density": [
+    { "from": 480, "to": 540, "mul": 1.8 },
+    { "from": 540, "to": 660, "mul": 1.0 },
+    { "from": 660, "to": 780, "mul": 1.7 },
+    { "from": 780, "to": 1020, "mul": 0.65 },
+    { "from": 1020, "to": 1140, "mul": 1.9 },
+    { "from": 1140, "to": 1200, "mul": 1.0 }
+  ]
+}

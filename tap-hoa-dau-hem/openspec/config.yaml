@@ -1,0 +1,28 @@
+schema: spec-driven
+
+context: |
+  Dự án: "Tạp Hóa Đầu Hẻm" - game mô phỏng kinh doanh tiệm tạp hóa nhỏ kiểu Việt Nam.
+  Nền tảng: web, ưu tiên điện thoại (màn hình dọc 9:16, cảm ứng), vẫn chơi được trên desktop.
+  Tech stack: Vite + TypeScript + Phaser 3, PWA, lưu game bằng localStorage, deploy tĩnh (Vercel).
+  Đồ họa: pixel art (tile 16x16, scale nguyên), phong cách ấm áp giống "Ai Mua Xôi Đi" / "Tiệm Mì Cay".
+  Ngôn ngữ trong game: tiếng Việt. Tiền tệ: đồng (đ), mệnh giá 1k..500k.
+  Kiến trúc: logic game thuần TypeScript (src/core, không phụ thuộc Phaser, test bằng Vitest);
+  Phaser chỉ render + nhận input (src/scenes). Dữ liệu cân bằng game để trong JSON (src/data).
+  Tài khoản: đăng nhập Google tùy chọn (Firebase Auth), lưu cloud Firestore; localStorage vẫn là nơi lưu chính.
+  Lộ trình (làm và archive theo đúng thứ tự):
+    1. phase-1-mvp-core-loop       - vòng chơi cốt lõi, level 1-4
+    1b. add-google-login-cloud-save - đăng nhập Google, lưu cloud, đồng bộ nhiều thiết bị
+    2. phase-2-shop-expansion      - mở rộng đất, kho, hàng tươi, tủ lạnh, nhiệm vụ, level 5-9
+    3. phase-3-staff-and-manager   - nhân viên, chế độ quản lý, thu nhập offline, level 10-20
+    4. phase-4-events-food-branches - sự kiện, góc đồ ăn, quầy nước, chi nhánh, level 21-35+
+  Mỗi giai đoạn phải chơi được hoàn chỉnh và deploy được trước khi sang giai đoạn sau.
+
+rules:
+  proposal:
+    - Viết bằng tiếng Việt, giữ tên capability dạng kebab-case tiếng Anh.
+  specs:
+    - Mô tả bằng tiếng Việt nhưng giữ từ khóa SHALL/MUST và WHEN/THEN để validator đọc được.
+    - Mọi con số cân bằng (giá, thời gian, EXP) phải lấy từ file dữ liệu, spec chỉ nêu giá trị mặc định.
+  tasks:
+    - Mỗi task nhỏ, làm xong trong một buổi, có thể kiểm chứng (test hoặc chơi thử trên điện thoại).
+    - Cuối mỗi nhóm lớn phải có task kiểm thử trên màn hình điện thoại 375x812.
