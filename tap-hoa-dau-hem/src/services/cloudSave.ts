@@ -1,9 +1,8 @@
 import type { GameState } from '../core/state';
+import { compressSave as compressState, decompressSave as decompressState, utf8Bytes } from '../core/compress';
 import { getFirebase } from './firebase';
 
 const MAX_COMPRESSED_CHARS = 900_000;
-const SAVE_PATH = ['users', 'saves', 'main'] as const;
-const LZ_URL = 'https://cdn.jsdelivr.net/npm/lz-string@1.5.0/+esm';
 
 export type CloudResult<T> =
   | { status: 'ok'; value: T }
@@ -21,19 +20,13 @@ export interface CloudSnapshot {
 }
 
 export async function compressSave(state: GameState): Promise<string> {
-  const lz = await import(/* @vite-ignore */ LZ_URL);
-  const compressor = (lz as any).compressToUTF16 ?? (lz as any).default?.compressToUTF16;
-  const compressed = compressor(JSON.stringify(state));
+  const compressed = compressState(state);
   if (typeof compressed !== 'string') throw new Error('Không nén được bản lưu.');
   return compressed;
 }
 
 export async function decompressSave(data: string): Promise<GameState> {
-  const lz = await import(/* @vite-ignore */ LZ_URL);
-  const decompressor = (lz as any).decompressFromUTF16 ?? (lz as any).default?.decompressFromUTF16;
-  const json = decompressor(data);
-  if (typeof json !== 'string') throw new Error('Bản lưu cloud bị hỏng.');
-  const state = JSON.parse(json) as GameState;
+  const state = decompressState<GameState>(data);
   if (!state || typeof state !== 'object' || typeof state.level !== 'number' || typeof state.day !== 'number') {
     throw new Error('Bản lưu cloud không đúng định dạng.');
   }
@@ -45,7 +38,7 @@ export async function pull(timeoutMs = 5000): Promise<CloudResult<CloudSnapshot 
     const { db, auth, firestoreSdk } = await getFirebase();
     const user = auth.currentUser;
     if (!user) return { status: 'error', message: 'Bạn chưa đăng nhập.' } as const;
-    const ref = firestoreSdk.doc(db, ...SAVE_PATH.slice(0, 1), user.uid, ...SAVE_PATH.slice(1));
+    const ref = firestoreSdk.doc(db, 'users', user.uid, 'saves', 'main');
     const snapshot = await firestoreSdk.getDoc(ref);
     return { status: 'ok', value: snapshot.exists() ? parseSnapshot(snapshot.data()) : null } as const;
   }, timeoutMs);
@@ -55,7 +48,7 @@ export async function push(state: GameState): Promise<CloudResult<number>> {
   if (!navigator.onLine) return { status: 'offline' };
   try {
     const data = await compressSave(state);
-    if (new TextEncoder().encode(data).byteLength > MAX_COMPRESSED_CHARS) return { status: 'error', message: 'Bản lưu quá lớn để đồng bộ.' };
+    if (utf8Bytes(data) > MAX_COMPRESSED_CHARS) return { status: 'error', message: 'Bản lưu quá lớn để đồng bộ.' };
     const { db, auth, firestoreSdk } = await getFirebase();
     const user = auth.currentUser;
     if (!user) return { status: 'error', message: 'Bạn chưa đăng nhập.' };
