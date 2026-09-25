@@ -10,6 +10,7 @@ import { ShelfView } from '../ui/shelves';
 import { play } from '../ui/sound';
 import { Button, dialog, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
+import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
 
 type Tab = 'buy' | 'arrange';
 
@@ -77,16 +78,22 @@ export class MorningScene extends Phaser.Scene {
     const s = G.state;
     const newProducts = s.announcedLevel < s.level ? unlockedProducts(s.level).filter((p) => p.unlockLevel > s.announcedLevel) : [];
     const showNew = () => {
-      if (s.announcedLevel >= s.level) return;
+      if (s.announcedLevel >= s.level) {
+        this.showLoginPrompt();
+        return;
+      }
       s.announcedLevel = s.level;
       persist();
-      if (newProducts.length === 0) return;
+      if (newProducts.length === 0) {
+        this.showLoginPrompt();
+        return;
+      }
       play('levelup');
       dialog(this, {
         icon: '🆕',
         title: 'Mặt hàng mới!',
         body: newProducts.map((p) => `${p.icon} ${p.name} · bán ${formatMoney(p.price)}`).join('\n'),
-        buttons: [{ label: 'Tuyệt!' }],
+        buttons: [{ label: 'Tuyệt!', onTap: () => this.showLoginPrompt() }],
       });
     };
     if (gift > 0) {
@@ -100,6 +107,17 @@ export class MorningScene extends Phaser.Scene {
     } else {
       showNew();
     }
+  }
+
+  private showLoginPrompt(): void {
+    if (G.state.day < 4 || G.state.loginPromptSeen || hasAuthHint() || !cloudSaveEnabled() || !firebaseConfigured()) return;
+    G.state.loginPromptSeen = true;
+    persist();
+    dialog(this, { icon: '☁️', title: 'Giữ tiến trình khi đổi máy', body: 'Bạn có thể đăng nhập Google để lưu bản sao tiến trình trên cloud. Vẫn chơi khách bình thường nếu muốn.', buttons: [
+      { label: 'Đăng nhập Google', color: C.green, onTap: () => this.scene.start('Title', { login: true }) },
+      { label: 'Để sau', color: C.blue },
+      { label: 'Không nhắc nữa', color: C.grey },
+    ] });
   }
 
   private setTab(t: Tab): void {

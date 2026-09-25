@@ -9,8 +9,10 @@ import { SummaryScene } from './scenes/SummaryScene';
 import { TitleScene } from './scenes/TitleScene';
 import { installRoundedRectFix } from './ui/roundrect';
 import { H, W, ZOOM } from './ui/theme';
+import { enableOnlineRetry } from './services/sync';
 
 installRoundedRectFix();
+enableOnlineRetry();
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

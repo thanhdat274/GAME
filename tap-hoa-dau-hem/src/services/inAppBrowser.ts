@@ -1,34 +1,36 @@
-/** Trình duyệt nhúng trong app mà Google chặn đăng nhập (lỗi `disallowed_useragent`). */
+/** Embedded browsers that Google blocks from signing in. */
 const RULES: [RegExp, string][] = [
   [/Messenger|MessengerForiOS|\bOrca-Android\b/i, 'Messenger'],
-  [/FBAN|FBAV|FB_IAB|FBIOS|FB4A/, 'Facebook'],
+  [/FBAN|FBAV|FB_IAB|FBIOS|FB4A/i, 'Facebook'],
   [/Instagram/i, 'Instagram'],
   [/Zalo/i, 'Zalo'],
   [/TikTok|musical_ly|BytedanceWebview|trill_/i, 'TikTok'],
   [/\bLine\//i, 'Line'],
 ];
 
-/** Trả về tên app nếu user agent là trình duyệt nhúng, ngược lại null. */
-export function detectInAppBrowser(ua: string): string | null {
-  for (const [re, name] of RULES) if (re.test(ua)) return name;
-  // Android WebView đánh dấu "; wv)" trong user agent.
-  if (/Android/i.test(ua) && /;\s*wv\)/.test(ua)) return 'ứng dụng này';
+export function detectInAppBrowser(userAgent: string): string | null {
+  for (const [rule, name] of RULES) if (rule.test(userAgent)) return name;
+  if (/Android/i.test(userAgent) && /;\s*wv\)/i.test(userAgent)) return 'ứng dụng này';
   return null;
 }
 
-export function isAndroid(ua: string): boolean {
-  return /Android/i.test(ua);
+export function isInAppBrowser(userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent): boolean {
+  return detectInAppBrowser(userAgent) !== null;
 }
 
-/** Link intent mở trang hiện tại bằng Chrome trên Android. */
-export function chromeIntentUrl(href: string): string {
-  const u = new URL(href);
-  return `intent://${u.host}${u.pathname}${u.search}${u.hash}#Intent;scheme=${u.protocol.replace(':', '')};package=com.android.chrome;end`;
+export function isAndroid(userAgent: string): boolean {
+  return /Android/i.test(userAgent);
 }
 
-/** Điện thoại/máy tính bảng thì đăng nhập bằng redirect, máy tính dùng popup. */
-export function prefersRedirect(ua: string, maxTouchPoints = 0): boolean {
-  if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
-  // iPadOS báo là Mac nhưng có màn cảm ứng.
-  return /Macintosh/.test(ua) && maxTouchPoints > 1;
+export function prefersRedirect(userAgent: string, maxTouchPoints = 0): boolean {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
+}
+
+export function chromeIntentUrl(
+  href = typeof location === 'undefined' ? '' : location.href,
+  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
+): string | null {
+  if (!href.startsWith('https://') || !isAndroid(userAgent)) return null;
+  const url = new URL(href);
+  return `intent://${url.host}${url.pathname}${url.search}${url.hash}#Intent;scheme=https;package=com.android.chrome;end`;
 }

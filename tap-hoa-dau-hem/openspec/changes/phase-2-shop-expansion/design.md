@@ -7,7 +7,7 @@ Giai đoạn 1 đã có vòng chơi ngày, kệ cố định và kho đếm theo
 **Goals:**
 - Tiệm lớn dần một cách trực quan: nhìn thấy đất bị khóa, muốn mở.
 - Thêm chiều sâu kinh tế (hạn dùng, giá, mối sỉ, nợ) mà vẫn dễ hiểu cho người chơi phổ thông.
-- Bản lưu v1 chuyển sang v2 không mất tiến trình.
+- Bản lưu v2 (sau self-service-shopping) chuyển sang v3 không mất tiến trình.
 
 **Non-Goals:**
 - Nhân viên, tự động hóa (giai đoạn 3).
@@ -22,8 +22,8 @@ Tiệm là lưới 6×8 ô (mỗi ô 48px logic). Mỗi "mảnh đất" là mộ
 
 Kế hoạch mở đất: ban đầu 12 ô. Đất A (L5, 150.000đ, +8 ô), Đất B (L8, 400.000đ, +8 ô), Đất C sân sau (L9, 600.000đ, +6 ô, chỉ đặt kho). Đất D (mini-mart) để dành cho giai đoạn 3; Đất E, F để dành cho giai đoạn 4 (góc đồ ăn, quầy nước).
 
-### D2. Camera
-Khi lưới cao hơn màn hình, cho kéo một ngón để cuộn dọc; quầy thu ngân và khay tiền luôn ghim ở dưới cùng (UI layer). Chạm vào kệ ở xa thì camera tự trượt tới. Có nút "Về quầy".
+### D2. Camera và đường đi khách
+Khi lưới cao hơn màn hình, cho kéo một ngón để cuộn dọc; quầy thu ngân và khay tiền luôn ghim ở dưới cùng (UI layer). Có nút "Về quầy". Khách tự chọn hàng tìm đường tới khu có món cần rồi đến quầy; người chơi chạm ô kệ để nạp hàng, không lấy hàng thay khách.
 
 ### D3. Chế độ xây dựng
 Chỉ vào được ở Buổi sáng. Nút "Sắp xếp" chuyển sang build mode: ô đất khóa hiện giá, nội thất kéo được, ô hợp lệ tô xanh, ô không hợp lệ tô đỏ. Thoát thì kiểm tra lối đi.
@@ -52,22 +52,22 @@ Khách ghi sổ lấy hàng không trả tiền; nợ ghi vào `ledger` kèm h�
 ### D10. Thu hút và trang trí
 `attraction = tổng điểm trang trí (giới hạn 100)`. Tốc độ sinh khách nhân `1 + attraction/400` (tối đa +25%). Con mèo là thành tựu đặc biệt: +5 điểm và thỉnh thoảng làm khách vui (+2 giây kiên nhẫn).
 
-### D11. Save v2
-`migrate_1_to_2`: chuyển `inventory[id] = qty` thành lô `expiresOnDay: null`; tạo lưới mặt bằng mặc định đặt 3 kệ theo vị trí cũ; thêm các trường mới với giá trị mặc định.
+### D11. Save v3
+`migrate_2_to_3`: chuyển `inventory[id] = qty` thành lô `expiresOnDay: null`; tạo lưới mặt bằng mặc định đặt 3 kệ theo vị trí cũ; giữ khu kệ, hàng sau quầy và cài đặt self-service; thêm các trường mới với giá trị mặc định.
 
 ## Risks / Trade-offs
 
 - [Quá nhiều hệ thống mới cùng lúc khiến người chơi rối] → Mỗi level chỉ mở 1–2 hệ thống, kèm hướng dẫn ngắn 1 lần (tooltip mũi tên).
-- [Cuộn camera xung đột với chạm lấy hàng] → Ngưỡng kéo 8px mới tính là cuộn; chạm nhanh là lấy hàng.
+- [Cuộn camera xung đột với chạm nạp hàng] → Ngưỡng kéo 8px mới tính là cuộn; chạm nhanh vào ô kệ là nạp hàng.
 - [Hàng hỏng gây cảm giác bị phạt] → Bán xả giảm 30–50% ở ngày cuối hạn, tổng kết nhắc "mẹo: nhập ít hàng tươi hơn".
 - [Người chơi bố trí chặn lối đi] → BFS kiểm tra, không cho thoát build mode khi bị chặn.
 - [Hiệu năng khi nhiều nội thất + khách] → Gộp nội thất tĩnh vào RenderTexture, chỉ khách và UI là động.
 
 ## Migration Plan
 
-1. Deploy bản có migrate v1 → v2, giữ khóa `thdh.save.v1` làm bản dự phòng 14 ngày.
-2. Test migrate bằng bản lưu mẫu v1 trong thư mục test fixtures.
-3. Rollback: bản cũ vẫn đọc được `thdh.save.v1`.
+1. Deploy bản có migrate v2 → v3, giữ bản save v2 làm bản dự phòng 14 ngày.
+2. Test migrate bằng bản lưu mẫu v2 trong thư mục test fixtures.
+3. Rollback: bản cũ vẫn đọc được save v2; không hạ version dữ liệu đã migrate.
 
 ## Open Questions
 

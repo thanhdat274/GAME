@@ -11,6 +11,7 @@ context: |
   Tài khoản: đăng nhập Google tùy chọn (Firebase Auth), lưu cloud Firestore; localStorage vẫn là nơi lưu chính.
   Lộ trình (làm và archive theo đúng thứ tự):
     1. phase-1-mvp-core-loop       - vòng chơi cốt lõi, level 1-4
+    1a. self-service-shopping     - khách tự chọn hàng, quét ở quầy, hàng sau quầy
     1b. add-google-login-cloud-save - đăng nhập Google, lưu cloud, đồng bộ nhiều thiết bị
     2. phase-2-shop-expansion      - mở rộng đất, kho, hàng tươi, tủ lạnh, nhiệm vụ, level 5-9
     3. phase-3-staff-and-manager   - nhân viên, chế độ quản lý, thu nhập offline, level 10-20

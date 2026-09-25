@@ -3,7 +3,7 @@
 - [ ] 1.1 Tạo `TaskQueue` toàn tiệm (ServeCustomer, Refill, ReceiveDelivery, Deliver, Watch) và độ ưu tiên; test
 - [ ] 1.2 Tách người chơi thành Agent; chuyển input chạm thành "tự nhận việc" mà không đổi cảm giác chơi
 - [ ] 1.3 Hỗ trợ nhiều quầy thu ngân và xếp hàng vào quầy ít người nhất; test
-- [ ] 1.4 Save v3 + `migrate_2_to_3` + fixture; lưu `lastSeen`; test
+- [ ] 1.4 Save v4 + `migrate_3_to_4` + fixture; giữ nguyên khu/kho lô/hàng sau quầy, thêm trường nhân viên và `lastSeen`; test
 - [ ] 1.5 Nâng `levels.json` lên L20 với bảng mở khóa L10–L20
 
 ## 2. Nhân viên

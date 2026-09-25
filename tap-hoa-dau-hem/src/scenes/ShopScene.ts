@@ -4,7 +4,8 @@ import type { CustomerType } from '../core/data';
 import { DATA, product } from '../core/data';
 import { DaySession, endDay } from '../core/day';
 import { formatClock, formatMoney, shelfQty } from '../core/state';
-import { G, persist } from '../game';
+import { G, persist, setPlayClockRunning } from '../game';
+import { cloudSaveEnabled } from '../services/firebase';
 import { bill, customerSprite, drawShopInterior, productIcon, setWalkFrame } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
 import { ShelfView, slotCenter } from '../ui/shelves';
@@ -406,14 +407,15 @@ export class ShopScene extends Phaser.Scene {
   private pause(): void {
     if (this.pauseLayer || this.ending) return;
     this.session.paused = true;
+    setPlayClockRunning(false);
     persist();
     const L = this.add.container(0, 0).setDepth(3000);
     L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
-    L.add(panel(this, 50, 150, W - 100, 350));
-    L.add(txt(this, W / 2, 180, '⏸ Tạm dừng', { size: 22, bold: true, origin: [0.5, 0.5] }));
-    L.add(new Button(this, W / 2, 238, { w: 220, h: 50, label: '▶ Tiếp tục', onTap: () => this.resume() }));
+    L.add(panel(this, 50, 120, W - 100, 430));
+    L.add(txt(this, W / 2, 152, '⏸ Tạm dừng', { size: 22, bold: true, origin: [0.5, 0.5] }));
+    L.add(new Button(this, W / 2, 208, { w: 220, h: 50, label: '▶ Tiếp tục', onTap: () => this.resume() }));
     const autoLabel = () => (G.state.settings.autoChange ? '🧮 Tự thối tiền: Bật' : '✋ Tự thối tiền: Tắt');
-    const autoBtn = new Button(this, W / 2, 298, {
+    const autoBtn = new Button(this, W / 2, 268, {
       w: 220,
       h: 44,
       label: autoLabel(),
@@ -427,7 +429,7 @@ export class ShopScene extends Phaser.Scene {
       },
     });
     L.add(autoBtn);
-    const sound = new Button(this, W / 2, 352, {
+    const sound = new Button(this, W / 2, 322, {
       w: 220,
       h: 44,
       label: G.state.settings.sound ? '🔊 Âm thanh: Bật' : '🔇 Âm thanh: Tắt',
@@ -440,8 +442,19 @@ export class ShopScene extends Phaser.Scene {
       },
     });
     L.add(sound);
+    if (cloudSaveEnabled()) L.add(new Button(this, W / 2, 376, {
+      w: 220,
+      h: 44,
+      label: '☁️ Tài khoản và đồng bộ',
+      color: C.blue,
+      onTap: () => {
+        persist();
+        stopMusic();
+        this.scene.start('Title', { login: false });
+      },
+    }));
     L.add(
-      new Button(this, W / 2, 406, {
+      new Button(this, W / 2, 430, {
         w: 220,
         h: 44,
         label: '🏠 Về màn chính',
@@ -454,7 +467,7 @@ export class ShopScene extends Phaser.Scene {
       }),
     );
     L.add(
-      txt(this, W / 2, 462, 'Tắt tự thối để tự chọn tờ tiền và có cơ hội nhận tip.\nĐã lưu tiến trình.', {
+      txt(this, W / 2, 500, 'Tắt tự thối để tự chọn tờ tiền và có cơ hội nhận tip.\nĐã lưu tiến trình.', {
         size: 12,
         color: HEX.muted,
         origin: [0.5, 0.5],
@@ -469,6 +482,7 @@ export class ShopScene extends Phaser.Scene {
     this.pauseLayer?.destroy();
     this.pauseLayer = null;
     this.session.paused = false;
+    setPlayClockRunning(true);
     if (G.state.settings.sound) startMusic();
   }
 }

@@ -9,14 +9,14 @@
 
 ## 2. Bản lưu sẵn sàng cho đồng bộ
 
-- [ ] 2.1 Thêm `lz-string`; viết `compressSave` / `decompressSave` dùng chung; test nén rồi giải nén giống hệt, test dữ liệu hỏng
+- [ ] 2.1 Tải lười `lz-string` phiên bản cố định; viết `compressSave` / `decompressSave` dùng chung; kiểm tra nén rồi giải nén giống hệt, dữ liệu hỏng
 - [ ] 2.2 Thêm khối `sync` (baseRevision, dirty, lastSyncedAt, deviceId) và bổ sung mặc định khi tải; test
 - [ ] 2.3 Thêm `summary` (level, day, money, playSeconds), đếm thời gian chơi trừ lúc tạm dừng; test
 - [ ] 2.4 Đặt `dirty = true` mỗi lần lưu local
 
 ## 3. Đăng nhập
 
-- [ ] 3.1 `src/services/firebase.ts`: khởi tạo tải lười bằng `import()` động, chỉ khi bấm đăng nhập hoặc có cờ `thdh.auth.hint`; tôn trọng `VITE_CLOUD_SAVE=off`
+- [ ] 3.1 `src/services/firebase.ts`: khởi tạo browser modules Firebase tải lười từ CDN chính thức, chỉ khi bấm đăng nhập hoặc có cờ `thdh.auth.hint`; tôn trọng `VITE_CLOUD_SAVE=off`
 - [ ] 3.2 `src/services/auth.ts`: popup trên desktop, redirect trên điện thoại, `browserLocalPersistence`, lắng nghe `onAuthStateChanged`, xử lý hủy/lỗi
 - [ ] 3.3 Rewrite Vercel `/__/auth/:path*` → `<project>.firebaseapp.com`, đặt `authDomain` là domain game; thử redirect trên iOS Safari và Chrome Android
 - [ ] 3.4 `src/services/inAppBrowser.ts`: nhận diện FBAN/FBAV/FB_IAB/Messenger/Instagram/Zalo/TikTok/Line/WebView; test với danh sách user agent mẫu

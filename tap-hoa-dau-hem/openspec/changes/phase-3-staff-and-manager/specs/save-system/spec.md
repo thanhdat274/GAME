@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
-### Requirement: Migrate bản lưu v2 lên v3
-Khi tải bản lưu version 2, hệ thống SHALL thêm các trường nhân viên, lịch ca, quy tắc tự động, lịch sử phân tích, `lastSeen` với giá trị mặc định rỗng và giữ bản v2 làm dự phòng.
+### Requirement: Migrate bản lưu v3 lên v4
+Khi tải bản lưu version 3, hệ thống SHALL thêm các trường nhân viên, lịch ca, quy tắc tự động, lịch sử phân tích, `lastSeen` với giá trị mặc định rỗng; giữ nguyên dữ liệu Phase 1a và Phase 2, đồng thời giữ bản v3 làm dự phòng.
 
 #### Scenario: Người chơi giai đoạn 2 cập nhật
 - **WHEN** người chơi level 9 với EXP đủ level 11 mở bản giai đoạn 3

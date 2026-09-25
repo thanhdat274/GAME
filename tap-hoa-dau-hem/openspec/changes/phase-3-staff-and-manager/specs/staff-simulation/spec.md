@@ -5,7 +5,7 @@ Nhân viên SHALL tự nhận việc từ hàng đợi việc của tiệm theo 
 
 #### Scenario: Thu ngân phục vụ
 - **WHEN** có khách chờ ở quầy 2 và thu ngân đang rảnh
-- **THEN** thu ngân lấy hàng, tính tiền và thối tiền cho khách đó
+- **THEN** thu ngân quét các món khách đã tự lấy, tính tiền, thối tiền và phục vụ yêu cầu hàng sau quầy nếu có
 
 #### Scenario: Bổ sung kệ
 - **WHEN** ô nước ngọt còn 1/5 và kho còn nước ngọt

@@ -48,6 +48,20 @@ export interface Settings {
   autoChange: boolean;
 }
 
+export interface SaveSync {
+  baseRevision: number;
+  dirty: boolean;
+  lastSyncedAt: number | null;
+  deviceId: string;
+}
+
+export interface SaveSummary {
+  level: number;
+  day: number;
+  money: number;
+  playSeconds: number;
+}
+
 export interface GameState {
   version: 1;
   day: number;
@@ -71,8 +85,10 @@ export interface GameState {
   lastSummary: DaySummary | null;
   /** Level đã được giới thiệu mặt hàng mới (tránh hiện lại popup). */
   announcedLevel: number;
-  /** Tổng thời gian chơi thật (giây), không tính lúc tạm dừng hoặc tab ẩn. */
-  playSeconds: number;
+  loginPromptSeen: boolean;
+  /** Metadata for optional cloud backup; localStorage remains the source used to play. */
+  sync: SaveSync;
+  summary: SaveSummary;
 }
 
 export const MAX_SHELVES = 3;
@@ -104,17 +120,18 @@ export function createNewGame(): GameState {
     settings: { sound: true, autoChange: true },
     lastSummary: null,
     announcedLevel: 1,
-    playSeconds: 0,
+    loginPromptSeen: false,
+    sync: { baseRevision: 0, dirty: true, lastSyncedAt: null, deviceId: createDeviceId() },
+    summary: { level: 1, day: 1, money: b.startMoney, playSeconds: 0 },
   };
 }
 
-/** Khoảng tối đa được tính cho một lần đếm, để máy ngủ/treo lâu không bị tính là đang chơi. */
-export const MAX_PLAY_TICK_MS = 5000;
-
-/** Cộng thời gian chơi; bỏ qua khoảng âm và cắt khoảng quá dài. */
-export function addPlayTime(state: GameState, elapsedMs: number): void {
-  if (!(elapsedMs > 0)) return;
-  state.playSeconds = (state.playSeconds ?? 0) + Math.min(elapsedMs, MAX_PLAY_TICK_MS) / 1000;
+function createDeviceId(): string {
+  try {
+    return globalThis.crypto?.randomUUID?.() ?? `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  } catch {
+    return `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
 }
 
 export function levelDef(level: number): LevelDef {

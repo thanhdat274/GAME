@@ -24,7 +24,7 @@ Có sẵn đăng nhập Google, SDK web, quy tắc bảo mật, và gói Spark m
 - Đã cân nhắc Supabase (Postgres + Auth): tốt, nhưng dự án miễn phí bị tạm dừng sau 7 ngày không hoạt động, và cần tự viết bảng + RLS. Tự làm backend (Node + DB) thì tốn công vận hành. Google Drive AppData thì quyền truy cập rộng, màn đồng ý đáng sợ với người chơi.
 
 ### D2. Tải lười SDK
-Firebase chỉ được `import()` động khi người chơi bấm "Đăng nhập", hoặc khi localStorage có cờ `thdh.auth.hint = "google"` (đã từng đăng nhập). Người chơi khách không phải tải thêm khoảng 100KB (gzip) của Firebase.
+Firebase chỉ được `import()` động khi người chơi bấm "Đăng nhập", hoặc khi localStorage có cờ `thdh.auth.hint = "google"` (đã từng đăng nhập). Người chơi khách không phải tải thêm Firebase. Bản triển khai hiện dùng browser modules phiên bản cố định trên CDN chính thức của Firebase; `lz-string` cũng chỉ tải khi cần nén/giải nén bản cloud. Điều này giữ bundle ban đầu nhỏ và tránh phụ thuộc npm trong môi trường cài gói đang lỗi, nhưng đăng nhập và khôi phục cloud cần mạng tới các CDN. Khi npm hoạt động ổn định có thể chuyển sang gói cục bộ mà không đổi API dịch vụ.
 
 ### D3. Luồng đăng nhập
 - Desktop: `signInWithPopup`.
@@ -39,7 +39,7 @@ Kiểm tra user agent với các dấu hiệu `FBAN`, `FBAV`, `FB_IAB`, `Messeng
 Firestore: `users/{uid}/saves/main`
 ```
 {
-  schemaVersion: number,   // version bản lưu game (v1..v4)
+  schemaVersion: number,   // version bản lưu game (v1..v5)
   revision: number,        // tăng 1 mỗi lần ghi thành công
   deviceId: string,        // id ngẫu nhiên của thiết bị ghi
   updatedAt: Timestamp,    // serverTimestamp()

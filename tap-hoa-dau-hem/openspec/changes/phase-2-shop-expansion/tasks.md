@@ -1,8 +1,8 @@
-## 1. Nền tảng dữ liệu và bản lưu v2
+## 1. Nền tảng dữ liệu và bản lưu v3
 
 - [ ] 1.1 Mở rộng kiểu `GameState` cho lưới mặt bằng, nội thất, lô hàng, sổ nợ, nhiệm vụ, trang trí
 - [ ] 1.2 Chuyển kho sang mô hình lô hàng (FEFO), cập nhật mọi chỗ gọi kho cũ; test
-- [ ] 1.3 Viết `migrate_1_to_2` + fixture bản lưu v1 mẫu; test giữ nguyên tiền, level, hàng, vị trí kệ
+- [ ] 1.3 Viết `migrate_2_to_3` từ save self-service v2 + fixture bản lưu v2 mẫu; test giữ nguyên tiền, level, hàng, khu kệ, hàng sau quầy và cài đặt
 - [ ] 1.4 Xuất/nhập mã sao lưu (JSON → nén → base64), màn Cài đặt có nút Xuất/Nhập
 - [ ] 1.5 Thêm trường mới vào `products.json` + 16 mặt hàng; cập nhật test kiểm tra dữ liệu
 - [ ] 1.6 Nâng `levels.json` lên L9 với bảng mở khóa L5–L9; hệ thống hướng dẫn tính năng mới hiện 1 lần
@@ -15,7 +15,7 @@
 - [ ] 2.4 Scene: vẽ lưới, đất khóa (mờ + ổ khóa + giá), hiệu ứng dỡ rào khi mở
 - [ ] 2.5 Build mode: kéo thả nội thất, tô xanh/đỏ, nút Xong/Hủy, chỉ có ở Buổi sáng
 - [ ] 2.6 Camera cuộn dọc bằng một ngón (ngưỡng 8px), quầy + khay tiền ghim ở dưới, nút "Về quầy"
-- [ ] 2.7 Khách tìm đường trên lưới (A* đơn giản) tới kệ và quầy
+- [ ] 2.7 Khách tự chọn hàng tìm đường trên lưới (A* đơn giản) tới từng khu có món cần rồi tới quầy; không yêu cầu người chơi chạm kệ để lấy hàng
 - [ ] 2.8 Gộp nội thất tĩnh vào RenderTexture; kiểm thử 60fps với 5 khách trên 375x812
 
 ## 3. Kho và thiết bị lạnh
@@ -60,6 +60,6 @@
 ## 8. Cân bằng và phát hành
 
 - [ ] 8.1 Mở rộng script mô phỏng: 30 ngày, kiểm tra lãi, tốc độ lên L9 (mục tiêu 20–30 ngày), tỉ lệ hàng hỏng < 10% với chiến lược hợp lý
-- [ ] 8.2 Kiểm thử trên điện thoại: build mode, cuộn camera, chạm lấy hàng khi tiệm lớn
+- [ ] 8.2 Kiểm thử trên điện thoại: build mode, cuộn camera, khách tự đi theo khu và người chơi nạp hàng/quét tại quầy khi tiệm lớn
 - [ ] 8.3 Test migrate bằng bản lưu thật của người chơi thử giai đoạn 1
 - [ ] 8.4 Deploy, thu phản hồi, cập nhật `balance.json` trước khi sang giai đoạn 3
