@@ -71,6 +71,8 @@ export interface GameState {
   lastSummary: DaySummary | null;
   /** Level đã được giới thiệu mặt hàng mới (tránh hiện lại popup). */
   announcedLevel: number;
+  /** Tổng thời gian chơi thật (giây), không tính lúc tạm dừng hoặc tab ẩn. */
+  playSeconds: number;
 }
 
 export const MAX_SHELVES = 3;
@@ -102,7 +104,17 @@ export function createNewGame(): GameState {
     settings: { sound: true, autoChange: true },
     lastSummary: null,
     announcedLevel: 1,
+    playSeconds: 0,
   };
+}
+
+/** Khoảng tối đa được tính cho một lần đếm, để máy ngủ/treo lâu không bị tính là đang chơi. */
+export const MAX_PLAY_TICK_MS = 5000;
+
+/** Cộng thời gian chơi; bỏ qua khoảng âm và cắt khoảng quá dài. */
+export function addPlayTime(state: GameState, elapsedMs: number): void {
+  if (!(elapsedMs > 0)) return;
+  state.playSeconds = (state.playSeconds ?? 0) + Math.min(elapsedMs, MAX_PLAY_TICK_MS) / 1000;
 }
 
 export function levelDef(level: number): LevelDef {
