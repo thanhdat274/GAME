@@ -14,7 +14,7 @@ Sau level 20, tiệm đã tự vận hành và người chơi cần mục tiêu 
 - **Cốt truyện**: các chương "Siêu thị đối diện" (đối thủ cạnh tranh giá), "Bà về thăm tiệm", "Lên phố mở chuỗi".
 - **Chi nhánh**: mở 3 chi nhánh (Chợ, Cổng trường, Khu công nghiệp) với nhu cầu khác nhau; giao Quản lý chi nhánh; chuyển hàng giữa chi nhánh; bản đồ thành phố.
 - **Nhiệm vụ tuần** và **đơn tiệc** số lượng lớn.
-- **BREAKING (dữ liệu lưu)**: bản lưu v4 hỗ trợ nhiều cửa hàng, có migrate v3 → v4.
+- **BREAKING (dữ liệu lưu)**: bản lưu v5 hỗ trợ nhiều cửa hàng, có migrate v4 → v5.
 
 ## Capabilities
 
@@ -34,7 +34,7 @@ Sau level 20, tiệm đã tự vận hành và người chơi cần mục tiêu 
 - `land-expansion`: Đất E (góc đồ ăn) và Đất F (quầy nước).
 - `staff-simulation`: Vai trò mới Đầu bếp, Pha chế, Quản lý chi nhánh.
 - `daily-quests`: Nhiệm vụ tuần, nhiệm vụ sự kiện, đơn tiệc.
-- `save-system`: Bản lưu v4 nhiều cửa hàng, migrate v3 → v4.
+- `save-system`: Bản lưu v5 nhiều cửa hàng, migrate v4 → v5.
 
 ## Impact
 

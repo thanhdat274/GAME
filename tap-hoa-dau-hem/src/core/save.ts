@@ -44,6 +44,8 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
     ...loaded,
     settings: { ...base.settings, ...loaded.settings },
     today: { ...base.today, ...loaded.today },
+    sync: { ...base.sync, ...loaded.sync },
+    summary: { ...base.summary, ...loaded.summary },
     version: CURRENT_VERSION,
   } as GameState;
 }
@@ -56,9 +58,13 @@ function defaultStore(): KeyValueStore | null {
   }
 }
 
-export function saveGame(state: GameState, store: KeyValueStore | null = defaultStore()): boolean {
+export function saveGame(state: GameState, store: KeyValueStore | null = defaultStore(), markDirty = true): boolean {
   if (!store) return false;
   try {
+    if (markDirty) state.sync.dirty = true;
+    state.summary.level = state.level;
+    state.summary.day = state.day;
+    state.summary.money = state.money;
     const file: SaveFile = { version: CURRENT_VERSION, savedAt: Date.now(), state };
     store.setItem(SAVE_KEY, JSON.stringify(file));
     return true;

@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function smallSave() {
+      return request.resource.data.data is string
+        && request.resource.data.data.toUtf8().size() < 900000;
+    }
+
+    match /users/{uid}/saves/main {
+      allow read, delete: if owns(uid);
+      allow create: if owns(uid)
+        && smallSave()
+        && request.resource.data.revision == 1
+        && request.resource.data.data is string;
+      allow update: if owns(uid)
+        && smallSave()
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.data is string;
+    }
+
+    match /users/{uid}/meta/clock {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.ping is timestamp;
+    }
+
+    match /users/{uid}/{document=**} {
+      allow read, write, delete: if false;
+    }
+  }
+}

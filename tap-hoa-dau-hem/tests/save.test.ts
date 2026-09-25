@@ -65,6 +65,32 @@ describe('lưu game', () => {
     expect(state.yesterdayMissed).toEqual({});
   });
 
+  it('bản lưu cũ được bổ sung metadata đồng bộ mà không tăng version', () => {
+    const old = createNewGame() as unknown as Record<string, unknown>;
+    delete old.sync;
+    delete old.summary;
+    const state = migrate({ version: 1, state: old });
+    expect(state.sync.baseRevision).toBe(0);
+    expect(state.sync.dirty).toBe(true);
+    expect(state.sync.deviceId.length).toBeGreaterThan(0);
+    expect(state.summary).toMatchObject({ level: 1, day: 1, playSeconds: 0 });
+  });
+
+  it('lưu local đánh dấu dirty, còn ghi sau đồng bộ giữ trạng thái sạch', () => {
+    const store = new MemoryStore();
+    const state = createNewGame();
+    state.sync.dirty = false;
+    state.money = 123000;
+    expect(saveGame(state, store)).toBe(true);
+    expect(state.sync.dirty).toBe(true);
+    expect(state.summary.money).toBe(123000);
+    state.sync.dirty = false;
+    expect(saveGame(state, store, false)).toBe(true);
+    const loaded = loadGame(store);
+    expect(loaded.status).toBe('ok');
+    if (loaded.status === 'ok') expect(loaded.state.sync.dirty).toBe(false);
+  });
+
   it('từ chối bản lưu mới hơn game', () => {
     expect(() => migrate({ version: 99, state: {} })).toThrow();
   });

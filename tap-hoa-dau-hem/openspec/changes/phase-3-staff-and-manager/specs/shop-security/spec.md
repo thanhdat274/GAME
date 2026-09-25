@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Trộm vặt
-Từ level 15, khoảng 3% khách SHALL là kẻ trộm: lấy 1–3 món từ kệ rồi đi thẳng ra cửa không qua quầy.
+Từ level 15, khoảng 3% khách SHALL là kẻ trộm: tự lấy 1–3 món từ khu hàng rồi đi thẳng ra cửa không qua quầy, theo cơ chế khách tự chọn hàng của Phase 1a.
 
 #### Scenario: Bắt quả tang
 - **WHEN** người chơi chạm vào kẻ trộm trong vòng 3 giây kể từ lúc hắn lấy hàng

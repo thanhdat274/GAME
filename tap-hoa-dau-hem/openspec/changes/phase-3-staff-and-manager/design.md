@@ -52,8 +52,8 @@ Từ L15, 3% khách là kẻ trộm: đi tới kệ, lấy món rồi đi thẳn
 ### D10. Giao hàng tận nhà
 Từ L18, điện thoại bàn reo: đơn 3–8 món, phí ship, hạn giao 1–2 giờ game. Cần nhân viên giao hàng (hoặc người chơi tự "đóng cửa" đi giao, tốn thời gian). Giao trễ thì bị giảm sao.
 
-### D11. Save v3
-Thêm `staff[]`, `schedule`, `rules[]`, `analyticsHistory` (30 ngày), `lastSeen`, `managerStats`. Migrate v2 → v3 với các giá trị rỗng.
+### D11. Save v4
+Thêm `staff[]`, `schedule`, `rules[]`, `analyticsHistory` (30 ngày), `lastSeen`, `managerStats`. Migrate v3 → v4 với các giá trị rỗng, giữ nguyên khu hàng, hàng sau quầy và dữ liệu lô hàng.
 
 ## Risks / Trade-offs
 
@@ -65,7 +65,7 @@ Thêm `staff[]`, `schedule`, `rules[]`, `analyticsHistory` (30 ngày), `lastSeen
 
 ## Migration Plan
 
-Deploy kèm migrate v2 → v3, giữ bản v2 làm dự phòng. Người chơi đang ở L9 với EXP dư sẽ lên level ngay khi tải và được giới thiệu tuyển nhân viên.
+Deploy kèm migrate v3 → v4, giữ bản v3 làm dự phòng. Người chơi đang ở L9 với EXP dư sẽ lên level ngay khi tải và được giới thiệu tuyển nhân viên.
 
 ## Open Questions
 

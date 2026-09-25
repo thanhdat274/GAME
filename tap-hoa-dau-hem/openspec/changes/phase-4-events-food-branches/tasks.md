@@ -1,7 +1,7 @@
-## 1. Đợt 4a - Nền tảng: bản lưu v4, lịch, ngăn xếp hiệu ứng
+## 1. Đợt 4a - Nền tảng: bản lưu v5, lịch, ngăn xếp hiệu ứng
 
 - [ ] 1.1 Tái cấu trúc `GameState` thành dữ liệu chung + `stores[]`; mọi hệ thống nhận `storeId`; test
-- [ ] 1.2 `migrate_3_to_4` + fixture; giới hạn kích thước bản lưu < 1MB; test
+- [ ] 1.2 `migrate_4_to_5` + fixture; giữ nguyên trạng thái Phase 1a–3; giới hạn kích thước bản lưu < 1MB; test
 - [ ] 1.3 Core: lịch 10 ngày/tháng, 12 tháng/năm, mùa và hệ số nhu cầu theo mùa; test
 - [ ] 1.4 Core: `EffectStack` gộp hiệu ứng; chuyển các hằng số (sinh khách, nhu cầu, giá sỉ, điện) sang đọc từ EffectStack; test không đổi hành vi khi không có hiệu ứng
 - [ ] 1.5 Nâng `levels.json` lên L35 với bảng mở khóa L21–L35

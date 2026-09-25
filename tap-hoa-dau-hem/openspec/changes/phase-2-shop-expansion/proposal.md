@@ -16,7 +16,7 @@ Sau giai đoạn 1, người chơi chạm trần level 4 với 3 kệ và 14 mó
 - **Nhiệm vụ hằng ngày** (3/ngày) và **thành tựu**.
 - **Trang trí**: biển hiệu, đèn, chậu cây, con mèo, giúp tăng chỉ số "thu hút".
 - 16 mặt hàng mới: đồ uống, đồ tươi, đông lạnh.
-- **BREAKING (dữ liệu lưu)**: bản lưu lên version 2, có migrate tự động từ v1.
+- **BREAKING (dữ liệu lưu)**: bản lưu lên version 3, có migrate tự động từ v2 (sau self-service-shopping).
 
 ## Capabilities
 
@@ -34,7 +34,7 @@ Sau giai đoạn 1, người chơi chạm trần level 4 với 3 kệ và 14 mó
 ### Modified Capabilities
 - `progression`: Nâng giới hạn level lên 9 và thêm bảng mở khóa L5–L9.
 - `customer-flow`: Thêm kiểu khách mặc cả, khách ghi sổ; khách phản ứng với giá bán và thu hút.
-- `save-system`: Bản lưu v2, migrate v1 → v2, xuất/nhập mã sao lưu.
+- `save-system`: Bản lưu v3, migrate v2 → v3, xuất/nhập mã sao lưu.
 - `product-catalog`: Thêm 16 mặt hàng và các trường hạn dùng, cần lạnh, giá gợi ý.
 
 ## Impact

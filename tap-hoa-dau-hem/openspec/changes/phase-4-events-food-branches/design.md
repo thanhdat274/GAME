@@ -59,12 +59,12 @@ Chỉ render tiệm đang xem. Chi nhánh khác mô phỏng rút gọn cuối ng
 
 - [Mini-game nấu và pha chế làm người chơi quá tải khi còn phải bán tạp hóa] → Góc đồ ăn có Đầu bếp ngay từ khi mở (L21 được thuê miễn phí 3 ngày đầu); người chơi chọn tự làm để lấy tip cao.
 - [Sự kiện tiêu cực gây khó chịu] → Luôn báo trước, luôn có cách chuẩn bị (máy phát, dọn hàng hết hạn); mỗi sự kiện xấu đi kèm cơ hội bán hàng.
-- [Bản lưu v4 thay đổi lớn cấu trúc] → Migrate v3 → v4 bọc tiệm hiện tại thành `stores[0]`; test kỹ bằng fixture của người chơi thật.
+- [Bản lưu v5 thay đổi lớn cấu trúc] → Migrate v4 → v5 bọc tiệm hiện tại thành `stores[0]`; giữ nguyên nhân viên, khu hàng, hàng sau quầy và lô hàng; test kỹ bằng fixture của người chơi thật.
 - [Nội dung sự kiện hết nhanh] → Dữ liệu hóa hoàn toàn để thêm sự kiện mới theo mùa thật mỗi tháng.
 
 ## Migration Plan
 
-Phát hành theo 3 đợt (4a, 4b, 4c). Migrate v3 → v4 chạy ở đợt 4a (dù chi nhánh chưa mở) để ổn định cấu trúc sớm. Giữ bản v3 làm dự phòng.
+Phát hành theo 3 đợt (4a, 4b, 4c). Migrate v4 → v5 chạy ở đợt 4a (dù chi nhánh chưa mở) để ổn định cấu trúc sớm. Giữ bản v4 làm dự phòng.
 
 ## Open Questions
 

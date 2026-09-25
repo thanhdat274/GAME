@@ -16,7 +16,7 @@ Tới level 9–10, tiệm đã lớn (3 mảnh đất, 5 khách chờ, hàng t�
 - **Bảng phân tích**: doanh thu 7 ngày, món bán chạy/ế, giờ đông khách, hiệu suất nhân viên.
 - **Chế độ Quản lý**: tiệm tự chạy cả ngày, người chơi xem và can thiệp; tăng tốc x2/x4.
 - **Thu nhập offline**: rời game vẫn có tiền theo mô phỏng rút gọn, tối đa 8 giờ.
-- **BREAKING (dữ liệu lưu)**: bản lưu v3, có migrate v2 → v3.
+- **BREAKING (dữ liệu lưu)**: bản lưu v4, có migrate v3 → v4.
 
 ## Capabilities
 
@@ -35,7 +35,7 @@ Tới level 9–10, tiệm đã lớn (3 mảnh đất, 5 khách chờ, hàng t�
 - `progression`: Giới hạn level 20 và bảng mở khóa L10–L20.
 - `land-expansion`: Thêm Đất D (mini-mart) và quầy thu ngân thứ 2.
 - `day-cycle`: Tổng kết có lương nhân viên; tốc độ ngày trong chế độ quản lý.
-- `save-system`: Bản lưu v3 và migrate v2 → v3.
+- `save-system`: Bản lưu v4 và migrate v3 → v4.
 
 ## Impact
 
