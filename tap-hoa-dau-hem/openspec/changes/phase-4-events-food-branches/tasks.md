@@ -55,7 +55,7 @@
 
 ## 7. Cân bằng và phát hành cuối
 
-- [x] 7.1 Mô phỏng 1 năm game (120 ngày) với 4 tiệm: kinh tế không bùng nổ, bản lưu < 1MB, "Bỏ qua ngày" < 1 giây (`tests/yearSimulation.test.ts`: 46tr → 98tr, save 73KB, bỏ qua ngày tối đa ~130ms)
-- [ ] 7.2 Kiểm thử toàn bộ trên điện thoại tầm trung: bản đồ, mini-game nấu và pha chế, sự kiện
+- [x] 7.1 Mô phỏng 1 năm game (120 ngày) với 4 tiệm: kinh tế không bùng nổ, bản lưu < 1MB, "Bỏ qua ngày" < 1 giây (`tests/yearSimulation.test.ts`: 46tr → 85,9tr, save 73KB, bỏ qua ngày tối đa 399ms; 27/09/2026)
+- [x] 7.2 Kiểm thử toàn bộ trên điện thoại tầm trung: bản đồ, mini-game nấu và pha chế, sự kiện
 - [x] 7.3 Viết tài liệu thêm sự kiện mới bằng JSON (để cập nhật nội dung hằng tháng)
 - [x] 7.4 Phát hành đợt 4c, cập nhật thẻ game trên cổng game
