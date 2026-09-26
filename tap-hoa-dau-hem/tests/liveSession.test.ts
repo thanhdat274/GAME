@@ -41,4 +41,17 @@ describe('phiên tiệm dùng chung', () => {
     expect(advanced.state.clock).toBeGreaterThan(opened.state.clock);
     expect(advanced.dayRuntime).not.toBeNull();
   });
+
+  it('cho nhập thêm hàng giữa giờ bán mà không làm mất phiên bán', () => {
+    const state = createNewGame();
+    state.shelves[0][0] = { productId: 'mi_goi', qty: 4 };
+    state.zones[0] = 'dry';
+    const opened = applyLiveShopCommand(createLiveShopAggregate(state), { type: 'openShop' }).aggregate;
+    const bought = applyLiveShopCommand(opened, { type: 'buyStock', cart: { mi_goi: 5 } }).aggregate;
+
+    expect(bought.state.phase).toBe('open');
+    expect(bought.dayRuntime).not.toBeNull();
+    expect(warehouseQty(bought.state, 'mi_goi')).toBe(5);
+    expect(bought.state.money).toBe(opened.state.money - 5 * product('mi_goi').cost);
+  });
 });
