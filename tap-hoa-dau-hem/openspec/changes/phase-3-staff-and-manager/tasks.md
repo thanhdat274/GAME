@@ -29,7 +29,7 @@
 
 - [x] 4.1 Đất D trong `land.json`, quầy thu ngân 2, kệ đôi, mặt tiền "Mini Mart"
 - [x] 4.2 Xe đẩy: khách mua 3–6 món; cân bằng kiên nhẫn cho đơn lớn
-- [ ] 4.3 Kiểm thử hiệu năng 6 nhân viên + 6 khách trên điện thoại tầm trung
+- [x] 4.3 Kiểm thử hiệu năng 6 nhân viên + 6 khách trên điện thoại tầm trung
 
 ## 5. Tự động hóa và an ninh
 

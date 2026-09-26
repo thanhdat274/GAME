@@ -61,8 +61,8 @@
 
 - [x] 8.1 Mở rộng script mô phỏng: 30 ngày, kiểm tra lãi, tốc độ lên L9 (mục tiêu 20–30 ngày), tỉ lệ hàng hỏng < 10% với chiến lược hợp lý
 - [ ] 8.2 Kiểm thử trên điện thoại: build mode, cuộn camera, khách tự đi theo khu theo luồng Phase 1a và người chơi nạp hàng/quét tại quầy khi tiệm lớn
-- [ ] 8.3 Test migrate bằng bản lưu thật của người chơi thử giai đoạn 1
-- [ ] 8.4 Deploy, thu phản hồi, cập nhật `balance.json` trước khi sang giai đoạn 3
+- [x] 8.3 Test migrate bằng bản lưu thật của người chơi thử giai đoạn 1
+- [x] 8.4 Deploy, thu phản hồi, cập nhật `balance.json` trước khi sang giai đoạn 3
 
 ### Ghi nhận triển khai 26/09/2026
 

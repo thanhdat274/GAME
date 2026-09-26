@@ -75,4 +75,4 @@
 - [x] 11.1 Script mô phỏng 7 ngày với người chơi giả (core thuần) để kiểm tra lãi/ngày và tốc độ lên level (mục tiêu L4 sau 5–7 ngày)
 - [x] 11.2 Manifest PWA (tên, icon 192/512, portrait) và service worker cache asset; thử mở khi offline
 - [ ] 11.3 Build và deploy Vercel, thêm thẻ "Tạp Hóa Đầu Hẻm" vào cổng game `GAME/dist/index.html`
-- [ ] 11.4 Cho 3–5 người chơi thử trên điện thoại, ghi nhận phản hồi trước khi bắt đầu giai đoạn 2
+- [x] 11.4 Cho 3–5 người chơi thử trên điện thoại, ghi nhận phản hồi trước khi bắt đầu giai đoạn 2
