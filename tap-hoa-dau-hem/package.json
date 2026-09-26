@@ -18,7 +18,8 @@
     "functions:build": "npm --prefix functions run build",
     "deploy:rules": "firebase deploy --only firestore:rules --project tap-hoa-dau-hem",
     "deploy:live": "firebase deploy --only functions,firestore:rules --project tap-hoa-dau-hem",
-    "emulators": "firebase emulators:start --only auth,firestore,functions --project demo-tap-hoa-dau-hem"
+    "emulators": "firebase emulators:start --only auth,firestore,functions --project demo-tap-hoa-dau-hem",
+    "compare:views": "vite-node scripts/compare-views.ts"
   },
   "dependencies": {
     "firebase": "^12.19.0",

@@ -238,6 +238,7 @@ export class MorningScene extends Phaser.Scene {
     const go = (key: string) => () => { persist(); this.scene.start(key); };
     const items: { label: string; color: number; onTap: () => void }[] = [];
     if (hasFeature(s.level, 'land')) items.push({ label: '🏗️ Sắp xếp', color: C.green, onTap: go('Build') });
+    items.push({ label: '🗺️ Sơ đồ tiệm', color: C.wood, onTap: go('StoreMap') });
     items.push({ label: '📦 Kho hàng', color: C.wood, onTap: go('Warehouse') });
     if (hasFeature(s.level, 'quests')) items.push({ label: '🎯 Nhiệm vụ', color: C.wood, onTap: go('Quests') });
     if (hasFeature(s.level, 'pricing')) items.push({ label: '💲 Giá bán', color: C.wood, onTap: go('Prices') });

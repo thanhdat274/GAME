@@ -40,6 +40,7 @@ export class BranchesScene extends Phaser.Scene {
         }
         persist(); this.scene.start('Morning');
       }) }).setEnabled(!locked));
+      if (store) this.list.add(new Button(this, current ? W - 60 : W - 150, current ? y + 39 : y + 86, { w: 82, h: current ? 34 : 26, label: '🗺️ Xem kệ', size: 10, color: C.wood, onTap: this.list.guard(() => { persist(); this.scene.start('StoreMap', { storeId: def.id, back: 'Branches' }); }) }));
       if (store && !current) this.list.add(new Button(this, W - 60, y + 82, { w: 82, h: 30, label: '🚚 Gửi hàng', size: 10, color: C.wood, onTap: this.list.guard(() => this.openShipment(def.id, def.name)) }));
       y += h;
     }

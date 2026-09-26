@@ -14,8 +14,9 @@ import { calendarDate } from '../core/calendar';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand, startLivePulses, stopLivePulses, suspendLiveShop } from '../services/liveShop';
 import { cloudSaveEnabled } from '../services/firebase';
-import { bakeStatic, bill, customerSprite, drawShopInterior, productIcon, setWalkFrame, staffSprite } from '../ui/art';
+import { bakeStatic, bill, customerLook, customerSprite, drawShopInterior, productIcon, setWalkFrame, staffSprite } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
+import { LiveMap } from '../ui/liveMap';
 import { ShelfView } from '../ui/shelves';
 import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sound';
 import { Bar, Button, dialog, floatText, panel, toast } from '../ui/widgets';
@@ -33,12 +34,7 @@ type SaleZone = Exclude<Category, 'counter' | 'food' | 'beverage'>;
 const ZONE_X: Record<SaleZone, number> = { dry: 60, snack: 175, household: 290, drink: 118, fresh: 232, frozen: 320 };
 const ZONE_BUTTON: Record<SaleZone, string> = { dry: 'Nạp đồ khô', snack: 'Nạp ăn vặt', household: 'Nạp đồ dùng', drink: 'Nạp đồ uống', fresh: 'Nạp đồ tươi', frozen: 'Nạp đông lạnh' };
 
-/** Khách quen (hàng xóm) dùng ngoại hình riêng: tạo loại khách ảo có id riêng để cache texture. */
-function lookOf(c: Customer): CustomerType {
-  if (!c.look || !c.name) return c.type;
-  const slug = c.name.normalize('NFD').replace(/[^a-zA-Z]/g, '').toLowerCase();
-  return { ...c.type, ...c.look, id: `${c.type.id}_${slug}` };
-}
+const lookOf = (c: Customer): CustomerType => customerLook(c);
 
 interface CustomerView {
   sprite: Phaser.GameObjects.Image;
@@ -80,6 +76,14 @@ export class ShopScene extends Phaser.Scene {
   private managerStatus: Phaser.GameObjects.Text | null = null;
   private weatherFx: Phaser.GameObjects.Graphics | null = null;
   private weatherFxAcc = 0;
+  /** Sơ đồ trực tiếp (mặt bằng từ trên xuống, khách và nhân viên đi lại), chỉ để xem. */
+  private liveMap!: LiveMap;
+  /** Góc nhìn trên xuống để chơi: người chơi chạm ô để đi, tới kệ mới nạp, ở quầy mới tính tiền. */
+  private playMap: LiveMap | null = null;
+  private mapBtn: Button | null = null;
+  /** Che bảng tính tiền khi người chơi đang ở xa quầy (góc nhìn trên xuống). */
+  private awayCover: Phaser.GameObjects.Container | null = null;
+  private awayText: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super('Shop');
@@ -114,11 +118,18 @@ export class ShopScene extends Phaser.Scene {
         if (G.liveSnapshot) void this.liveCommand({ type: 'startRefill', shelf: r, slot: c });
         else if (this.session.startRefill(r, c)) play('step');
       },
-      onScroll: (atCounter) => this.counterBtn?.setVisible(!atCounter),
+      onScroll: (atCounter) => this.counterBtn?.setVisible(!atCounter && !this.topDown),
     }, s);
     // Tiệm nhiều kệ: kéo một ngón để xem kệ phía sau, nút này đưa khung nhìn về các kệ sát quầy.
     this.counterBtn = new Button(this, W - 58, SHELF_TOP + 3 * 64 - 8, { w: 100, h: 26, label: '↓ Về quầy', size: 11, color: C.blue, onTap: () => this.shelves.scrollToCounter() });
     this.counterBtn.setDepth(260).setVisible(!this.shelves.atCounter);
+    this.playMap = null;
+    this.awayCover = null;
+    this.liveMap = new LiveMap(this, this.session, {
+      mode: 'watch',
+      onSwitchMode: G.liveSnapshot ? undefined : () => { this.liveMap.close(); this.setViewMode('topdown'); },
+    });
+    this.mapBtn = new Button(this, 26, COUNTER_Y + 44, { w: 44, h: 40, label: '🗺️\nSơ đồ', size: 9, color: C.blue, onTap: () => this.liveMap.open() }).setDepth(260);
     this.drawCounter();
     this.addZoneRefillButtons();
     this.hud = new Hud(this, s, { onPause: () => this.pause() });
@@ -129,6 +140,8 @@ export class ShopScene extends Phaser.Scene {
     this.ordersBtn = null;
     this.managerStatus = null;
     this.drawStaff();
+    this.applyViewMode();
+    if (this.topDown && !G.state.tutorialsSeen.includes('topdown')) this.topDownTutorial();
 
     this.wireEvents();
     this.time.addEvent({
@@ -227,7 +240,7 @@ export class ShopScene extends Phaser.Scene {
     });
     if (questsUnlocked(G.state)) {
       this.questBtn = new Button(this, W - 26, 286, { w: 40, h: 34, label: '🎯', size: 16, color: C.blue, onTap: () => this.showQuests() });
-      this.questBtn.setDepth(210);
+      this.questBtn.setDepth(270);
     }
   }
 
@@ -322,15 +335,15 @@ export class ShopScene extends Phaser.Scene {
     });
     e.on('priceComplaint', ({ customer, productId }) => {
       const v = this.views.get(customer.id);
-      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, `💸 Đắt quá! (${product(productId).name})`, HEX.red, 12);
+      this.sideFloat(v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, `💸 Đắt quá! (${product(productId).name})`, HEX.red, 12);
     });
     e.on('notCold', ({ customer }) => {
       const v = this.views.get(customer.id);
-      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, '🥵 Không lạnh à?', '#1f5fa0', 12);
+      this.sideFloat(v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, '🥵 Không lạnh à?', '#1f5fa0', 12);
     });
     e.on('catPetted', (customer) => {
       const v = this.views.get(customer.id);
-      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, '🐱❤️', HEX.red, 16);
+      this.sideFloat(v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, '🐱❤️', HEX.red, 16);
     });
     e.on('debtRepaid', ({ name, amount }) => {
       play('coin');
@@ -346,12 +359,12 @@ export class ShopScene extends Phaser.Scene {
     e.on('creditRequested', () => this.renderPanel(true));
     e.on('bargainResolved', ({ customer, accepted, left }) => {
       const v = this.views.get(customer.id);
-      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, accepted ? '🥰 Cảm ơn nha!' : left ? '😤 Thôi khỏi mua!' : '😒 Ừ thì mua...', accepted ? HEX.green : HEX.red, 13);
+      this.sideFloat(v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, accepted ? '🥰 Cảm ơn nha!' : left ? '😤 Thôi khỏi mua!' : '😒 Ừ thì mua...', accepted ? HEX.green : HEX.red, 13);
       this.renderPanel(true);
     });
     e.on('creditResolved', ({ customer, granted, amount }) => {
       const v = this.views.get(customer.id);
-      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, granted ? `📒 Ghi sổ ${formatMoney(amount)}` : '😞 Thôi vậy...', granted ? '#1f5fa0' : HEX.red, 13);
+      this.sideFloat(v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, granted ? `📒 Ghi sổ ${formatMoney(amount)}` : '😞 Thôi vậy...', granted ? '#1f5fa0' : HEX.red, 13);
       this.renderPanel(true);
     });
     e.on('basketReady', () => { this.layoutQueue(); this.renderPanel(true); });
@@ -366,19 +379,19 @@ export class ShopScene extends Phaser.Scene {
       play('wrong');
       vibrate(60);
       const v = this.views.get(customer.id);
-      if (v) floatText(this, v.sprite.x, v.sprite.y - 70, '🙁 Hết!', HEX.red, 13);
+      if (v) this.sideFloat(v.sprite.x, v.sprite.y - 70, '🙁 Hết!', HEX.red, 13);
     });
     e.on('itemScanned', () => this.renderPanel(true));
     e.on('counterRequested', ({ customer, productId, seconds }) => {
       const v = this.views.get(customer.id);
-      floatText(this, v?.sprite.x ?? W / 2, FEET_Y - 78, `Sau quầy: ${product(productId).name} · ${seconds}s`, '#1f5fa0', 12);
+      this.sideFloat(v?.sprite.x ?? W / 2, FEET_Y - 78, `Sau quầy: ${product(productId).name} · ${seconds}s`, '#1f5fa0', 12);
       this.renderPanel(true);
     });
     e.on('counterServed', () => { play('pick'); this.renderPanel(true); });
     e.on('counterWrong', ({ customer }) => {
       play('wrong'); vibrate(60);
       const v = this.views.get(customer.id);
-      if (v) floatText(this, v.sprite.x, v.sprite.y - 70, 'Sai món!', HEX.red, 13);
+      if (v) this.sideFloat(v.sprite.x, v.sprite.y - 70, 'Sai món!', HEX.red, 13);
     });
     e.on('counterExpired', () => this.renderPanel(true));
     e.on('paymentStarted', () => this.renderPanel(true));
@@ -386,7 +399,7 @@ export class ShopScene extends Phaser.Scene {
     e.on('changeResult', ({ result, given, customer, auto }) => {
       if (auto && customer.changeDue > 0) {
         const v = this.views.get(customer.id);
-        floatText(this, v?.sprite.x ?? 80, 306, `🧮 Thối ${formatMoney(customer.changeDue)}`, '#1f5fa0', 13);
+        this.sideFloat(v?.sprite.x ?? 80, 306, `🧮 Thối ${formatMoney(customer.changeDue)}`, '#1f5fa0', 13);
       }
       if (result === 'short') {
         play('error');
@@ -401,8 +414,8 @@ export class ShopScene extends Phaser.Scene {
       play('cash');
       const v = this.views.get(customer.id);
       const x = v?.sprite.x ?? 80;
-      floatText(this, x, 266, `+${formatMoney(amount)}`, HEX.green, 17);
-      if (tip > 0) this.time.delayedCall(250, () => floatText(this, x + 40, 248, `+${formatMoney(tip)} tip`, '#b7791f', 14));
+      this.sideFloat(x, 266, `+${formatMoney(amount)}`, HEX.green, 17);
+      if (tip > 0) this.time.delayedCall(250, () => this.sideFloat(x + 40, 248, `+${formatMoney(tip)} tip`, '#b7791f', 14));
     });
     e.on('customerLeft', ({ customer, reason, stars }) => this.removeCustomer(customer, reason, stars));
     e.on('refillDone', () => play('pick'));
@@ -416,18 +429,18 @@ export class ShopScene extends Phaser.Scene {
     e.on('staffArrived', (st) => { this.drawStaff(); this.layoutQueue(); toast(this, `${roleDef(st.role).icon} ${st.name} vào ca`, 300, C.greenDark); });
     e.on('staffLeft', () => { this.drawStaff(); this.layoutQueue(); });
     e.on('lanesChanged', () => { this.drawStaff(); this.layoutQueue(); this.renderPanel(true); });
-    e.on('staffTired', (st) => floatText(this, this.cashierX.get(st.id) ?? 120, COUNTER_Y - 8, `💦 ${st.name} mệt`, '#1f5fa0', 12));
+    e.on('staffTired', (st) => this.sideFloat(this.cashierX.get(st.id) ?? 120, COUNTER_Y - 8, `💦 ${st.name} mệt`, '#1f5fa0', 12));
     e.on('staffMistake', ({ staff, kind, amount }) => {
-      floatText(this, this.cashierX.get(staff.id) ?? W / 2, COUNTER_Y - 8, kind === 'over' ? `😅 Thối dư ${formatMoney(amount)}` : `😠 Khách: thối thiếu!`, HEX.red, 12);
+      this.sideFloat(this.cashierX.get(staff.id) ?? W / 2, COUNTER_Y - 8, kind === 'over' ? `😅 Thối dư ${formatMoney(amount)}` : `😠 Khách: thối thiếu!`, HEX.red, 12);
     });
     e.on('staffLevelUp', (st) => { play('levelup'); toast(this, `⭐ ${st.name} lên cấp ${st.level}!`, 240, C.greenDark); this.drawStaff(); });
     e.on('staffRefill', ({ shelf, slot, qty }) => {
       const at = this.shelves.slotCenter(shelf, slot);
-      floatText(this, at.x, at.y, `🧺+${qty}`, HEX.green, 12);
+      this.sideFloat(at.x, at.y, `🧺+${qty}`, HEX.green, 12);
     });
     e.on('staffServed', ({ customer }) => {
       const v = this.views.get(customer.id);
-      if (v) floatText(this, v.sprite.x, 266, `+${formatMoney(customer.total)}`, HEX.green, 14);
+      if (v) this.sideFloat(v.sprite.x, 266, `+${formatMoney(customer.total)}`, HEX.green, 14);
     });
     e.on('thiefFleeing', (c) => this.thiefRuns(c));
     e.on('thiefCaught', ({ by, fine }) => {
@@ -486,6 +499,8 @@ export class ShopScene extends Phaser.Scene {
     if (!v) return;
     play('error');
     vibrate(120);
+    // Góc nhìn trên xuống: bắt trộm bằng cách chạy lại gần trên sơ đồ.
+    if (this.topDown) return;
     v.sprite.setTint(0xff9a8a).setY(FEET_Y - 20).setFlipX(true);
     const mark = txt(this, v.sprite.x, v.sprite.y - 70, '🚨 Chạm để bắt!', { size: 12, bold: true, color: HEX.red, origin: [0.5, 0.5], stroke: '#ffffff' }).setDepth(900);
     this.tweens.killTweensOf(v.sprite);
@@ -505,7 +520,7 @@ export class ShopScene extends Phaser.Scene {
   private updatePhone(): void {
     const ringing = this.session.phoneOrders.find((o) => o.status === 'ringing');
     if (ringing && !this.phoneBtn) {
-      this.phoneBtn = new Button(this, W - 26, 248, { w: 44, h: 34, label: '☎️', size: 18, color: C.red, onTap: () => this.answerPhone() }).setDepth(260);
+      this.phoneBtn = new Button(this, W - 26, 248, { w: 44, h: 34, label: '☎️', size: 18, color: C.red, onTap: () => this.answerPhone() }).setDepth(270);
       this.tweens.add({ targets: this.phoneBtn, angle: { from: -12, to: 12 }, yoyo: true, repeat: -1, duration: 90 });
     } else if (!ringing && this.phoneBtn) {
       this.tweens.killTweensOf(this.phoneBtn);
@@ -515,7 +530,7 @@ export class ShopScene extends Phaser.Scene {
     const waiting = this.session.phoneOrders.filter((o) => o.status === 'accepted' && !o.courier);
     const courier = G.state.staff.some((st) => st.role === 'delivery' && this.session.workerOf(st.id)?.present);
     if (waiting.length && !courier && !this.ordersBtn) {
-      this.ordersBtn = new Button(this, W - 70, 212, { w: 124, h: 30, label: '', size: 11, color: C.blue, onTap: () => this.selfDeliver() }).setDepth(260);
+      this.ordersBtn = new Button(this, W - 70, 212, { w: 124, h: 30, label: '', size: 11, color: C.blue, onTap: () => this.selfDeliver() }).setDepth(270);
     }
     if (this.ordersBtn && (!waiting.length || courier)) {
       this.ordersBtn.destroy();
@@ -630,7 +645,7 @@ export class ShopScene extends Phaser.Scene {
   private addCustomer(c: Customer): void {
     play('door');
     const sprite = customerSprite(this, DOOR_X, FEET_Y, lookOf(c)).setScale(CUSTOMER_SCALE / 2).setDepth(100);
-    if (c.name) floatText(this, W - 60, FEET_Y - 80, `👋 ${c.name} ghé tiệm`, '#6b4220', 12);
+    if (c.name) this.sideFloat(W - 60, FEET_Y - 80, `👋 ${c.name} ghé tiệm`, '#6b4220', 12);
     const bar = new Bar(this, 0, 0, 36, 5, C.green, 0x000000);
     bar.setDepth(150);
     this.views.set(c.id, { sprite, bar });
@@ -673,7 +688,7 @@ export class ShopScene extends Phaser.Scene {
       const face = reason === 'served' ? (stars >= 4 ? '😊' : stars >= 3 ? '🙂' : '😐') : reason === 'patience' ? '😠' : '😞';
       const says = reason === 'patience' ? 'Lâu quá!' : reason === 'nothing' ? 'Không có hàng à?' : '';
       const fx = reason === 'served' ? v.sprite.x - 40 : v.sprite.x;
-      floatText(this, fx, v.sprite.y - 72, `${face} ${says}`.trim(), reason === 'served' ? HEX.green : HEX.red, 14);
+      this.sideFloat(fx, v.sprite.y - 72, `${face} ${says}`.trim(), reason === 'served' ? HEX.green : HEX.red, 14);
       if (reason !== 'served') play('wrong');
       this.tweens.killTweensOf(v.sprite);
       v.sprite.setFlipX(true).setY(FEET_Y);
@@ -707,6 +722,7 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private flyItem(productId: string, shelf: number, slot: number, c: Customer): void {
+    if (this.topDown) return;
     const from = this.shelves.slotCenter(shelf, slot);
     const v = this.views.get(c.id);
     const icon = productIcon(this, from.x, from.y, product(productId), 28).setDepth(400);
@@ -983,6 +999,20 @@ export class ShopScene extends Phaser.Scene {
     // Chế độ quản lý: tăng tốc x2/x4 (nhiều bước core mỗi khung hình).
     const speed = G.state.today.managerDay ? G.state.manager.speed : 1;
     if (!G.liveSnapshot) for (let i = 0; i < speed && !this.ending; i++) this.session.update(dtMs / 1000);
+    const gameDt = this.session.paused ? 0 : speed * Math.min(dtMs / 1000, 0.5);
+    this.liveMap.update(gameDt);
+    if (this.playMap) {
+      this.playMap.update(gameDt);
+      this.session.playerAtCounter = this.playMap.playerAtCounter;
+      const away = !this.playMap.playerAtCounter && this.session.playerAway <= 0 && !this.managerView;
+      this.awayCover?.setVisible(away);
+      if (away) {
+        const staffed = this.session.lanes.some((l) => !l.closing);
+        this.awayText?.setText(staffed
+          ? 'Thu ngân đang lo quầy: khách mới tự sang quầy thu ngân,\nbạn cứ đi phụ nạp kệ, nấu món.'
+          : this.session.queue.length ? `Khách đầu hàng phải chờ bạn quay lại mới tính tiền được.\n(${this.session.queue.length} người đang chờ quầy bạn)` : 'Khách đầu hàng phải chờ bạn quay lại mới tính tiền được.');
+      }
+    }
     this.renderAcc += dtMs;
     if (this.renderAcc >= 100) {
       this.renderAcc = 0;
@@ -991,12 +1021,16 @@ export class ShopScene extends Phaser.Scene {
       this.shelves.render(G.state, this.shelfOpts());
       this.renderPanel();
       const canShowZoneActions = this.session.customers.length === 0;
-      this.zoneRefillButtons.forEach(({ zone, button }) => button.setVisible(canShowZoneActions && G.state.zones.some((item) => item === zone)));
+      this.zoneRefillButtons.forEach(({ zone, button }) => button.setVisible(canShowZoneActions && !this.topDown && G.state.zones.some((item) => item === zone)));
       this.checkQuestProgress();
     }
+    const side = !this.topDown;
     this.session.customers.forEach((c) => {
       const v = this.views.get(c.id);
       if (!v) return;
+      v.sprite.setVisible(side);
+      v.bar.setVisible(side);
+      if (!side) return;
       const r = c.patience / c.patienceMax;
       v.bar.setPosition(v.sprite.x - 18, v.sprite.y - 70);
       v.bar.set(r, r > 0.5 ? C.green : r > 0.25 ? C.yellow : C.red);
@@ -1045,6 +1079,86 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private onOrientation = (): void => this.pause();
+
+  /** Chữ nổi đặt theo vị trí của góc nhìn ngang; góc trên xuống đã có hiệu ứng riêng trên sơ đồ nên bỏ qua. */
+  private sideFloat(x: number, y: number, text: string, color?: string, size?: number): void {
+    if (!this.topDown) floatText(this, x, y, text, color, size);
+  }
+
+  private get topDown(): boolean {
+    return !!this.playMap?.visible;
+  }
+
+  /** Đổi góc nhìn ngay trong ngày (không khởi động lại phiên bán). */
+  private setViewMode(mode: 'side' | 'topdown'): void {
+    if (mode === 'topdown' && G.liveSnapshot) { toast(this, 'Phiên chơi chung chỉ dùng góc nhìn ngang', 300, C.red); return; }
+    G.state.settings.viewMode = mode;
+    if (!G.liveSnapshot) persist();
+    this.applyViewMode();
+    if (mode === 'topdown') this.topDownTutorial();
+  }
+
+  /** Hướng dẫn một lần khi bật góc nhìn trên xuống (tạm dừng tiệm trong lúc đọc). */
+  private topDownTutorial(): void {
+    const s = G.state;
+    if (s.tutorialsSeen.includes('topdown')) {
+      toast(this, 'Chạm ô để đi · tới kệ mới nạp được\nđứng ở quầy mới tính tiền được', 300, C.greenDark);
+      return;
+    }
+    s.tutorialsSeen.push('topdown');
+    if (!G.liveSnapshot) persist();
+    this.session.paused = true;
+    const staffed = s.staff.some((st) => st.role === 'cashier');
+    dialog(this, {
+      icon: '🗺️',
+      title: 'Góc nhìn trên xuống',
+      body: [
+        '👆 Chạm ô trống để đi tới đó.',
+        '🗄️ Chạm kệ: đi tới sát kệ rồi bấm + để nạp, chạm ô trống để bày món, chạm ô "HẠN" để bán xả.',
+        '🍳 Chạm bếp / quầy nước để nấu, 📦 kệ kho để xem kho.',
+        '🧾 Chạm quầy để về tính tiền. Rời quầy thì khách đầu hàng phải chờ bạn.',
+        staffed ? '👥 Có thu ngân: bạn rời quầy thì khách tự sang quầy thu ngân, bạn đi phụ việc thoải mái.' : '👥 Thuê thu ngân thì bạn được đi lại tự do, khách sẽ sang quầy thu ngân.',
+        '🚨 Kẻ trộm bỏ chạy: chạy lại gần rồi chạm để bắt.',
+      ].join('\n'),
+      width: 330,
+      buttons: [{ label: 'Bắt đầu', color: C.green, onTap: () => { if (!this.pauseLayer) this.session.paused = false; } }],
+    });
+  }
+
+  private applyViewMode(): void {
+    const top = !G.liveSnapshot && G.state.settings.viewMode === 'topdown';
+    if (top) {
+      if (!this.playMap) {
+        this.playMap = new LiveMap(this, this.session, {
+          mode: 'play', top: HUD_H, bottom: PANEL_Y, depth: 262,
+          onSwitchMode: () => this.setViewMode('side'),
+          onCook: (recipeId) => this.openCook(recipeId),
+        });
+        this.awayCover = this.buildAwayCover();
+      }
+      if (!this.playMap.visible) this.playMap.open();
+    } else {
+      this.playMap?.close();
+      this.awayCover?.setVisible(false);
+      this.session.playerAtCounter = true;
+    }
+    this.mapBtn?.setVisible(!top);
+    this.counterBtn?.setVisible(!top && !this.shelves.atCounter);
+    // Phần nhìn ngang nằm dưới sơ đồ: ẩn đi cho đỡ tốn công vẽ.
+    this.shelves.setVisible(!top);
+    this.staffLayer.setVisible(!top);
+    for (const v of this.views.values()) { v.sprite.setVisible(!top); v.bar.setVisible(!top); }
+  }
+
+  private buildAwayCover(): Phaser.GameObjects.Container {
+    const L = this.add.container(0, 0).setDepth(320).setVisible(false);
+    L.add(this.add.rectangle(W / 2, (PANEL_Y + H) / 2, W, H - PANEL_Y, 0x2b1d14, 1).setInteractive());
+    L.add(txt(this, W / 2, PANEL_Y + 70, '🚶 Bạn đang ở xa quầy', { size: 17, bold: true, color: HEX.cream, origin: [0.5, 0.5] }));
+    this.awayText = txt(this, W / 2, PANEL_Y + 108, '', { size: 12, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: W - 40 });
+    L.add(this.awayText);
+    L.add(new Button(this, W / 2, PANEL_Y + 160, { w: 180, h: 44, label: '🏃 Về quầy', size: 15, color: C.green, onTap: () => this.playMap?.walkToCounter() }));
+    return L;
+  }
 
   private pause(): void {
     if (this.pauseLayer || this.ending) return;
@@ -1099,9 +1213,24 @@ export class ShopScene extends Phaser.Scene {
     });
     L.add(scanBtn);
     y += 54;
-    const sound = new Button(this, W / 2, y, {
-      w: 220,
+    const viewLabel = () => (this.topDown ? '🗺️ Góc: Trên xuống' : '👀 Góc: Nhìn ngang');
+    const viewBtn = new Button(this, W / 2 + 56, y, {
+      w: 108,
       h: 44,
+      size: 11,
+      label: viewLabel(),
+      color: C.blue,
+      onTap: () => {
+        this.setViewMode(this.topDown ? 'side' : 'topdown');
+        viewBtn.setText(viewLabel());
+      },
+    });
+    if (G.liveSnapshot) viewBtn.setEnabled(false);
+    L.add(viewBtn);
+    const sound = new Button(this, W / 2 - 56, y, {
+      w: 108,
+      h: 44,
+      size: 11,
       label: G.state.settings.sound ? '🔊 Âm thanh: Bật' : '🔇 Âm thanh: Tắt',
       color: C.wood,
       onTap: () => {
@@ -1180,6 +1309,15 @@ export class ShopScene extends Phaser.Scene {
     setPlayClockRunning(false);
     this.scene.pause('Shop');
     this.scene.launch('Restock');
+  }
+
+  /** Nấu kỹ (mini-game) từ góc nhìn trên xuống: màn Bếp phủ lên, tiệm đứng yên tới khi quay lại. */
+  private openCook(recipeId: string): void {
+    if (this.ending || G.liveSnapshot) return;
+    this.session.paused = true;
+    setPlayClockRunning(false);
+    this.scene.pause('Shop');
+    this.scene.launch('Cook', { recipeId, fromShop: true });
   }
 
   resumeFromRestock(): void {

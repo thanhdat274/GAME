@@ -15,8 +15,8 @@ function color(hex: string): number {
  * Vẽ nhân vật pixel art 12x20 điểm ảnh bằng Graphics rồi lưu thành texture (nét, không nhòe).
  * Asset tạm thời cho tới khi có sprite vẽ tay.
  */
-export function customerTexture(scene: Phaser.Scene, t: CustomerType, frame: 0 | 1 = 0): string {
-  const key = frame === 0 ? `cust_${t.id}` : `cust_${t.id}_${frame}`;
+export function customerTexture(scene: Phaser.Scene, t: CustomerType, frame: 0 | 1 = 0, back = false): string {
+  const key = `${frame === 0 ? `cust_${t.id}` : `cust_${t.id}_${frame}`}${back ? '_back' : ''}`;
   if (scene.textures.exists(key)) return key;
   const u = PX * ZOOM;
   const g = scene.make.graphics({}, false);
@@ -35,17 +35,23 @@ export function customerTexture(scene: Phaser.Scene, t: CustomerType, frame: 0 |
     px(9, 2, 1, 6, hair);
   }
   if (t.id === 'xe_om') px(1, 1, 10, 1, 0x3b3b3b); // mũ
-  px(4, 4, 1, 1, dark);
-  px(7, 4, 1, 1, dark);
-  px(5, 6, 2, 1, 0xc0605a);
+  if (back) {
+    // Nhìn từ sau lưng (sơ đồ trên xuống, đi lên): gáy tóc, không thấy mặt.
+    px(3, 2, 6, 4, hair);
+    px(4, 6, 4, 1, skin);
+  } else {
+    px(4, 4, 1, 1, dark);
+    px(7, 4, 1, 1, dark);
+    px(5, 6, 2, 1, 0xc0605a);
+  }
   // Thân
   px(2, 7, 8, 7, shirt);
   px(1, 8, 1, 5, shirt);
   px(10, 8, 1, 5, shirt);
   px(1, 13, 1, 1, skin);
   px(10, 13, 1, 1, skin);
-  if (t.id === 'hoc_sinh') px(5, 7, 2, 3, 0xd32f2f); // khăn quàng đỏ
-  if (t.id === 'van_phong') px(5, 7, 2, 1, 0xffffff);
+  if (t.id === 'hoc_sinh' && !back) px(5, 7, 2, 3, 0xd32f2f); // khăn quàng đỏ
+  if (t.id === 'van_phong' && !back) px(5, 7, 2, 1, 0xffffff);
   // Quần + giày (khung 1: bước chân, một chân đưa lên trước)
   if (frame === 0) {
     px(3, 14, 6, 4, pants);
@@ -78,13 +84,20 @@ export function staffType(p: { id: string; name: string; look: Look }): Customer
   };
 }
 
+/** Khách quen (hàng xóm) dùng ngoại hình riêng: tạo loại khách ảo có id riêng để cache texture. */
+export function customerLook(c: { type: CustomerType; name?: string; look?: Partial<Look> }): CustomerType {
+  if (!c.look || !c.name) return c.type;
+  const slug = c.name.normalize('NFD').replace(/[^a-zA-Z]/g, '').toLowerCase();
+  return { ...c.type, ...c.look, id: `${c.type.id}_${slug}` };
+}
+
 export function staffSprite(scene: Phaser.Scene, x: number, y: number, p: { id: string; name: string; look: Look }): Phaser.GameObjects.Image {
   return customerSprite(scene, x, y, staffType(p));
 }
 
 /** Đổi khung hình đi bộ của khách (gọi theo nhịp khi đang di chuyển). */
-export function setWalkFrame(img: Phaser.GameObjects.Image, t: CustomerType, frame: 0 | 1): void {
-  img.setTexture(frame === 0 ? `cust_${t.id}` : `cust_${t.id}_${frame}`);
+export function setWalkFrame(img: Phaser.GameObjects.Image, t: CustomerType, frame: 0 | 1, back = false): void {
+  img.setTexture(back ? customerTexture(img.scene, t, frame, true) : frame === 0 ? `cust_${t.id}` : `cust_${t.id}_${frame}`);
 }
 
 /** Tạo texture từ sprite ma trận ký tự, 1 điểm ảnh = 1 pixel canvas (phóng bằng setScale số nguyên). */
