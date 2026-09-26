@@ -78,6 +78,13 @@ export function staffType(p: { id: string; name: string; look: Look }): Customer
   };
 }
 
+/** Khách quen (hàng xóm) dùng ngoại hình riêng: tạo loại khách ảo có id riêng để cache texture. */
+export function customerLook(c: { type: CustomerType; name?: string; look?: Partial<Look> }): CustomerType {
+  if (!c.look || !c.name) return c.type;
+  const slug = c.name.normalize('NFD').replace(/[^a-zA-Z]/g, '').toLowerCase();
+  return { ...c.type, ...c.look, id: `${c.type.id}_${slug}` };
+}
+
 export function staffSprite(scene: Phaser.Scene, x: number, y: number, p: { id: string; name: string; look: Look }): Phaser.GameObjects.Image {
   return customerSprite(scene, x, y, staffType(p));
 }

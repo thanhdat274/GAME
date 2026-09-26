@@ -14,8 +14,9 @@ import { calendarDate } from '../core/calendar';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand, startLivePulses, stopLivePulses, suspendLiveShop } from '../services/liveShop';
 import { cloudSaveEnabled } from '../services/firebase';
-import { bakeStatic, bill, customerSprite, drawShopInterior, productIcon, setWalkFrame, staffSprite } from '../ui/art';
+import { bakeStatic, bill, customerLook, customerSprite, drawShopInterior, productIcon, setWalkFrame, staffSprite } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
+import { LiveMap } from '../ui/liveMap';
 import { ShelfView } from '../ui/shelves';
 import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sound';
 import { Bar, Button, dialog, floatText, panel, toast } from '../ui/widgets';
@@ -33,12 +34,7 @@ type SaleZone = Exclude<Category, 'counter' | 'food' | 'beverage'>;
 const ZONE_X: Record<SaleZone, number> = { dry: 60, snack: 175, household: 290, drink: 118, fresh: 232, frozen: 320 };
 const ZONE_BUTTON: Record<SaleZone, string> = { dry: 'Nạp đồ khô', snack: 'Nạp ăn vặt', household: 'Nạp đồ dùng', drink: 'Nạp đồ uống', fresh: 'Nạp đồ tươi', frozen: 'Nạp đông lạnh' };
 
-/** Khách quen (hàng xóm) dùng ngoại hình riêng: tạo loại khách ảo có id riêng để cache texture. */
-function lookOf(c: Customer): CustomerType {
-  if (!c.look || !c.name) return c.type;
-  const slug = c.name.normalize('NFD').replace(/[^a-zA-Z]/g, '').toLowerCase();
-  return { ...c.type, ...c.look, id: `${c.type.id}_${slug}` };
-}
+const lookOf = (c: Customer): CustomerType => customerLook(c);
 
 interface CustomerView {
   sprite: Phaser.GameObjects.Image;
@@ -80,6 +76,8 @@ export class ShopScene extends Phaser.Scene {
   private managerStatus: Phaser.GameObjects.Text | null = null;
   private weatherFx: Phaser.GameObjects.Graphics | null = null;
   private weatherFxAcc = 0;
+  /** Sơ đồ trực tiếp (mặt bằng từ trên xuống, khách và nhân viên đi lại). */
+  private liveMap!: LiveMap;
 
   constructor() {
     super('Shop');
@@ -119,6 +117,8 @@ export class ShopScene extends Phaser.Scene {
     // Tiệm nhiều kệ: kéo một ngón để xem kệ phía sau, nút này đưa khung nhìn về các kệ sát quầy.
     this.counterBtn = new Button(this, W - 58, SHELF_TOP + 3 * 64 - 8, { w: 100, h: 26, label: '↓ Về quầy', size: 11, color: C.blue, onTap: () => this.shelves.scrollToCounter() });
     this.counterBtn.setDepth(260).setVisible(!this.shelves.atCounter);
+    this.liveMap = new LiveMap(this, this.session);
+    new Button(this, 26, COUNTER_Y + 44, { w: 44, h: 40, label: '🗺️\nSơ đồ', size: 9, color: C.blue, onTap: () => this.liveMap.open() }).setDepth(260);
     this.drawCounter();
     this.addZoneRefillButtons();
     this.hud = new Hud(this, s, { onPause: () => this.pause() });
@@ -983,6 +983,7 @@ export class ShopScene extends Phaser.Scene {
     // Chế độ quản lý: tăng tốc x2/x4 (nhiều bước core mỗi khung hình).
     const speed = G.state.today.managerDay ? G.state.manager.speed : 1;
     if (!G.liveSnapshot) for (let i = 0; i < speed && !this.ending; i++) this.session.update(dtMs / 1000);
+    this.liveMap.update(this.session.paused ? 0 : speed * Math.min(dtMs / 1000, 0.5));
     this.renderAcc += dtMs;
     if (this.renderAcc >= 100) {
       this.renderAcc = 0;

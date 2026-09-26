@@ -671,6 +671,11 @@ export class DaySession {
     }
   }
 
+  /** Kệ người chơi đang tự nạp (ô đầu tiên trong hàng đợi nạp), để sơ đồ trực tiếp vẽ người chơi đứng ở kệ đó. */
+  playerRefillShelf(): number | null {
+    return this.refills[0]?.shelf ?? null;
+  }
+
   isRefilling(shelf: number, slot: number): number | null {
     const r = this.refills.find((x) => x.shelf === shelf && x.slot === slot);
     return r ? 1 - r.left / DATA.balance.refillSeconds : null;

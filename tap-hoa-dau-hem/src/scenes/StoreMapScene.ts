@@ -1,17 +1,18 @@
 import Phaser from 'phaser';
 import { DATA, furniture, product } from '../core/data';
-import { fixtureCells, footprint, plot, plotAt } from '../core/layout';
+import { fixtureCells } from '../core/layout';
 import { formatMoney, type Fixture } from '../core/state';
 import {
   fixtureInfo, fixtureStockLevel, sellsGoods, storeView, warehouseLines, warehouseUsage,
   type FixtureInfo, type ItemLine, type StoreView,
 } from '../core/storeMap';
 import { G } from '../game';
-import { furnitureImage, productIcon } from '../ui/art';
+import { productIcon } from '../ui/art';
+import { cellAt, drawFixture, drawFloor, type FloorGeom } from '../ui/floorPlan';
 import { ScrollArea, card, pageFrame } from '../ui/page';
 import { ZONE_NAMES } from '../ui/shelves';
 import { Button } from '../ui/widgets';
-import { C, H, HEX, W, emoji, setupCamera, txt } from '../ui/theme';
+import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
 const CELL = 40;
 const GX = (W - DATA.land.cols * CELL) / 2;
@@ -19,11 +20,7 @@ const GY = 94;
 const DETAIL_TOP = GY + DATA.land.rows * CELL + 8;
 const DETAIL_BOTTOM = H - 50;
 
-const KIND_COLOR: Record<string, number> = {
-  shelf: 0xa86f3a, fridge: 0xbfe3f7, freezer: 0x8ec5ea, storage: 0x9e9e9e, counter: 0x6b4220,
-  decor: 0x7fbf7f, food: 0xc85a32, drink: 0x4e9db5, seating: 0x95603a, generator: 0x6b7680,
-};
-const LEVEL_COLOR = { ok: C.green, low: C.yellow, empty: C.red } as const;
+const GEOM: FloorGeom = { gx: GX, gy: GY, cell: CELL };
 
 /** Tên tiệm rút gọn cho nút chọn tiệm ("Chi nhánh Khu công nghiệp" → "Khu công ng…"). */
 function shortName(name: string): string {
@@ -96,29 +93,12 @@ export class StoreMapScene extends Phaser.Scene {
   }
 
   private drawFloor(): void {
-    const g = this.add.graphics();
-    const { cols, rows, door } = DATA.land;
-    const land = new Set(this.view.land);
-    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-      const owner = plotAt(x, y);
-      const px = GX + x * CELL;
-      const py = GY + y * CELL;
-      if (!owner) { g.fillStyle(0x3a2a20, 1).fillRect(px, py, CELL, CELL); continue; }
-      const open = owner === 'initial' || land.has(owner);
-      const storage = owner !== 'initial' && plot(owner).storageOnly;
-      if (open) g.fillStyle(storage ? 0x9aa48a : (x + y) % 2 ? C.floorA : C.floorB, 1).fillRect(px, py, CELL, CELL);
-      else g.fillStyle(0x5c4632, 1).fillRect(px, py, CELL, CELL);
-      g.lineStyle(1, 0x000000, 0.12).strokeRect(px, py, CELL, CELL);
-    }
-    g.fillStyle(C.red, 1).fillRect(GX + door.x * CELL + 4, GY + (door.y + 1) * CELL - 5, CELL - 8, 5);
-    emoji(this, GX + door.x * CELL + CELL / 2, GY + door.y * CELL + CELL / 2, '🚪', 18);
+    drawFloor(this, GEOM, this.view.land);
   }
 
   private fixtureAt(worldX: number, worldY: number): Fixture | undefined {
-    const x = Math.floor((worldX - GX) / CELL);
-    const y = Math.floor((worldY - GY) / CELL);
-    if (x < 0 || y < 0 || x >= DATA.land.cols || y >= DATA.land.rows) return undefined;
-    return this.view.fixtures.find((f) => fixtureCells(f).some((c) => c.x === x && c.y === y));
+    const cell = cellAt(GEOM, worldX, worldY);
+    return cell ? this.view.fixtures.find((f) => fixtureCells(f).some((c) => c.x === cell.x && c.y === cell.y)) : undefined;
   }
 
   private select(sel: Selection): void {
@@ -134,25 +114,9 @@ export class StoreMapScene extends Phaser.Scene {
   }
 
   private fixtureView(f: Fixture): Phaser.GameObjects.Container {
-    const def = furniture(f.type);
-    const { w, h } = footprint(f.type, f.rot);
-    const c = this.add.container(GX + f.x * CELL, GY + f.y * CELL);
-    const g = this.add.graphics();
     const sel = this.selected?.kind === 'fixture' && this.selected.uid === f.uid;
-    g.fillStyle(0x000000, 0.2).fillRoundedRect(3, 5, w * CELL - 6, h * CELL - 6, 6);
-    g.fillStyle(KIND_COLOR[def.kind] ?? C.grey, 1).fillRoundedRect(3, 3, w * CELL - 6, h * CELL - 6, 6);
-    g.lineStyle(sel ? 3 : 1.5, sel ? C.yellow : 0x000000, sel ? 1 : 0.35).strokeRoundedRect(3, 3, w * CELL - 6, h * CELL - 6, 6);
-    c.add(g);
-    const img = furnitureImage(this, f.type, (w * CELL) / 2, (h * CELL) / 2, w * CELL - 8, h * CELL - 8, f.rot);
-    c.add(img ?? emoji(this, (w * CELL) / 2, (h * CELL) / 2, def.icon, 16));
-    if (f.shelf !== undefined) {
-      const tag = txt(this, (w * CELL) / 2, h * CELL - 8, `${def.kind === 'shelf' ? 'Kệ' : def.name} ${f.shelf + 1}`, { size: 8, bold: true, color: HEX.white, origin: [0.5, 0.5] });
-      c.add(tag.setBackgroundColor('#000000aa').setPadding(3, 0, 3, 0));
-    }
-    if (sellsGoods(def.kind)) {
-      const level = fixtureStockLevel(fixtureInfo(this.view, f));
-      if (level) c.add(this.add.circle(w * CELL - 8, 8, 5, LEVEL_COLOR[level]).setStrokeStyle(1.5, 0xffffff));
-    }
+    const stock = sellsGoods(furniture(f.type).kind) ? fixtureStockLevel(fixtureInfo(this.view, f)) : null;
+    const c = drawFixture(this, GEOM, f, { selected: sel, stock });
     if (sel) this.tweens.add({ targets: c, alpha: 0.6, yoyo: true, repeat: 1, duration: 140 });
     return c;
   }
