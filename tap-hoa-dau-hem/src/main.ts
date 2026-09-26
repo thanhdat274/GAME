@@ -9,6 +9,7 @@ import { LedgerScene } from './scenes/LedgerScene';
 import { PricesScene } from './scenes/PricesScene';
 import { QuestsScene } from './scenes/QuestsScene';
 import { WarehouseScene } from './scenes/WarehouseScene';
+import { StoreMapScene } from './scenes/StoreMapScene';
 import { HowToScene } from './scenes/HowToScene';
 import { MorningScene } from './scenes/MorningScene';
 import { ShopScene } from './scenes/ShopScene';
@@ -40,7 +41,7 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   render: { antialias: true, roundPixels: false },
   input: { activePointers: 2 },
-  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, PricesScene, LedgerScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene],
+  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, StoreMapScene, PricesScene, LedgerScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene],
 });
 
 // Chỉ bản dev: đo FPS khi kiểm thử hiệu năng trên trình duyệt.
@@ -62,7 +63,7 @@ window.addEventListener('thdh-cloud-loaded', () => {
 });
 
 // Lưu khi rời tab / tắt ứng dụng (chỉ khi đã vào game để không ghi đè bằng trạng thái mặc định).
-const inGame = () => ['Morning', 'Shop', 'Summary', 'Warehouse', 'Prices', 'Ledger', 'Quests', 'Decor', 'Staff', 'Schedule', 'Rules', 'Analytics', 'Calendar', 'Kitchen', 'Cook', 'Branches', 'Story', 'Prestige'].some((k) => game.scene.isActive(k));
+const inGame = () => ['Morning', 'Shop', 'Summary', 'Warehouse', 'StoreMap', 'Prices', 'Ledger', 'Quests', 'Decor', 'Staff', 'Schedule', 'Rules', 'Analytics', 'Calendar', 'Kitchen', 'Cook', 'Branches', 'Story', 'Prestige'].some((k) => game.scene.isActive(k));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && inGame()) persist();
 });
