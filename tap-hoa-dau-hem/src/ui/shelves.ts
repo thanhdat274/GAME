@@ -4,6 +4,7 @@ import { counterFixture, walkTiles } from '../core/layout';
 import { MAX_SHELVES, fixtureOfShelf, shelfKind, shelfUsable, shelfCount, type GameState } from '../core/state';
 import { canRefill, slotFreshness, zoneFill, zoneOf } from '../core/stock';
 import { productIcon } from './art';
+import { KineticScroll, snap } from './scroll';
 import { C, HEX, txt } from './theme';
 
 export const SLOT_W = 52;
@@ -101,6 +102,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
   private moreUp: Phaser.GameObjects.Text | null = null;
   private moreDown: Phaser.GameObjects.Text | null = null;
   private scrollTween: Phaser.Tweens.Tween | null = null;
+  private kinetic: KineticScroll | null = null;
 
   constructor(scene: Phaser.Scene, readonly top: number, private cb: ShelfCallbacks, state: GameState, viewRows = MAX_SHELVES) {
     super(scene, 0, 0);
@@ -162,33 +164,24 @@ export class ShelfView extends Phaser.GameObjects.Container {
     // Khung nhìn kết thúc trước nhãn của hàng kế tiếp để nhãn không lòi ra dưới khung.
     const maskG = s.make.graphics({}, false).fillRect(0, this.top - 14, 360, this.viewH + 4);
     this.content.setMask(maskG.createGeometryMask());
-    let startY = 0;
-    let startScroll = 0;
-    let active = false;
-    let dragging = false;
-    s.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      active = this.visible && this.inView(p.worldY);
-      dragging = false;
-      startY = p.worldY;
-      startScroll = this.scrollY;
+    this.kinetic = new KineticScroll(s, {
+      inView: (y) => this.inView(y),
+      enabled: () => this.visible,
+      get: () => this.scrollY,
+      set: (v) => { this.scrollTween?.remove(); this.setScroll(v); },
+      max: () => this.maxScroll,
+      threshold: 8,
     });
-    s.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (!active || !p.isDown) return;
-      if (!dragging && Math.abs(p.worldY - startY) < 8) return;
-      dragging = true;
-      this.scrollTween?.remove();
-      this.setScroll(startScroll - (p.worldY - startY));
-    });
-    s.input.on('pointerup', () => { active = false; });
-    s.input.on('wheel', (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
-      if (!this.visible || !this.inView(p.worldY)) return;
-      this.setScroll(this.scrollY + dy * 0.5);
-    });
+  }
+
+  /** Chạm hiện tại là để cuộn / dừng trôi, không phải bấm ô. */
+  private get scrollTap(): boolean {
+    return !!this.kinetic?.blockTap;
   }
 
   setScroll(y: number): void {
     this.scrollY = Phaser.Math.Clamp(y, 0, this.maxScroll);
-    this.content.y = -this.scrollY;
+    this.content.y = snap(-this.scrollY);
     this.moreUp?.setVisible(this.scrollY > 4);
     this.moreDown?.setVisible(this.scrollY < this.maxScroll - 4);
     this.cb.onScroll?.(this.atCounter);
@@ -200,6 +193,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
   }
 
   private animateTo(y: number): void {
+    this.kinetic?.stop();
     const target = Phaser.Math.Clamp(y, 0, this.maxScroll);
     this.scrollTween?.remove();
     const from = { v: this.scrollY };
@@ -246,7 +240,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
     refillBtn.setSize(26, 26).setInteractive({ useHandCursor: true });
     refillBtn.on('pointerup', (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
-      if (p.getDistance() < 10 && this.inView(p.worldY)) this.cb.onRefill?.(r, c);
+      if (p.getDistance() < 10 && !this.scrollTap && this.inView(p.worldY)) this.cb.onRefill?.(r, c);
     });
 
     const removeBtn = s.add.container(-SLOT_W / 2 + 8, -SLOT_H / 2 + 8, [
@@ -256,13 +250,13 @@ export class ShelfView extends Phaser.GameObjects.Container {
     removeBtn.setSize(24, 24).setInteractive({ useHandCursor: true });
     removeBtn.on('pointerup', (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
-      if (p.getDistance() < 10 && this.inView(p.worldY)) this.cb.onRemove?.(r, c);
+      if (p.getDistance() < 10 && !this.scrollTap && this.inView(p.worldY)) this.cb.onRemove?.(r, c);
     });
 
     const root = s.add.container(x, y, [bg, glow, qty, out, fresh, progress, refillBtn, removeBtn]);
     root.setSize(SLOT_W, SLOT_H).setInteractive({ useHandCursor: true });
     root.on('pointerup', (p: Phaser.Input.Pointer) => {
-      if (p.getDistance() < 12 && this.inView(p.worldY)) this.cb.onSlotTap(r, c);
+      if (p.getDistance() < 12 && !this.scrollTap && this.inView(p.worldY)) this.cb.onSlotTap(r, c);
     });
     this.content.add(root);
     return { root, bg, icon: null, iconId: null, qty, out, fresh, refillBtn, removeBtn, progress, glow, bgKey: '', freshKey: '' };

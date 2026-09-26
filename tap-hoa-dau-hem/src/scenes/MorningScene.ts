@@ -16,7 +16,8 @@ import { suspendLiveShop } from '../services/liveShop';
 import { productIcon } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
 import { ShelfView, ZONE_NAMES, placeErrorText } from '../ui/shelves';
-import { play, setSoundEnabled, stopMusic } from '../ui/sound';
+import { play, setSoundEnabled, stopMusic, vibrate } from '../ui/sound';
+import { Culler, KineticScroll, snap } from '../ui/scroll';
 import { Button, dialog, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
@@ -56,6 +57,11 @@ const ROW_H = 66;
 /** Tâm hàng ô quầy và hàng chip đầu tiên khi bật chế độ "Sau quầy". */
 const COUNTER_SLOT_Y = 382;
 const COUNTER_CHIP_Y = 452;
+/** Khung nhìn lưới hàng trong kho ở tab Bày kệ. */
+const CHIP_VIEW_TOP = 356;
+const CHIP_VIEW_BOTTOM = 550;
+/** Giữ bao lâu (ms) thì nhấc món lên để kéo thả (vuốt nhanh là cuộn). */
+const CHIP_HOLD_MS = 280;
 const COUNTER_X0 = 96;
 const COUNTER_DX = 72;
 
@@ -80,12 +86,22 @@ export class MorningScene extends Phaser.Scene {
   private arrangeLayer!: Phaser.GameObjects.Container;
   private list!: Phaser.GameObjects.Container;
   private listH = 0;
+  private listScroll: KineticScroll | null = null;
   private cartText!: Phaser.GameObjects.Text;
   private cartWarn!: Phaser.GameObjects.Text;
   private buyBtn!: Button;
   private tabBtns!: Record<Tab, Button>;
   private shelves!: ShelfView;
   private chips!: Phaser.GameObjects.Container;
+  /** Cuộn lưới hàng trong kho (tab Bày kệ). */
+  private chipScroll: KineticScroll | null = null;
+  private chipCuller: Culler | null = null;
+  private chipMask: Phaser.GameObjects.Graphics | null = null;
+  private chipOffset = 0;
+  private chipTop = CHIP_VIEW_TOP;
+  private chipMax = 0;
+  /** Món đang được giữ để kéo thả lên kệ. */
+  private chipDrag: { id: string; ghost: Phaser.GameObjects.Container } | null = null;
   private counterPanel!: Phaser.GameObjects.Container;
   private counterTabBtn!: Button;
   private whLabel!: Phaser.GameObjects.Text;
@@ -392,27 +408,26 @@ export class MorningScene extends Phaser.Scene {
   }
 
   private enableListScroll(): void {
-    let startY = 0;
-    let startListY = 0;
-    let active = false;
-    const minY = () => Math.min(LIST_TOP + 16, LIST_BOTTOM - this.listH);
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      active = this.tab === 'buy' && p.worldY > LIST_TOP && p.worldY < LIST_BOTTOM;
-      startY = p.worldY;
-      startListY = this.list.y;
+    const top = LIST_TOP + 16;
+    const viewTop = LIST_TOP + 14;
+    const culler = new Culler(this.cameras.main);
+    const setList = (offset: number) => {
+      this.list.y = snap(top - offset);
+      culler.cull(this.list, viewTop, LIST_BOTTOM);
+    };
+    this.listScroll = new KineticScroll(this, {
+      inView: (y) => y > LIST_TOP && y < LIST_BOTTOM,
+      enabled: () => this.tab === 'buy',
+      get: () => top - this.list.y,
+      set: setList,
+      max: () => Math.max(0, this.listH - (LIST_BOTTOM - top)),
     });
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (!active || !p.isDown) return;
-      this.list.y = Phaser.Math.Clamp(startListY + (p.worldY - startY), minY(), LIST_TOP + 16);
-    });
-    this.input.on('pointerup', () => (active = false));
-    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
-      if (this.tab === 'buy') this.list.y = Phaser.Math.Clamp(this.list.y - dy * 0.5, minY(), LIST_TOP + 16);
-    });
+    setList(0);
   }
 
   private changeQty(id: string, delta: number): void {
-    // Nút đã cuộn ra ngoài vùng danh sách (bị che) thì không nhận chạm.
+    // Nút đã cuộn ra ngoài vùng danh sách (bị che), hoặc chạm là để cuộn / dừng trôi, thì không nhận.
+    if (this.listScroll?.blockTap) return;
     const y = this.input.activePointer.worldY;
     if (y < LIST_TOP + 14 || y > LIST_BOTTOM) return;
     const next = Math.max(0, (this.cart[id] ?? 0) + delta);
@@ -482,6 +497,26 @@ export class MorningScene extends Phaser.Scene {
     this.hint = txt(this, 12, 336, '', { size: 11, color: HEX.cream });
     this.counterPanel = this.add.container(0, 0);
     this.chips = this.add.container(0, 0);
+    this.chipMask = this.make.graphics({}, false);
+    this.chips.setMask(this.chipMask.createGeometryMask());
+    this.chipCuller = new Culler(this.cameras.main);
+    this.chipOffset = 0;
+    this.chipScroll = new KineticScroll(this, {
+      inView: (y) => y >= this.chipTop && y <= CHIP_VIEW_BOTTOM,
+      enabled: () => this.tab === 'arrange' && !this.chipDrag,
+      get: () => this.chipOffset,
+      set: (v) => this.setChipOffset(v),
+      max: () => this.chipMax,
+    });
+    // Kéo thả món (sau khi giữ): hình món đi theo ngón tay, thả lên ô kệ / ô quầy.
+    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => this.chipDrag?.ghost.setPosition(ptr.worldX, ptr.worldY));
+    this.input.on('pointerup', (ptr: Phaser.Input.Pointer) => {
+      if (!this.chipDrag) return;
+      const { id, ghost } = this.chipDrag;
+      ghost.destroy();
+      this.chipDrag = null;
+      this.dropChip(id, ptr);
+    });
     this.counterTabBtn = new Button(this, W - 58, 318, {
       w: 104,
       h: 30,
@@ -596,6 +631,11 @@ export class MorningScene extends Phaser.Scene {
       const message = this.counterMode ? 'Chưa có hàng sau quầy trong kho.' : 'Kho trống. Qua tab "Nhập hàng" để mua hàng.';
       this.chips.add(txt(this, W / 2, this.counterMode ? COUNTER_CHIP_Y + 20 : 420, message, { size: 13, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: 300 }));
       this.counterPanel.setVisible(G.state.level >= 3 && this.counterMode);
+      this.chipTop = this.counterMode ? COUNTER_CHIP_Y - 36 : CHIP_VIEW_TOP;
+      this.chipMax = 0;
+      this.chipMask?.clear().fillStyle(0xffffff).fillRect(0, this.chipTop, W, CHIP_VIEW_BOTTOM - this.chipTop);
+      this.chipCuller?.reset();
+      this.setChipOffset(0);
       if (this.counterMode) this.renderCounterSlots();
       return;
     }
@@ -613,49 +653,76 @@ export class MorningScene extends Phaser.Scene {
       bg.lineStyle(sel ? 3 : 2, sel ? C.red : C.slotEdge, 1).strokeRoundedRect(-cw / 2, -ch / 2, cw, ch, 10);
       const icon = productIcon(this, 0, -8, p, this.counterMode ? 32 : 36);
       const label = txt(this, 0, ch / 2 - 11, `x${q}`, { size: 12, bold: true, origin: [0.5, 0.5] });
-      const chip = this.add.container(x, y, [bg, icon, label]).setSize(cw, ch).setInteractive({ useHandCursor: true, draggable: true });
+      const chip = this.add.container(x, y, [bg, icon, label]).setSize(cw, ch).setInteractive({ useHandCursor: true });
+      let hold: Phaser.Time.TimerEvent | null = null;
+      // Món đã cuộn ra ngoài khung (bị che) thì không nhận chạm.
+      const inFrame = (ptr: Phaser.Input.Pointer) => ptr.worldY >= this.chipTop && ptr.worldY <= CHIP_VIEW_BOTTOM;
+      chip.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+        hold?.remove();
+        if (!inFrame(ptr)) return;
+        hold = this.time.delayedCall(CHIP_HOLD_MS, () => {
+          // Giữ yên (không cuộn) thì nhấc món lên để kéo thả.
+          if (!ptr.isDown || ptr.getDistance() > 8 || this.chipScroll?.moving || this.chipDrag) return;
+          this.chipScroll?.cancel();
+          this.chipDrag = { id, ghost: productIcon(this, ptr.worldX, ptr.worldY, p, 40).setDepth(800).setAlpha(0.9) };
+          vibrate(15);
+          play('tap');
+        });
+      });
       chip.on('pointerup', (ptr: Phaser.Input.Pointer) => {
-        if (ptr.getDistance() > 10) return;
+        hold?.remove();
+        if (ptr.getDistance() > 10 || this.chipScroll?.blockTap || !inFrame(ptr)) return;
         this.selected = sel ? null : id;
         play('tap');
         this.refresh();
       });
-      let ghost: Phaser.GameObjects.Container | null = null;
-      chip.on('dragstart', () => {
-        ghost = productIcon(this, x, y, p, 40).setDepth(800).setAlpha(0.9);
-      });
-      chip.on('drag', (ptr: Phaser.Input.Pointer) => ghost?.setPosition(ptr.worldX, ptr.worldY));
-      chip.on('dragend', (ptr: Phaser.Input.Pointer) => {
-        ghost?.destroy();
-        ghost = null;
-        const target = this.shelves.slotAt(ptr.worldX, ptr.worldY);
-        if (target && !(target.shelf < MAX_SHELVES && target.shelf >= shelfCount(G.state.level))) {
-          if (p.behindCounter) {
-            toast(this, 'Hàng sau quầy: thả vào một ô quầy bên dưới');
-            return;
-          }
-          try {
-            if (G.liveSnapshot) { void this.liveCommand({ type: 'assignShelf', shelf: target.shelf, slot: target.slot, productId: id }); return; }
-            assignSlot(G.state, target.shelf, target.slot, id);
-          } catch (e) {
-            if (e instanceof Error) toast(this, placeErrorText(e.message));
-            else throw e;
-            return;
-          }
-          play('pick');
-          this.afterArrange();
-        } else if (p.behindCounter && this.counterMode && Math.abs(ptr.worldY - COUNTER_SLOT_Y) <= 26) {
-          const counterSlot = Math.round((ptr.worldX - COUNTER_X0) / COUNTER_DX);
-          if (counterSlot >= 0 && counterSlot < G.state.counter.length) {
-            if (G.liveSnapshot) { void this.liveCommand({ type: 'assignCounter', slot: counterSlot, productId: id }); return; }
-            assignCounterSlot(G.state, counterSlot, id);
-            this.afterArrange();
-          }
-        }
-      });
       this.chips.add(chip);
     });
+    // Khung cuộn: phần trên là ô quầy khi ở chế độ sau quầy.
+    this.chipTop = this.counterMode ? COUNTER_CHIP_Y - 36 : CHIP_VIEW_TOP;
+    const rows = Math.ceil(items.length / cols);
+    const firstY = this.counterMode ? COUNTER_CHIP_Y : 390;
+    const bottom = firstY + (rows - 1) * (this.counterMode ? 66 : 72) + ch / 2 + 8;
+    this.chipMax = Math.max(0, bottom - CHIP_VIEW_BOTTOM);
+    this.chipMask?.clear().fillStyle(0xffffff).fillRect(0, this.chipTop, W, CHIP_VIEW_BOTTOM - this.chipTop);
+    this.chipCuller?.reset();
+    this.setChipOffset(this.chipOffset);
     this.renderCounterSlots();
+  }
+
+  private setChipOffset(v: number): void {
+    this.chipOffset = Phaser.Math.Clamp(v, 0, this.chipMax);
+    this.chips.y = snap(-this.chipOffset);
+    this.chipCuller?.cull(this.chips, this.chipTop, CHIP_VIEW_BOTTOM);
+  }
+
+  /** Thả món đang kéo: lên ô kệ, hoặc lên ô quầy khi ở chế độ sau quầy. */
+  private dropChip(id: string, ptr: Phaser.Input.Pointer): void {
+    const p = product(id);
+    const target = this.shelves.slotAt(ptr.worldX, ptr.worldY);
+    if (target && !(target.shelf < MAX_SHELVES && target.shelf >= shelfCount(G.state.level))) {
+      if (p.behindCounter) {
+        toast(this, 'Hàng sau quầy: thả vào một ô quầy bên dưới');
+        return;
+      }
+      try {
+        if (G.liveSnapshot) { void this.liveCommand({ type: 'assignShelf', shelf: target.shelf, slot: target.slot, productId: id }); return; }
+        assignSlot(G.state, target.shelf, target.slot, id);
+      } catch (e) {
+        if (e instanceof Error) toast(this, placeErrorText(e.message));
+        else throw e;
+        return;
+      }
+      play('pick');
+      this.afterArrange();
+    } else if (p.behindCounter && this.counterMode && Math.abs(ptr.worldY - COUNTER_SLOT_Y) <= 26) {
+      const counterSlot = Math.round((ptr.worldX - COUNTER_X0) / COUNTER_DX);
+      if (counterSlot >= 0 && counterSlot < G.state.counter.length) {
+        if (G.liveSnapshot) { void this.liveCommand({ type: 'assignCounter', slot: counterSlot, productId: id }); return; }
+        assignCounterSlot(G.state, counterSlot, id);
+        this.afterArrange();
+      }
+    }
   }
 
   private renderCounterSlots(): void {
@@ -775,7 +842,7 @@ export class MorningScene extends Phaser.Scene {
     } else {
       this.shelves.render(s, { mode: 'arrange' });
       this.whLabel.setText(`📦 Kho · ${warehouseCellsUsed(s.warehouse)}/${warehouseCapacity(s)} ô${s.deliveries.length ? ' · 🚚 chờ giao' : ''}`);
-      this.hint.setText(this.selected ? (this.counterMode ? `Chạm ô quầy để đặt ${product(this.selected).name}` : `Chạm ô kệ để bày ${product(this.selected).name}`) : (this.counterMode ? 'Chạm món sau quầy rồi chọn ô quầy' : 'Chạm món rồi chạm ô kệ (hoặc kéo thả)'));
+      this.hint.setText(this.selected ? (this.counterMode ? `Chạm ô quầy để đặt ${product(this.selected).name}` : `Chạm ô kệ để bày ${product(this.selected).name}`) : (this.counterMode ? 'Chạm món sau quầy rồi chọn ô quầy' : 'Chạm món rồi chạm ô kệ (hoặc giữ rồi kéo thả)'));
       this.counterTabBtn.setVisible(s.level >= 3);
       this.counterTabBtn.setText(this.counterMode ? '📦 Kho hàng' : '🔐 Sau quầy');
       this.renderChips();
