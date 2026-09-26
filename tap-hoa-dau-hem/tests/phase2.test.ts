@@ -61,7 +61,7 @@ describe('dữ liệu giai đoạn 2', () => {
     expect(fresh).toHaveLength(16);
     expect(DATA.products.filter((p) => p.requiresCold === 'freezer').every((p) => p.unlockLevel === 9)).toBe(true);
     expect(DATA.levels.maxLevel).toBe(35);
-    expect(DATA.levels.levels.slice(0, 9).map((l) => l.exp)).toEqual([0, 120, 350, 700, 1150, 1700, 2350, 3100, 4000]);
+    expect(DATA.levels.levels.slice(0, 9).map((l) => l.exp)).toEqual([0, 80, 200, 360, 560, 800, 1080, 1400, 1780]);
   });
 
   it('báo lỗi shelfLifeDays <= 0 và requiresCold sai, chỉ rõ id', () => {
@@ -564,13 +564,13 @@ describe('nhiệm vụ, thành tựu, trang trí', () => {
 });
 
 describe('bản lưu v3', () => {
-  it('migrate v2: kho thành lô không hạn, 3 kệ đúng chỗ, giữ tiền/level/khu/hàng sau quầy/cài đặt', () => {
+  it('migrate v2: giữ dữ liệu và cập nhật level theo mốc EXP mới', () => {
     const v2 = (saveV2 as { state: Record<string, unknown> }).state;
     const s = migrate({ version: 2, state: structuredClone(v2) });
     expect(s.version).toBe(5);
     expect(s.warehouse).toEqual([{ productId: 'mi_goi', qty: 30, exp: null }, { productId: 'the_cao', qty: 4, exp: null }]);
     expect(s.money).toBe(432_100);
-    expect(s.level).toBe(4);
+    expect(s.level).toBe(6);
     expect(s.zones).toEqual(['dry', 'snack', 'household']);
     expect(s.counter[0]).toEqual({ productId: 'gas_mini', qty: 2 });
     expect(s.settings).toEqual({ sound: false, autoChange: false, autoScan: true });

@@ -12,6 +12,7 @@ import { endDay } from '../src/core/day';
 import { validateRecipes, prepareRecipe, setRecipeActive } from '../src/core/recipes';
 import { cleanDiningTable, ensureDiningTables, seatDiner, serveExtraDiningOrder, tickDining } from '../src/core/dining';
 import { createMaxLevelSimulation } from '../src/core/simulation';
+import { PRESTIGE_EXP_PER_STAR, prestigeStars } from '../src/core/prestige';
 
 describe('nền tảng phase 4a', () => {
   it('lịch 10 ngày/tháng, 12 tháng/năm; ngày cũ bắt đầu ở tháng 3', () => {
@@ -280,5 +281,12 @@ describe('nền tảng phase 4a', () => {
     expect(state.money).toBeGreaterThan(0);
     expect(warehouseCellsUsed(state.warehouse)).toBeLessThanOrEqual(warehouseCapacity(state));
     expect(state.counter.some((slot) => slot.productId === null)).toBe(true);
+  });
+
+  it('giữ nhịp danh hiệu sau khi rút ngắn EXP lên level 35', () => {
+    const state = createMaxLevelSimulation();
+    state.exp = DATA.levels.levels[DATA.levels.maxLevel - 1].exp + PRESTIGE_EXP_PER_STAR;
+    expect(PRESTIGE_EXP_PER_STAR).toBe(43_210);
+    expect(prestigeStars(state)).toBe(1);
   });
 });

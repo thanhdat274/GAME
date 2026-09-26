@@ -37,6 +37,7 @@ const BOTS: Bot[] = [
 
 interface RunStats {
   levelDay: Record<number, number>;
+  expByDay: number[];
   profits: number[];
   served: number;
   left: Record<Exclude<LeaveReason, 'served'>, number>;
@@ -144,7 +145,7 @@ function playDay(s: GameState, bot: Bot, rng: Rng, stats: RunStats): void {
 function run(bot: Bot, days: number, seed: number): RunStats {
   const rng = new Rng(seed);
   const s = createNewGame();
-  const stats: RunStats = { levelDay: {}, profits: [], served: 0, left: { patience: 0, nothing: 0, thief: 0 }, grandma: 0, finalMoney: 0, tips: 0, freshSold: 0, freshSpoiled: 0, netProfits: [] };
+  const stats: RunStats = { levelDay: {}, expByDay: [], profits: [], served: 0, left: { patience: 0, nothing: 0, thief: 0 }, grandma: 0, finalMoney: 0, tips: 0, freshSold: 0, freshSpoiled: 0, netProfits: [] };
   for (let i = 0; i < days; i++) {
     const before = s.money;
     stowHolding(s);
@@ -158,6 +159,7 @@ function run(bot: Bot, days: number, seed: number): RunStats {
     }
     playDay(s, bot, rng, stats);
     const sum = endDay(s);
+    stats.expByDay.push(s.exp);
     stats.tips += sum.tips;
     stats.profits.push(sum.grossProfit + sum.tips - sum.overpaid);
     stats.netProfits.push(sum.netProfit ?? 0);
@@ -191,8 +193,9 @@ for (const bot of BOTS) {
   const day1 = avg(runs.map((r) => r.profits[0]));
   const late = avg(runs.flatMap((r) => r.profits.slice(-3)));
   console.log(`▶ ${bot.name}`);
-  console.log(`  Lên Lv2: ${lv(2)} · Lv3: ${lv(3)} · Lv4: ${lv(4)}`);
-  if (days > 10) console.log(`  Lv5: ${lv(5)} · Lv6: ${lv(6)} · Lv7: ${lv(7)} · Lv8: ${lv(8)} · Lv9: ${lv(9)}`);
+  console.log(`  Lên Lv2: ${lv(2)} · Lv3: ${lv(3)} · Lv4: ${lv(4)} · Lv5: ${lv(5)} · Lv10: ${lv(10)} · Lv20: ${lv(20)} · Lv30: ${lv(30)} · Lv35: ${lv(35)}`);
+  const expAt = (day: number) => avg(runs.map((r) => r.expByDay[Math.min(day, days) - 1] ?? 0));
+  console.log(`  EXP lũy kế TB: ngày 5 ${expAt(5).toFixed(0)} · 10 ${expAt(10).toFixed(0)} · 20 ${expAt(20).toFixed(0)} · 35 ${expAt(35).toFixed(0)} · 60 ${expAt(60).toFixed(0)} · 80 ${expAt(80).toFixed(0)} · 100 ${expAt(100).toFixed(0)}`);
   const fs = runs.reduce((a, r) => a + r.freshSold, 0);
   const fsp = runs.reduce((a, r) => a + r.freshSpoiled, 0);
   if (fs + fsp > 0) console.log(`  Hàng tươi hỏng: ${pct(fsp, fs + fsp)} (${fsp}/${fs + fsp} đơn vị) · lãi ròng 5 ngày cuối: ${formatMoney(avg(runs.flatMap((r) => r.netProfits.slice(-5))))}/ngày`);

@@ -269,18 +269,18 @@ describe('khách hàng', () => {
 describe('level và sao', () => {
   it('mốc EXP', () => {
     expect(levelForExp(0)).toBe(1);
-    expect(levelForExp(119)).toBe(1);
-    expect(levelForExp(120)).toBe(2);
-    expect(levelForExp(700)).toBe(4);
-    expect(levelForExp(1150)).toBe(5);
-    expect(levelForExp(4000)).toBe(9);
-    expect(levelForExp(18470)).toBe(20);
+    expect(levelForExp(79)).toBe(1);
+    expect(levelForExp(80)).toBe(2);
+    expect(levelForExp(360)).toBe(4);
+    expect(levelForExp(560)).toBe(5);
+    expect(levelForExp(1780)).toBe(9);
+    expect(levelForExp(10550)).toBe(20);
     expect(levelForExp(9_999_999)).toBe(35);
   });
 
   it('lên nhiều level một lúc', () => {
     const s = createNewGame();
-    s.exp = 360;
+    s.exp = 200;
     expect(applyLevelUps(s).map((l) => l.level)).toEqual([2, 3]);
     expect(s.level).toBe(3);
   });

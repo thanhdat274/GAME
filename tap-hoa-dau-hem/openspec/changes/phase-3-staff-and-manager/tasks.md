@@ -61,7 +61,7 @@
 
 ## 9. Cân bằng và phát hành
 
-- [x] 9.1 Mô phỏng 60 ngày: tốc độ lên L20 (mục tiêu 45–60 ngày game), lãi ròng khi có nhân viên phải cao hơn tự bán từ L12
+- [x] 9.1 Mô phỏng 100 ngày: mục tiêu L10 ngày 10–14, L20 ngày 35–45, L30 ngày 60–75, L35 ngày 80–100; lãi ròng khi có nhân viên phải cao hơn tự bán từ L12 (bot thường đạt L10/20/30/35 ngày 13/36/63,5/88,5; 27/09/2026)
 - [x] 9.2 Kiểm tra nhân viên không làm người chơi thừa: ở L10–L19 người chơi tự bán vẫn tăng lãi rõ rệt
 - [ ] 9.3 Kiểm thử trên điện thoại các màn quản lý (Nhân sự, Ca, Quy tắc, Phân tích)
 - [ ] 9.4 Deploy, thu phản hồi, chỉnh `balance.json` trước giai đoạn 4

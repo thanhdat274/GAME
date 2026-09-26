@@ -1,13 +1,12 @@
 import { DATA } from './data';
 import type { GameState } from './state';
 
-const cap = DATA.levels.levels[DATA.levels.maxLevel - 1];
-const prior = DATA.levels.levels[DATA.levels.maxLevel - 2];
-export const PRESTIGE_EXP_PER_STAR = cap.exp - prior.exp;
+export const PRESTIGE_EXP_PER_STAR = DATA.levels.prestigeExpPerStar;
+const maxLevelExp = DATA.levels.levels[DATA.levels.maxLevel - 1].exp;
 
 export function prestigeStars(state: GameState): number {
   if (state.level < DATA.levels.maxLevel) return 0;
-  return Math.min(30, Math.floor(Math.max(0, state.exp - cap.exp) / PRESTIGE_EXP_PER_STAR));
+  return Math.min(30, Math.floor(Math.max(0, state.exp - maxLevelExp) / PRESTIGE_EXP_PER_STAR));
 }
 
 export function prestigeRevenueMultiplier(state: GameState): number {

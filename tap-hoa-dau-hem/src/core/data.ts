@@ -61,6 +61,7 @@ export interface LevelDef {
 
 export interface LevelTable {
   maxLevel: number;
+  prestigeExpPerStar: number;
   nextTeaser: string;
   levels: LevelDef[];
 }
@@ -436,6 +437,7 @@ export function validateLevels(table: LevelTable): string[] {
     prev = l.exp;
   });
   if (table.levels.length !== table.maxLevel) errors.push('maxLevel không khớp số level');
+  if (!Number.isInteger(table.prestigeExpPerStar) || table.prestigeExpPerStar <= 0) errors.push('prestigeExpPerStar phải là số nguyên dương');
   return errors;
 }
 

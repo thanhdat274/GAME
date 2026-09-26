@@ -53,7 +53,7 @@ Khách trả bằng tờ lớn nhất phù hợp (ví dụ đơn 13.000đ → tr
 ### D6. Kinh tế khởi điểm (mặc định, nằm trong balance.json)
 - Tiền đầu: 300.000đ. Kho: 30 ô (tăng từ 20 sau chơi thử bằng bot: Lv4 có 14 món, 20 ô gây thiếu hàng liên tục). 2 kệ × 6 ô, mỗi ô chứa tối đa 5 đơn vị cùng loại.
 - Lãi gộp mục tiêu 20–40%/món. Một ngày chơi tốt lãi 60–120k ở level 1.
-- EXP: +1 mỗi món bán, +3 mỗi khách hài lòng. Mốc level: L2 = 120, L3 = 350, L4 = 700 EXP tích lũy.
+- EXP: +1 mỗi món bán, +3 mỗi khách hài lòng. Mốc level hiện tại: L2 = 80, L3 = 200, L4 = 360 EXP tích lũy; toàn bộ đường cong nằm trong `src/data/levels.json`.
 - Sao tiệm: trung bình trượt 20 khách gần nhất (1–5 sao).
 
 ### D7. Lưu game

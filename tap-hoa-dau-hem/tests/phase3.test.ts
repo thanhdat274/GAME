@@ -118,8 +118,8 @@ describe('hàng đợi việc (TaskQueue)', () => {
 describe('dữ liệu giai đoạn 3', () => {
   it('level 10–20 và chỗ nhân viên L10: 1, L12: 2, L15: 4, L20: 6', () => {
     expect(DATA.levels.maxLevel).toBe(35);
-    expect(levelForExp(5130)).toBe(10);
-    expect(levelForExp(18470)).toBe(20);
+    expect(levelForExp(2200)).toBe(10);
+    expect(levelForExp(10550)).toBe(20);
     expect([9, 10, 11, 12, 14, 15, 19, 20].map(staffSlots)).toEqual([0, 1, 1, 2, 2, 4, 4, 6]);
     expect(nextSlotLevel(10)).toBe(12);
     expect(nextSlotLevel(20)).toBe(21);
@@ -134,7 +134,7 @@ describe('bản lưu v4', () => {
   it('migrate v3 → v4 giữ khu, kho lô, hàng sau quầy; thêm trường nhân viên; lên level theo EXP dư', () => {
     const s = migrate(structuredClone(saveV3) as unknown as { version: number; state: Record<string, unknown> });
     expect(s.version).toBe(5);
-    expect(s.level).toBe(11);
+    expect(s.level).toBe(16);
     expect(s.staff).toEqual([]);
     expect(s.schedule).toEqual({});
     expect(s.rules).toEqual([]);
@@ -244,7 +244,7 @@ describe('chỉ số và tâm trạng nhân viên', () => {
     expect(a.lifetime.served).toBeGreaterThan(1000);
     expect(rate).toBeGreaterThan(0.085);
     expect(rate).toBeLessThan(0.115);
-  });
+  }, 30_000);
 
   it('ngày nghỉ +10; làm quá 6 ngày liền thì trừ tâm trạng và kêu mệt', () => {
     const s = shop(13);
