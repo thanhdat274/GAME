@@ -498,6 +498,47 @@ export function canRefill(state: GameState, shelf: number, slot: number): boolea
   return s.qty < shelfCapacity(state, shelf) && state.warehouse.some((lot) => lot.productId === s.productId && lot.qty > 0);
 }
 
+/** Ô kệ còn trống (chưa gán món, hoặc đã bán hết) để bày món mới giữa giờ bán. */
+export function slotFreeForNew(state: GameState, shelf: number, slot: number, productId: string): boolean {
+  const s = state.shelves[shelf]?.[slot];
+  return !!s && s.qty === 0 && s.productId !== productId;
+}
+
+/** Ô quầy trống (hoặc đã hết) để đưa món sau quầy mới vào giữa giờ bán. */
+export function counterFreeForNew(state: GameState, slot: number, productId: string): boolean {
+  const s = state.counter[slot];
+  return !!s && s.qty === 0 && s.productId !== productId;
+}
+
+/**
+ * Giữa giờ bán: mỗi món trong kho chưa có ô nào trên kệ được xếp vào một ô trống hợp lệ.
+ * Không nạp thêm ô đang bày (việc đó dùng nút + có thời gian nạp ở màn bán).
+ */
+export function planNewProducts(state: GameState): { placements: { shelf: number; slot: number; productId: string }[]; unplaced: string[] } {
+  const rows = usableShelves(state);
+  const taken = new Set<string>();
+  const zones = new Map(rows.map((r) => [r, zoneOf(state, r)]));
+  const placements: { shelf: number; slot: number; productId: string }[] = [];
+  const unplaced: string[] = [];
+  const ids = Object.entries(warehouseTotals(state)).filter(([id, q]) => q > 0 && !product(id).behindCounter).map(([id]) => id);
+  for (const id of ids) {
+    if (rows.some((r) => state.shelves[r].some((s) => s.productId === id))) continue;
+    const p = product(id);
+    let spot: { shelf: number; slot: number } | null = null;
+    for (const r of rows) {
+      if (kindAccepts(state, r, p)) continue;
+      const zone = zones.get(r);
+      if (zone && zone !== p.category) continue;
+      const c = state.shelves[r].findIndex((s, i) => !s.productId && !taken.has(`${r}:${i}`));
+      if (c >= 0) { spot = { shelf: r, slot: c }; if (!zone) zones.set(r, p.category as ShelfZone); break; }
+    }
+    if (!spot) { unplaced.push(id); continue; }
+    taken.add(`${spot.shelf}:${spot.slot}`);
+    placements.push({ ...spot, productId: id });
+  }
+  return { placements, unplaced };
+}
+
 /**
  * Tự bày: nạp các ô đang có hàng; mỗi món còn trong kho mà chưa có ô thì được một ô
  * (dùng ô trống, hết ô trống thì lấy lại một ô của món đang chiếm nhiều ô); ô trống còn lại

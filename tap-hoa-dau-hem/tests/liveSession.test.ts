@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { product } from '../src/core/data';
+import { DATA, product } from '../src/core/data';
 import { advanceLiveShop, applyLiveShopCommand, createLiveShopAggregate, validateLiveCommandEnvelope } from '../src/core/liveSession';
 import { createNewGame, warehouseQty } from '../src/core/state';
+import { addLot, planNewProducts } from '../src/core/stock';
 
 describe('phiên tiệm dùng chung', () => {
   it('áp dụng hành động lần lượt lên trạng thái mới nhất', () => {
@@ -53,5 +54,34 @@ describe('phiên tiệm dùng chung', () => {
     expect(bought.dayRuntime).not.toBeNull();
     expect(warehouseQty(bought.state, 'mi_goi')).toBe(5);
     expect(bought.state.money).toBe(opened.state.money - 5 * product('mi_goi').cost);
+
+    const placed = applyLiveShopCommand(bought, { type: 'assignShelf', shelf: 0, slot: 1, productId: 'mi_goi' }).aggregate;
+    expect(placed.state.shelves[0][1]).toMatchObject({ productId: 'mi_goi', qty: 5 });
+    expect(placed.dayRuntime).not.toBeNull();
+  });
+
+  it('giữa giờ bán không cho nạp tức thì ô đang bày', () => {
+    const state = createNewGame();
+    state.shelves[0][0] = { productId: 'mi_goi', qty: 2 };
+    state.zones[0] = 'dry';
+    const opened = applyLiveShopCommand(createLiveShopAggregate(state), { type: 'openShop' }).aggregate;
+    const bought = applyLiveShopCommand(opened, { type: 'buyStock', cart: { mi_goi: 5 } }).aggregate;
+
+    expect(() => applyLiveShopCommand(bought, { type: 'assignShelf', shelf: 0, slot: 0, productId: 'mi_goi' })).toThrow('ô trống');
+    expect(() => applyLiveShopCommand(bought, { type: 'clearShelf', shelf: 0, slot: 0 })).toThrow('hết hàng');
+    expect(() => applyLiveShopCommand(bought, { type: 'refillShelf', shelf: 0, slot: 0 })).toThrow('không dùng được');
+  });
+
+  it('tự bày giữa giờ bán chỉ xếp món chưa có ô vào ô trống', () => {
+    const state = createNewGame();
+    state.shelves[0][0] = { productId: 'mi_goi', qty: 2 };
+    state.zones[0] = 'dry';
+    const other = DATA.products.find((p) => p.category === 'dry' && p.id !== 'mi_goi' && p.unlockLevel <= state.level && !p.requiresCold)!;
+    addLot(state, 'mi_goi', 5, null);
+    addLot(state, other.id, 3, null);
+
+    const { placements } = planNewProducts(state);
+    expect(placements.map((p) => p.productId)).toEqual([other.id]);
+    expect(state.shelves[placements[0].shelf][placements[0].slot].productId).toBeNull();
   });
 });
