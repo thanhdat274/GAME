@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { DATA, hasFeature, product, supplier, type Category, type Product } from '../core/data';
-import { openShop } from '../core/day';
+import { openShop, setManagerMode } from '../core/day';
+import { shiftsWithoutCashier } from '../core/schedule';
+import { letGo, retainStaff } from '../core/staff';
 import { exportBackupCode, importBackupCode } from '../core/save';
 import { MAX_SHELVES, formatMoney, priceOf, shelfCount, totalQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
 import {
@@ -18,6 +20,7 @@ import { play, setSoundEnabled, stopMusic } from '../ui/sound';
 import { Button, dialog, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
+import { scheduleEvents } from '../core/eventScheduler';
 
 type Tab = 'buy' | 'arrange';
 
@@ -34,6 +37,17 @@ const TUTORIALS: Record<string, { icon: string; title: string; body: string }> =
   decor: { icon: '🪴', title: 'Trang trí', body: 'Đồ trang trí tăng thu hút, khách tới đông hơn. Mua ở ☰ Tiệm → Trang trí.' },
   freezer: { icon: '❄️', title: 'Tủ đông', body: 'Kem, xúc xích, há cảo... chỉ bày được trong tủ đông (8.000đ điện/ngày).' },
   bargain: { icon: '🙏', title: 'Khách mặc cả', body: 'Bà nội trợ có thể xin bớt 5–15%. Bớt thì khách vui; không bớt thì có thể bỏ về.' },
+  staff: { icon: '👥', title: 'Thuê nhân viên', body: 'Tiệm đông rồi! Vào ☰ Tiệm → Nhân sự để thuê thu ngân. Bé Lan đang chờ ở bảng tuyển dụng.' },
+  warehouse_big: { icon: '🏬', title: 'Kho tổng', body: 'Nâng kho lên 120 ô ở ☰ Tiệm → Kho hàng.' },
+  refill_staff: { icon: '🧺', title: 'Nhân viên bổ sung kệ', body: 'Thêm chỗ thứ 2. Nhân viên bổ sung kệ tự nạp ô vơi dưới 40%.' },
+  schedule: { icon: '📅', title: 'Xếp ca', body: 'Ca sáng 08–14, ca chiều 14–20. Cho nhân viên nghỉ ít nhất 1 ngày/tuần để họ vui. Xem ☰ Tiệm → Xếp ca.' },
+  stocker: { icon: '📦', title: 'Nhân viên kho · sơ đồ kệ', body: 'Chốt sơ đồ kệ ở ☰ Tiệm → Quy tắc; nhân viên kho sẽ bày theo sơ đồ trước giờ mở cửa.' },
+  mini_mart: { icon: '🏪', title: 'Mini Mart', body: 'Mở Đất D để có thêm 12 ô, quầy thu ngân 2, kệ đôi và xe đẩy. Coi chừng trộm vặt: chạm vào kẻ trộm trong 3 giây để bắt!' },
+  autorestock: { icon: '⚙️', title: 'Đặt hàng tự động', body: 'Tạo quy tắc "còn dưới X thì nhập Y" ở ☰ Tiệm → Quy tắc. Chạy mỗi buổi sáng.' },
+  camera: { icon: '📷', title: 'Camera an ninh', body: 'Lắp camera ở ☰ Tiệm → Nhân sự để tự phát hiện 80% kẻ trộm.' },
+  delivery: { icon: '☎️', title: 'Giao hàng tận nhà', body: 'Điện thoại bàn sẽ reo trong ngày. Nhận đơn rồi để nhân viên giao hàng chạy xe, hoặc tự đi giao.' },
+  analytics: { icon: '📊', title: 'Phân tích', body: 'Xem doanh thu 7 ngày, món bán chạy/ế, giờ đông khách và hiệu suất nhân viên ở ☰ Tiệm → Phân tích.' },
+  manager: { icon: '🧑‍💼', title: 'Chế độ quản lý', body: 'Bật "Để nhân viên lo" ở ☰ Tiệm: tiệm tự chạy, bạn tăng tốc x2/x4 hoặc bỏ qua ngày. Rời game vẫn có thu nhập (tối đa 8 giờ).' },
 };
 
 const LIST_TOP = 100;
@@ -84,6 +98,7 @@ export class MorningScene extends Phaser.Scene {
 
   create(data: { gift?: number }): void {
     setPlayClockRunning(true);
+    scheduleEvents(G.state);
     setupCamera(this);
     const onLiveUpdated = () => {
       if (!G.liveSnapshot) return;
@@ -140,8 +155,8 @@ export class MorningScene extends Phaser.Scene {
   private showMorningPopups(gift: number): void {
     const s = G.state;
     const unlockCounter = s.announcedLevel < 3 && s.level >= 3;
-    const newProducts = s.announcedLevel < s.level ? unlockedProducts(s.level).filter((p) => p.unlockLevel > s.announcedLevel) : [];
-    const afterNew = () => this.showTutorials(() => this.showHolding());
+    const newProducts = s.announcedLevel < s.level ? unlockedProducts(s.level, s).filter((p) => p.unlockLevel > s.announcedLevel) : [];
+    const afterNew = () => this.showTutorials(() => this.showNotes(() => this.showQuits(() => this.showHolding())));
     const showNew = () => {
       if (s.announcedLevel >= s.level) {
         afterNew();
@@ -177,6 +192,31 @@ export class MorningScene extends Phaser.Scene {
     }
   }
 
+  /** Thông báo buổi sáng: tự nhập hàng, nhân viên mệt, nợ lương... */
+  private showNotes(done: () => void): void {
+    const notes = G.state.morningNotes;
+    if (!notes.length) { done(); return; }
+    G.state.morningNotes = [];
+    persist();
+    dialog(this, { icon: '📋', title: 'Sáng nay', body: notes.slice(0, 8).join('\n'), buttons: [{ label: 'Đã biết', onTap: done }], width: 320 });
+  }
+
+  /** Nhân viên xin nghỉ: "Tăng lương giữ lại" (+15% lương, +30 tâm trạng) hoặc để đi. */
+  private showQuits(done: () => void): void {
+    const st = G.state.staff.find((x) => x.quitting);
+    if (!st) { done(); return; }
+    const raise = Math.round((st.wage * (1 + DATA.balance.staff.mood.retainRaise)) / 1000) * 1000;
+    dialog(this, {
+      icon: '😞',
+      title: `${st.name} xin nghỉ việc`,
+      body: `"Dạo này em mệt quá chủ ơi..."\nTăng lương lên ${formatMoney(raise)}/ngày để giữ lại?`,
+      buttons: [
+        { label: '💰 Tăng lương giữ lại', color: C.green, onTap: () => { retainStaff(G.state, st.id); persist(); this.showQuits(done); } },
+        { label: 'Để đi', color: C.grey, onTap: () => { letGo(G.state, st.id); persist(); this.showQuits(done); } },
+      ],
+    });
+  }
+
   /** Hàng Anh Ba giao hôm qua không vừa kho: nhắc dọn trước khi mở cửa. */
   private showHolding(): void {
     const held = G.state.holding.reduce((sum, lot) => sum + lot.qty, 0);
@@ -187,19 +227,60 @@ export class MorningScene extends Phaser.Scene {
     ] });
   }
 
-  /** Menu các màn quản lý giai đoạn 2, chỉ hiện mục đã mở khóa. */
+  /** Menu các màn quản lý (2 cột để vừa màn dọc), chỉ hiện mục đã mở khóa. */
   private openShopMenu(): void {
     const s = G.state;
     const go = (key: string) => () => { persist(); this.scene.start(key); };
-    const buttons: { label: string; color?: number; onTap?: () => void }[] = [];
-    if (hasFeature(s.level, 'land')) buttons.push({ label: '🏗️ Sắp xếp · mở đất, nội thất', color: C.green, onTap: go('Build') });
-    buttons.push({ label: '📦 Kho hàng', color: C.wood, onTap: go('Warehouse') });
-    if (hasFeature(s.level, 'quests')) buttons.push({ label: '🎯 Nhiệm vụ · thành tựu', color: C.wood, onTap: go('Quests') });
-    if (hasFeature(s.level, 'pricing')) buttons.push({ label: '💲 Giá bán', color: C.wood, onTap: go('Prices') });
-    if (hasFeature(s.level, 'credit')) buttons.push({ label: '📒 Sổ nợ', color: C.wood, onTap: go('Ledger') });
-    if (hasFeature(s.level, 'decor')) buttons.push({ label: '🪴 Trang trí', color: C.wood, onTap: go('Decor') });
-    buttons.push({ label: 'Đóng', color: C.grey });
-    dialog(this, { title: '☰ Quản lý tiệm', body: s.level < 9 ? `Level sau mở thêm tính năng (tới level ${DATA.levels.maxLevel}).` : 'Đã mở mọi tính năng giai đoạn 2.', buttons });
+    const items: { label: string; color: number; onTap: () => void }[] = [];
+    if (hasFeature(s.level, 'land')) items.push({ label: '🏗️ Sắp xếp', color: C.green, onTap: go('Build') });
+    items.push({ label: '📦 Kho hàng', color: C.wood, onTap: go('Warehouse') });
+    if (hasFeature(s.level, 'quests')) items.push({ label: '🎯 Nhiệm vụ', color: C.wood, onTap: go('Quests') });
+    if (hasFeature(s.level, 'pricing')) items.push({ label: '💲 Giá bán', color: C.wood, onTap: go('Prices') });
+    if (hasFeature(s.level, 'credit')) items.push({ label: '📒 Sổ nợ', color: C.wood, onTap: go('Ledger') });
+    if (hasFeature(s.level, 'decor')) items.push({ label: '🪴 Trang trí', color: C.wood, onTap: go('Decor') });
+    if (hasFeature(s.level, 'staff')) items.push({ label: '👥 Nhân sự', color: C.blue, onTap: go('Staff') });
+    if (hasFeature(s.level, 'schedule')) items.push({ label: '📅 Xếp ca', color: C.blue, onTap: go('Schedule') });
+    if (hasFeature(s.level, 'stocker') || hasFeature(s.level, 'autorestock')) items.push({ label: '⚙️ Quy tắc', color: C.blue, onTap: go('Rules') });
+    if (hasFeature(s.level, 'analytics')) items.push({ label: '📊 Phân tích', color: C.blue, onTap: go('Analytics') });
+    if (hasFeature(s.level, 'calendar')) items.push({ label: '🗓️ Lịch', color: C.blue, onTap: go('Calendar') });
+    if (hasFeature(s.level, 'food_corner')) items.push({ label: '🍳 Bếp & quầy nước', color: C.green, onTap: go('Kitchen') });
+    if (hasFeature(s.level, 'branches')) items.push({ label: '🗺️ Bản đồ thành phố', color: C.blue, onTap: go('Branches') });
+    items.push({ label: '📖 Hành trình', color: C.blue, onTap: go('Story') });
+    if (hasFeature(s.level, 'prestige')) items.push({ label: '🏆 Danh hiệu', color: C.yellow, onTap: go('Prestige') });
+    const L = this.add.container(0, 0).setDepth(2000);
+    const close = () => L.destroy();
+    L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55).setInteractive().on('pointerup', close));
+    const rows = Math.ceil(items.length / 2);
+    const manager = hasFeature(s.level, 'manager');
+    const h = 96 + rows * 48 + (manager ? 58 : 0) + 50;
+    const top = H / 2 - h / 2;
+    L.add(this.add.rectangle(W / 2, top + h / 2, W - 40, h, 0xffffff, 0.001).setInteractive());
+    L.add(panel(this, 20, top, W - 40, h));
+    L.add(txt(this, W / 2, top + 22, '☰ Quản lý tiệm', { size: 18, bold: true, origin: [0.5, 0.5] }));
+    const next = DATA.levels.levels.find((l) => l.level === s.level + 1);
+    L.add(txt(this, W / 2, top + 46, next ? `Level ${next.level}: ${next.label}` : 'Đã mở mọi tính năng giai đoạn 3.', { size: 11, color: HEX.muted, origin: [0.5, 0.5], align: 'center', wrap: W - 70 }));
+    items.forEach((it, i) => {
+      const x = W / 2 + (i % 2 === 0 ? -76 : 76);
+      const y = top + 86 + Math.floor(i / 2) * 48;
+      L.add(new Button(this, x, y, { w: 144, h: 40, label: it.label, size: 13, color: it.color, onTap: () => { close(); it.onTap(); } }));
+    });
+    let y = top + 86 + rows * 48;
+    if (manager) {
+      const label = () => (s.manager.enabled ? '🧑‍💼 Để nhân viên lo: BẬT' : '🧑‍💼 Để nhân viên lo: tắt');
+      const btn = new Button(this, W / 2, y + 4, {
+        w: W - 80, h: 42, label: label(), size: 14, color: s.manager.enabled ? C.green : C.grey,
+        onTap: () => {
+          setManagerMode(s, !s.manager.enabled);
+          persist();
+          btn.setText(label()).setColor(s.manager.enabled ? C.green : C.grey);
+          const empty = shiftsWithoutCashier(s, s.day);
+          if (s.manager.enabled && empty.length) toast(this, `⚠️ ${empty.map((sh) => DATA.balance.staff.shifts[sh].name).join(', ')} hôm nay không có thu ngân — bạn phải tự đứng quầy.`, H * 0.25, C.red);
+        },
+      });
+      L.add(btn);
+      y += 58;
+    }
+    L.add(new Button(this, W / 2, y + 4, { w: 140, h: 38, label: 'Đóng', size: 14, color: C.grey, onTap: close }));
   }
 
   private showLoginPrompt(): void {
@@ -247,7 +328,7 @@ export class MorningScene extends Phaser.Scene {
     this.list.setMask(maskG.createGeometryMask());
     this.buyLayer.add([supplierLabel, this.list]);
 
-    const unlocked = unlockedProducts(G.state.level);
+    const unlocked = unlockedProducts(G.state.level, G.state);
     const locked = DATA.products.filter((p) => !unlocked.includes(p));
     this.rows = [];
     let y = 0;

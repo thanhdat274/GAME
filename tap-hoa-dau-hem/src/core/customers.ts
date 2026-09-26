@@ -1,6 +1,7 @@
 import { DATA, type Category, type CustomerType } from './data';
 import type { Rng } from './rng';
 import { priceOf, unlockedCategories, unlockedProducts, usableShelves, type GameState } from './state';
+import { EffectStack } from './effects';
 
 export interface OrderLine {
   productId: string;
@@ -18,7 +19,7 @@ export interface OrderLine {
   declined?: 'price' | 'cold';
 }
 
-export type CustomerStatus = 'entering' | 'browsing' | 'waiting' | 'scanning' | 'bargain' | 'credit' | 'paying' | 'done';
+export type CustomerStatus = 'entering' | 'browsing' | 'waiting' | 'scanning' | 'bargain' | 'credit' | 'paying' | 'fleeing' | 'done';
 
 export interface Customer {
   id: number;
@@ -64,6 +65,16 @@ export interface Customer {
   catChecked?: boolean;
   /** Nội thất khách đang đứng cạnh (uid) — để tính đường đi. */
   at?: number | null;
+  /** Quầy khách xếp: 0 = quầy người chơi, số khác = quầy nhân viên. */
+  lane?: number;
+  /** Sao cộng thêm (thu ngân thân thiện). */
+  bonusStars?: number;
+  /** Kẻ trộm vặt: lấy hàng rồi đi thẳng ra cửa. */
+  thief?: boolean;
+  /** Giây còn lại để bắt quả tang. */
+  fleeLeft?: number;
+  /** Khách lấy xe đẩy (mini-mart): mua 3–6 món. */
+  cart?: boolean;
 }
 
 /** Hệ số mật độ khách theo giờ trong ngày. */
@@ -73,8 +84,8 @@ export function densityAt(minute: number): number {
 }
 
 /** Thời gian trung bình (giây thật) giữa hai khách. */
-export function meanSpawnSeconds(minute: number, ratingMul: number, day = 99): number {
-  return DATA.balance.baseSpawnSeconds / (densityAt(minute) * ratingMul * newShopMultiplier(day));
+export function meanSpawnSeconds(minute: number, ratingMul: number, day = 99, eventTrafficMul = 1): number {
+  return DATA.balance.baseSpawnSeconds / (densityAt(minute) * ratingMul * newShopMultiplier(day) * eventTrafficMul);
 }
 
 /** Tiệm mới mở ít người biết: ngày đầu ít khách hơn. */
@@ -88,32 +99,42 @@ export function pickCustomerType(rng: Rng, types: CustomerType[] = DATA.customer
 }
 
 /** Sinh giỏ hàng thông thường; hàng sau quầy được thêm riêng theo xác suất của khách. */
-export function generateOrder(type: CustomerType, level: number, rng: Rng, state?: GameState): OrderLine[] {
+export function generateOrder(type: CustomerType, level: number, rng: Rng, state?: GameState, cartUnits = 0): OrderLine[] {
   const cats = unlockedCategories(level);
-  const products = unlockedProducts(level).filter((p) => !p.behindCounter);
+  const products = unlockedProducts(level, state).filter((p) => !p.behindCounter);
   // Món đang bán xả được chọn nhiều hơn.
   const clearance = new Set<string>();
   if (state) for (const r of usableShelves(state)) for (const s of state.shelves[r]) if (s.clearance && s.productId && s.qty > 0) clearance.add(s.productId);
-  const pickWeight = (id: string, price: number) => (1 / Math.sqrt(price)) * (clearance.has(id) ? DATA.balance.clearance.pickWeightMul : 1);
+  const effects = state ? EffectStack.forDay(state.day, state.calendarStartMonth, state.calendarStartYear, state.activeEvents) : null;
+  const pickWeight = (id: string, price: number, category: string) => (1 / Math.sqrt(price))
+    * (clearance.has(id) ? DATA.balance.clearance.pickWeightMul : 1) * (effects?.demand(category, id) ?? 1);
   const countWeights = DATA.balance.orderLineWeights.slice(0, type.maxItems);
-  const count = rng.weightedIndex(countWeights) + 1;
+  const count = cartUnits > 0 ? cartUnits : rng.weightedIndex(countWeights) + 1;
   const lines: OrderLine[] = [];
+  const units = () => lines.reduce((n, l) => n + l.qty, 0);
   for (let i = 0; i < count; i++) {
-    const catWeights = cats.map((c: Category) => type.prefs[c] ?? 0);
+    if (cartUnits > 0 && units() >= cartUnits) break;
+    const catWeights = cats.map((c: Category) => (type.prefs[c] ?? 0) * (effects?.demand(c) ?? 1));
     const ci = rng.weightedIndex(catWeights);
     if (ci < 0) break;
     const pool = products.filter((p) => p.category === cats[ci] && !lines.some((l) => l.productId === p.id));
     if (pool.length === 0) continue;
     // Món rẻ (mì gói, muối) được mua thường xuyên hơn món đắt (dầu ăn).
-    const p = pool[rng.weightedIndex(pool.map((x) => pickWeight(x.id, x.price)))];
+    const p = pool[rng.weightedIndex(pool.map((x) => pickWeight(x.id, x.price, x.category)))];
     // Món rẻ thì hay mua nhiều hơn.
     const maxQty = DATA.balance.qtyByPrice.find((q) => p.price <= q.maxPrice)?.maxQty ?? 1;
-    lines.push({ productId: p.id, qty: rng.int(1, maxQty), picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
+    const qty = cartUnits > 0 ? Math.min(rng.int(1, maxQty), cartUnits - units()) : rng.int(1, maxQty);
+    lines.push({ productId: p.id, qty, picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
   }
   if (lines.length === 0) lines.push({ productId: rng.pick(products).id, qty: 1, picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
   const counterUnlockLevel = DATA.levels.levels.find((item) => item.counterUnlock)?.level ?? Number.POSITIVE_INFINITY;
   if (level >= counterUnlockLevel && type.counterRequestChance > 0 && rng.next() < type.counterRequestChance) {
-    const counterProducts = unlockedProducts(level).filter((p) => p.behindCounter);
+    const counterProducts = unlockedProducts(level, state).filter((p) => p.behindCounter);
+    if (state) {
+      const prepared = DATA.products.filter((p) => p.recipeOnly && state.activeRecipes.some((id) => DATA.recipes.find((r) => r.id === id)?.output === p.id)
+        && state.counter.some((slot) => slot.productId === p.id && slot.qty > 0));
+      counterProducts.push(...prepared);
+    }
     if (counterProducts.length) {
       const p = rng.pick(counterProducts);
       lines.push({ productId: p.id, qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [] });
@@ -122,21 +143,30 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
   return lines;
 }
 
+/** Tiệm đã thành mini-mart (mở mảnh đất có xe đẩy) và level đã mở xe đẩy. */
+export function hasCarts(state: GameState | undefined, level: number): boolean {
+  if (!state || !DATA.levels.levels.some((l) => l.level <= level && l.features?.includes('cart'))) return false;
+  return state.land.some((id) => DATA.land.plots.find((p) => p.id === id)?.miniMart);
+}
+
 export function createCustomer(id: number, level: number, rng: Rng, state?: GameState): Customer {
   const type = pickCustomerType(rng, DATA.customers, level);
-  const order = generateOrder(type, level, rng, state);
+  const cartCfg = DATA.balance.cart;
+  const cart = hasCarts(state, level) && cartCfg.types.includes(type.id) && rng.next() < cartCfg.chance;
+  const order = generateOrder(type, level, rng, state, cart ? rng.int(cartCfg.minItems, cartCfg.maxItems) : 0);
   const browseLines = order.filter((l) => !l.counterLine).length;
   const neighbor = type.neighbors?.length ? type.neighbors[Math.floor(rng.next() * type.neighbors.length)] : undefined;
   const b = DATA.balance;
   const bargainPct = level >= b.bargain.unlockLevel && type.bargainChance && rng.next() < type.bargainChance
     ? rng.int(b.bargain.minPct, b.bargain.maxPct) : 0;
   const wantsCredit = !!type.creditChance && DATA.levels.levels.some((l) => l.level <= level && l.features?.includes('credit')) && rng.next() < type.creditChance;
+  const patience = cart ? Math.round(type.patience * cartCfg.patienceMul) : type.patience;
   const customer: Customer = {
     id,
     type,
     order,
-    patience: type.patience,
-    patienceMax: type.patience,
+    patience,
+    patienceMax: patience,
     status: 'entering',
     bill: 0,
     total: 0,
@@ -163,6 +193,7 @@ export function createCustomer(id: number, level: number, rng: Rng, state?: Game
     customer.name = neighbor.name;
     customer.look = { shirt: neighbor.shirt, pants: neighbor.pants, hair: neighbor.hair, skin: neighbor.skin };
   }
+  if (cart) customer.cart = true;
   if (bargainPct) customer.bargainPct = bargainPct;
   if (wantsCredit) customer.wantsCredit = true;
   return customer;
@@ -190,5 +221,5 @@ export function orderComplete(c: Customer): boolean {
 export function ratingFor(c: Customer): number {
   const ratio = c.patience / c.patienceMax;
   const base = ratio >= 0.5 ? 5 : ratio >= 0.25 ? 4 : 3;
-  return Math.max(1, Math.min(c.maxStars ?? 5, base - c.penalty));
+  return Math.max(1, Math.min(c.maxStars ?? 5, base - c.penalty + (c.bonusStars ?? 0)));
 }

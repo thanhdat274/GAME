@@ -23,14 +23,17 @@ export const PALETTE: Record<string, number> = {
   n: 0x3aa35b,
   N: 0x2a7a43,
   p: 0xf06292,
+  s: 0xb0bec5, // thép sáng
+  S: 0x78909c, // thép tối
+  i: 0xe1f5fe, // kính lạnh
 };
 
 export type Sprite = readonly string[];
 
 /** Trả về danh sách lỗi của một sprite (kích thước, ký tự lạ). */
-export function validateSprite(rows: Sprite, size = 16): string[] {
+export function validateSprite(rows: Sprite, size = 16, height = size): string[] {
   const errors: string[] = [];
-  if (rows.length !== size) errors.push(`có ${rows.length} dòng, cần ${size}`);
+  if (rows.length !== height) errors.push(`có ${rows.length} dòng, cần ${height}`);
   rows.forEach((row, y) => {
     if (row.length !== size) errors.push(`dòng ${y} dài ${row.length}, cần ${size}`);
     for (const ch of row) if (ch !== '.' && !(ch in PALETTE)) errors.push(`dòng ${y} có ký tự lạ "${ch}"`);
@@ -600,3 +603,168 @@ PRODUCT_SPRITES.bat_lua = [
   '.....kYwwwwwYk..', '.....kYYYYYYk...', '.....kNNNNNNk...', '.....kNnnnnNk...',
   '.....kNnnnnNk...', '......kkkkkk....', '................', '................',
 ];
+
+/** Nội thất nhìn chính diện; kích thước khớp footprint (1 ô = 16 điểm ảnh). */
+export const FURNITURE_SPRITES: Record<string, Sprite> = {
+  shelf: [
+    'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk',
+    'kttttttttttttttttttttttttttttttk',
+    'keccccccccccccccccccccccccccccek',
+    'keckrckyckncklckpckockLckyckrcek',
+    'kecrrcyycnncllcppcoocLLcyycrrcek',
+    'kecrrcyycnncllcppcoocLLcyycrrcek',
+    'kecrrcyycnncllcppcoocLLcyycrrcek',
+    'kBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBk',
+    'keccccccccccccccccccccccccccccek',
+    'kecwwcwwcwwcwwcwwcwwcwwcwwcwwcek',
+    'kecrrcyycLLcoocppcllcnncyycrrcek',
+    'kecrrcyycLLcoocppcllcnncyycrrcek',
+    'kecrrcyycLLcoocppcllcnncyycrrcek',
+    'kBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBk',
+    'kkkeeeeeeeeeeeeeeeeeeeeeeeeeekkk',
+    'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk',
+  ],
+  fridge: [
+    'kkkkkkkkkkkkkkkk',
+    'kLLLLLLLLLLLLLLk',
+    'kLLwLLwLLwLLwLLk',
+    'kLLLLLLLLLLLLLLk',
+    'kWWWWWWWWWWWWWWk',
+    'kWSSSSSSSSSSSSWk',
+    'kWSwwiiiiiiiiSWk',
+    'kWSwwriwniwyiSWk',
+    'kWSirrinniyyiSWk',
+    'kWSirrinniyyiSWk',
+    'kWSirrinniyyiSWk',
+    'kWSssssssssssSWk',
+    'kWSiiiiiiiiiiSWk',
+    'kWSiwoiwliwpkSWk',
+    'kWSiooillippkSWk',
+    'kWSiooillippkSWk',
+    'kWSiooillippkSWk',
+    'kWSssssssssskSWk',
+    'kWSiiiiiiiiikSWk',
+    'kWSiwriwLiwniSWk',
+    'kWSirriLLinniSWk',
+    'kWSirriLLinniSWk',
+    'kWSirriLLinniSWk',
+    'kWSssssssssssSWk',
+    'kWSiiiiiiiiiiSWk',
+    'kWSllllllllllSWk',
+    'kWSllllllllllSWk',
+    'kWSSSSSSSSSSSSWk',
+    'kWWWWWWWWWWWWWWk',
+    'kggggggggggggggk',
+    'kggggggggggggggk',
+    'kkkkkkkkkkkkkkkk',
+  ],
+  freezer: [
+    '.SSSSSSSSSSSSSSSSSSSSSSSSSSSSSS.',
+    '.SiwiiiiwiiiiwiiiiwiiiiwiiiiwiS.',
+    '.SippiyyillioowppirriwwinniiiwS.',
+    'kSippiyyilliooippirriwwinniiiiSk',
+    'kSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk',
+    'kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk',
+    'kwLLLLLLLLLLLLLLLLLLLLLLLLLLLLwk',
+    'kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk',
+    'kwwllllllllllllllllllllllllllwwk',
+    'kwwllllllllllwwwwwwllllllllllwwk',
+    'kwwllllllllllwLLLLwllllllllllwwk',
+    'kwwllllllllllwwwwwwllllllllllwwk',
+    'kwwllllllllllllllllllllllllllwwk',
+    'kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk',
+    'kggggggggggggggggggggggggggggggk',
+    'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk',
+  ],
+  storage_rack: [
+    '.S............S.',
+    '.Sbbyybb......S.',
+    '.SbttttbbbbbbbS.',
+    '.SbttttbbccccbS.',
+    '.SbbbbbbbbbbbbS.',
+    '.ssssssssssssss.',
+    '.SbbbbbbbyyybbS.',
+    '.SbcccbbtttttbS.',
+    '.SbcccbbtttttbS.',
+    '.SbbbbbbbbbbbbS.',
+    '.ssssssssssssss.',
+    '.S.bbbyyyybbb.S.',
+    '.S.bttttttttb.S.',
+    '.S.bttttttttb.S.',
+    '.S.bbbbbbbbbb.S.',
+    '.ssssssssssssss.',
+  ],
+  counter: [
+    '..................kkkkkkkkkkk...',
+    '..................knnnnnnnnnk...',
+    '..................knnnnnnnnnk...',
+    '....yyy...........kgggggggggk...',
+    '...yyyyy..........kgwgwgwgwgk...',
+    '...yyyyy..........kkkkkkkkkkk...',
+    'kttttttttttttttttttttttttttttttk',
+    'kttttttttttttttttttttttttttttttk',
+    'kbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbk',
+    'kbbbBbbbbbBbbbbbBbbbbbBbbbbbBbbk',
+    'kbbbBbbbbbBbbbbbBbbbbbBbbbbbBbbk',
+    'kbbbBbbbbbBbbbbbBbbbbbBbbbbbBbbk',
+    'kbbbBbbbbbBbbbbbBbbbbbBbbbbbBbbk',
+    'kbbbBbbbbbBbbbbbBbbbbbBbbbbbBbbk',
+    'kbbbBbbbbbBbbbbbBbbbbbBbbbbbBbbk',
+    'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk',
+  ],
+  chau_cay: [
+    '................',
+    '.......n........',
+    '......n.n.......',
+    '....nnnnNnn.....',
+    '.....nNnnnn.....',
+    '...nnnnnnnnnn...',
+    '...nnnnnnNnnn...',
+    '...nnNnnnnnnn...',
+    '.....nnNNnn.....',
+    '.......NN.......',
+    '...oooooooooo...',
+    '....keeeeeek....',
+    '....keeeeeek....',
+    '....keeeeeek....',
+    '....kkkkkkkk....',
+    '................',
+  ],
+  shelf_steel: [
+    '.ssssssssssssss.',
+    '.S............S.',
+    '.S.rr.yy.ll.nnS.',
+    '.S.rr.yy.ll.nnS.',
+    '.S.rr.yy.ll.nnS.',
+    '.ssssssssssssss.',
+    '.S............S.',
+    '.S.ooo.ppp.LLLS.',
+    '.S.ooo.ppp.LLLS.',
+    '.S.ooo.ppp.LLLS.',
+    '.ssssssssssssss.',
+    '.S.bbbbbbbbbb.S.',
+    '.S.bttttttttb.S.',
+    '.S.bttttttttb.S.',
+    '.S.bbbbbbbbbb.S.',
+    '.ssssssssssssss.',
+  ],
+};
+
+// Giai đoạn 3: kệ đôi khung thép (chứa gấp đôi) và quầy thu ngân 2 (máy tính tiền màu xanh dương).
+FURNITURE_SPRITES.shelf_double = FURNITURE_SPRITES.shelf.map((row) => row.replace(/[te]/g, 's').replace(/B/g, 'S'));
+FURNITURE_SPRITES.counter2 = FURNITURE_SPRITES.counter.map((row) => row.replace(/n/g, 'l'));
+
+// Phase 4 product art: reuse matching item silhouettes until bespoke sprites are drawn.
+for (const [id, source] of Object.entries({
+  banh_tet: 'banh_mi', hat_dua: 'snack', bao_li_xi: 'keo', banh_trung_thu: 'banh_quy', long_den: 'bat_lua',
+  tap_vo: 'gao', but_bi: 'bat_lua', ao_mua: 'sua_tuoi', xuc_xich_nuong_tp: 'xuc_xich', mi_ly_tp: 'mi_goi',
+  banh_mi_trung_tp: 'banh_mi', trung_luoc_tp: 'trung_ga', tra_tac_tp: 'tra_xanh', ca_phe_sua_tp: 'nuoc_ngot',
+  nuoc_mia_tp: 'nuoc_ngot', sinh_to_tp: 'sua_hop', tra_sua_tp: 'sua_hop', tra_tac_base: 'tra_xanh',
+  ca_phe_bot: 'nuoc_ngot', mia: 'banh_mi', trai_cay: 'rau_muong',
+})) PRODUCT_SPRITES[id] = PRODUCT_SPRITES[source];
+
+// Phase 4 fixtures inherit footprint-compatible cabinet art as temporary placeholders.
+for (const [id, source] of Object.entries({
+  food_grill: 'counter', hot_kettle: 'storage_rack', bread_case: 'shelf', food_table_2: 'storage_rack', food_table_4: 'counter',
+  drink_counter: 'counter', blender: 'storage_rack', sugarcane_press: 'counter', drink_table_2: 'storage_rack', generator: 'counter',
+})) FURNITURE_SPRITES[id] = FURNITURE_SPRITES[source];

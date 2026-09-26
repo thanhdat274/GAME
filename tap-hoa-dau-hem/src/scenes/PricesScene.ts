@@ -29,7 +29,7 @@ export class PricesScene extends Phaser.Scene {
     this.list.clear();
     const s = G.state;
     let y = 4;
-    for (const p of unlockedProducts(s.level)) {
+    for (const p of unlockedProducts(s.level, s)) {
       const range = priceRange(p.id);
       const price = priceOf(p.id, s);
       const pct = Math.round((priceRatio(s, p.id) - 1) * 100);

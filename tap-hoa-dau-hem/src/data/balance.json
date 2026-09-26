@@ -5,7 +5,7 @@
   "slotCapacity": 10,
   "daySeconds": 180,
   "openMinute": 480,
-  "closeMinute": 1200,
+  "closeMinute": 1320,
   "tickMs": 100,
   "maxQueue": 3,
   "maxShoppers": 3,
@@ -89,7 +89,7 @@
     {
       "from": 540,
       "to": 660,
-      "mul": 1.0
+      "mul": 1
     },
     {
       "from": 660,
@@ -109,7 +109,7 @@
     {
       "from": 1140,
       "to": 1200,
-      "mul": 1.0
+      "mul": 1
     }
   ],
   "walkSecondsPerTile": 0.35,
@@ -131,6 +131,12 @@
       "cells": 80,
       "cost": 500000,
       "unlockLevel": 9
+    },
+    {
+      "name": "Kho tổng",
+      "cells": 120,
+      "cost": 900000,
+      "unlockLevel": 11
     }
   ],
   "notColdBuyChance": 0.5,
@@ -186,5 +192,155 @@
     "unlockLevel": 5
   },
   "loveStreakRating": 4.8,
-  "sellBackRatio": 0.5
+  "sellBackRatio": 0.5,
+  "staff": {
+    "candidateMin": 3,
+    "candidateMax": 4,
+    "refreshDays": 2,
+    "wageBase": 5000,
+    "wagePerStat": 700,
+    "wageStep": 1000,
+    "timeBase": 1.4,
+    "timePerSpeed": 0.08,
+    "tiredSpeedMul": 0.7,
+    "lowMoodThreshold": 30,
+    "lowMoodSpeedMul": 0.8,
+    "errorBase": 0.12,
+    "errorPerAccuracy": 0.011,
+    "errorMin": 0.01,
+    "friendlyStarPerPoint": 0.1,
+    "friendlyTipPerPoint": 0.05,
+    "tipChance": 0.5,
+    "staminaBaseHours": 3,
+    "staminaPerPoint": 0.5,
+    "expPerJob": 1,
+    "expPerLevel": 40,
+    "levelWageMul": 1.08,
+    "mood": {
+      "start": 70,
+      "dayOff": 10,
+      "overworkDays": 6,
+      "overworkPenalty": 8,
+      "doubleShift": 5,
+      "scold": 10,
+      "bonus": 15,
+      "unpaid": 20,
+      "wageWeight": 20,
+      "wageCap": 10,
+      "lowThreshold": 30,
+      "quitThreshold": 10,
+      "quitDays": 2,
+      "retainRaise": 0.15,
+      "retainMood": 30,
+      "tiredBubbleDays": 7
+    },
+    "bonusAmount": 20000,
+    "scoldAccuracy": 2,
+    "severanceDays": 1,
+    "scanSecondsPerItem": 0.6,
+    "counterSeconds": 1.5,
+    "changeSeconds": 2,
+    "bargainAcceptMax": 10,
+    "wrongChangeValues": [
+      1000,
+      2000,
+      5000
+    ],
+    "refillWalkSeconds": 2.5,
+    "refillThreshold": 0.4,
+    "refillCheckSeconds": 0.5,
+    "managerExpMul": 0.5,
+    "shifts": [
+      {
+        "name": "Ca sáng",
+        "from": 480,
+        "to": 840
+      },
+      {
+        "name": "Ca chiều",
+        "from": 840,
+        "to": 1200
+      }
+    ]
+  },
+  "security": {
+    "thiefChance": 0.03,
+    "catchWindowSeconds": 3,
+    "fineMul": 2,
+    "refillDetect": 0.3,
+    "cameraDetect": 0.8,
+    "cameraCost": 250000
+  },
+  "delivery": {
+    "ringChancePerSecond": 0.012,
+    "minItems": 3,
+    "maxItems": 8,
+    "answerSeconds": 15,
+    "feeBase": 5000,
+    "feePerDistance": 2000,
+    "deadlineMin": 60,
+    "deadlineMax": 120,
+    "secondsPerDistance": 4,
+    "onTimeStars": 5,
+    "lateStars": 2,
+    "addresses": [
+      {
+        "name": "Cô Hoa",
+        "place": "nhà số 12",
+        "distance": 1
+      },
+      {
+        "name": "Chú Tư",
+        "place": "cuối hẻm",
+        "distance": 3
+      },
+      {
+        "name": "Chị Lụa",
+        "place": "hẻm nhánh 5",
+        "distance": 2
+      },
+      {
+        "name": "Bác Bảy",
+        "place": "đầu hẻm bên kia",
+        "distance": 4
+      },
+      {
+        "name": "Anh Hùng",
+        "place": "khu trọ",
+        "distance": 5
+      }
+    ]
+  },
+  "manager": {
+    "speeds": [
+      1,
+      2,
+      4
+    ],
+    "skipMaxTicks": 20000
+  },
+  "offline": {
+    "maxHours": 8,
+    "efficiency": 0.6,
+    "realMinutesPerDay": 60,
+    "historyDays": 3
+  },
+  "cart": {
+    "chance": 0.4,
+    "minItems": 3,
+    "maxItems": 6,
+    "patienceMul": 1.5,
+    "types": [
+      "noi_tro"
+    ]
+  },
+  "analytics": {
+    "historyDays": 30,
+    "topCount": 5,
+    "slowDays": 5
+  },
+  "restock": {
+    "suggestThresholdDays": 1,
+    "suggestQtyDays": 2
+  }
 }

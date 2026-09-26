@@ -7,8 +7,15 @@ import furnitureJson from '../data/furniture.json';
 import suppliersJson from '../data/suppliers.json';
 import questsJson from '../data/quests.json';
 import decorJson from '../data/decor.json';
+import staffJson from '../data/staff.json';
+import recipesJson from '../data/recipes.json';
+import branchesJson from '../data/branches.json';
+import storyJson from '../data/story.json';
+import titlesJson from '../data/titles.json';
+import weeklyQuestsJson from '../data/weeklyQuests.json';
+import partyOrdersJson from '../data/partyOrders.json';
 
-export type Category = 'dry' | 'snack' | 'household' | 'drink' | 'fresh' | 'frozen' | 'counter';
+export type Category = 'dry' | 'snack' | 'household' | 'drink' | 'fresh' | 'frozen' | 'counter' | 'food' | 'beverage';
 export type ColdKind = 'fridge' | 'freezer';
 
 export interface Product {
@@ -31,6 +38,10 @@ export interface Product {
   requiresCold?: ColdKind;
   /** Bán được ở kệ thường nhưng khách thích mua lạnh hơn. */
   prefersCold?: boolean;
+  /** Chỉ nhập trong sự kiện theo lịch. */
+  eventOnly?: string;
+  /** Thành phẩm do bếp/quầy nước chế biến, không nhập từ mối sỉ. */
+  recipeOnly?: boolean;
 }
 
 export interface LevelDef {
@@ -40,6 +51,10 @@ export interface LevelDef {
   shelves: number;
   label: string;
   counterUnlock?: boolean;
+  /** Hệ số lượng khách từ level này (mặc định 1). */
+  traffic?: number;
+  /** Số chỗ nhân viên tối đa từ level này. */
+  staffSlots?: number;
   /** Hệ thống mở ở level này (land, fridge, quests, pricing, anh_ba, fresh, credit, warehouse, decor, freezer, bargain). */
   features?: string[];
 }
@@ -129,6 +144,75 @@ export interface Balance {
   quests: { perDay: number; rerollsPerDay: number; unlockLevel: number };
   loveStreakRating: number;
   sellBackRatio: number;
+  staff: StaffBalance;
+  security: { thiefChance: number; catchWindowSeconds: number; fineMul: number; refillDetect: number; cameraDetect: number; cameraCost: number };
+  delivery: {
+    ringChancePerSecond: number; minItems: number; maxItems: number; answerSeconds: number; feeBase: number; feePerDistance: number;
+    deadlineMin: number; deadlineMax: number; secondsPerDistance: number; onTimeStars: number; lateStars: number;
+    addresses: { name: string; place: string; distance: number }[];
+  };
+  manager: { speeds: number[]; skipMaxTicks: number };
+  offline: { maxHours: number; efficiency: number; realMinutesPerDay: number; historyDays: number };
+  cart: { chance: number; minItems: number; maxItems: number; patienceMul: number; types: string[] };
+  analytics: { historyDays: number; topCount: number; slowDays: number };
+  restock: { suggestThresholdDays: number; suggestQtyDays: number };
+}
+
+export interface StaffBalance {
+  candidateMin: number;
+  candidateMax: number;
+  refreshDays: number;
+  wageBase: number;
+  wagePerStat: number;
+  wageStep: number;
+  timeBase: number;
+  timePerSpeed: number;
+  tiredSpeedMul: number;
+  lowMoodThreshold: number;
+  lowMoodSpeedMul: number;
+  errorBase: number;
+  errorPerAccuracy: number;
+  errorMin: number;
+  friendlyStarPerPoint: number;
+  friendlyTipPerPoint: number;
+  tipChance: number;
+  staminaBaseHours: number;
+  staminaPerPoint: number;
+  expPerJob: number;
+  expPerLevel: number;
+  levelWageMul: number;
+  mood: {
+    start: number; dayOff: number; overworkDays: number; overworkPenalty: number; doubleShift: number; scold: number; bonus: number;
+    unpaid: number; wageWeight: number; wageCap: number; lowThreshold: number; quitThreshold: number; quitDays: number;
+    retainRaise: number; retainMood: number; tiredBubbleDays: number;
+  };
+  bonusAmount: number;
+  scoldAccuracy: number;
+  severanceDays: number;
+  scanSecondsPerItem: number;
+  counterSeconds: number;
+  changeSeconds: number;
+  bargainAcceptMax: number;
+  wrongChangeValues: number[];
+  refillWalkSeconds: number;
+  refillThreshold: number;
+  refillCheckSeconds: number;
+  managerExpMul: number;
+  shifts: { name: string; from: number; to: number }[];
+}
+
+export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'branch_manager';
+export type StatKey = 'speed' | 'accuracy' | 'friendly' | 'stamina';
+export type StaffStats = Record<StatKey, number>;
+export interface Look { shirt: string; pants: string; hair: string; skin: string }
+
+export interface StaffData {
+  roles: { id: StaffRole; name: string; icon: string; unlockFeature: string; mainStat: StatKey }[];
+  personalities: { id: string; name: string; note: string; overworkMul: number; scoldMul: number; gainMul: number; accuracyMod: number; dailyMood: number }[];
+  fixedCandidate: { id: string; name: string; personality: string; role: StaffRole; stats: StaffStats; wage: number; look: Look };
+  names: string[];
+  looks: Look[];
+  statRange: { min: number; max: number };
 }
 
 export interface Rect { x: number; y: number; w: number; h: number }
@@ -140,6 +224,10 @@ export interface LandPlot {
   cost: number;
   queueBonus: number;
   storageOnly?: boolean;
+  /** Số khách duyệt hàng cùng lúc tăng thêm. */
+  shopperBonus?: number;
+  /** Mở mảnh này thì tiệm thành Mini Mart (đổi mặt tiền, có xe đẩy). */
+  miniMart?: boolean;
   rects: Rect[];
 }
 
@@ -152,7 +240,7 @@ export interface LandTable {
   defaultLayout: { type: string; x: number; y: number; rot: number; shelf?: number }[];
 }
 
-export type FurnitureKind = 'shelf' | 'fridge' | 'freezer' | 'storage' | 'counter' | 'decor';
+export type FurnitureKind = 'shelf' | 'fridge' | 'freezer' | 'storage' | 'counter' | 'decor' | 'food' | 'drink' | 'seating' | 'generator';
 
 export interface FurnitureDef {
   id: string;
@@ -168,6 +256,12 @@ export interface FurnitureDef {
   power: number;
   storageCells?: number;
   fixed?: boolean;
+  /** Hệ số sức chứa mỗi ô (kệ đôi = 2). */
+  capacityMul?: number;
+  /** Số cái tối đa được đặt. */
+  limit?: number;
+  /** Chỉ mua được khi đã mở mảnh đất này. */
+  requiresPlot?: string;
 }
 
 export interface SupplierDef {
@@ -196,6 +290,18 @@ export interface QuestDef {
   money: number;
   exp: number;
 }
+
+export interface WeeklyQuestDef {
+  id: string;
+  text: string;
+  metric: 'soldCategory' | 'soldTotal' | 'served' | 'revenue';
+  arg?: string;
+  target: number;
+  money: number;
+  exp: number;
+}
+
+export interface PartyOrderTemplate { id: string; customer: string; items: Record<string, number>; deadlineDays: number }
 
 export interface AchievementDef {
   id: string;
@@ -228,8 +334,57 @@ export interface GameData {
   furniture: FurnitureDef[];
   suppliers: SupplierDef[];
   quests: QuestDef[];
+  weeklyQuests: WeeklyQuestDef[];
+  partyOrders: PartyOrderTemplate[];
   achievements: AchievementDef[];
   decor: DecorDef[];
+  staff: StaffData;
+  recipes: RecipeDef[];
+  branches: BranchDef[];
+  story: StoryChapter[];
+  titles: PrestigeTitle[];
+}
+
+export interface PrestigeTitle { id: string; name: string; stars: number }
+
+export interface StoryChapter {
+  id: string;
+  chapter: number;
+  title: string;
+  unlockLevel: number;
+  portrait: string;
+  dialog: string[];
+  goal: string;
+  rewardMoney: number;
+  rewardExp: number;
+  rivalDays?: number;
+}
+
+export interface BranchDef {
+  id: string;
+  name: string;
+  kind: 'market' | 'school' | 'industrial';
+  icon: string;
+  unlockLevel: number;
+  cost: number;
+  efficiency: number;
+  traffic: number;
+  demand: Record<string, number>;
+  description: string;
+  defaultLayout: { type: string; x: number; y: number; rot?: 0 | 1; shelf?: number }[];
+}
+
+export interface RecipeDef {
+  id: string;
+  name: string;
+  category: 'food' | 'beverage';
+  output: string;
+  ingredients: Record<string, number>;
+  station: string;
+  unlockLevel: number;
+  prepSeconds: number;
+  shelfLifeDays: number;
+  steps: string[];
 }
 
 const CATEGORIES: Category[] = ['dry', 'snack', 'household', 'drink', 'fresh', 'frozen', 'counter'];
@@ -284,8 +439,15 @@ export const DATA: GameData = {
   furniture: furnitureJson as FurnitureDef[],
   suppliers: suppliersJson as SupplierDef[],
   quests: questsJson.quests as QuestDef[],
+  weeklyQuests: weeklyQuestsJson as WeeklyQuestDef[],
+  partyOrders: partyOrdersJson as unknown as PartyOrderTemplate[],
   achievements: questsJson.achievements as AchievementDef[],
   decor: decorJson as DecorDef[],
+  staff: staffJson as StaffData,
+  recipes: recipesJson as unknown as RecipeDef[],
+  branches: branchesJson as unknown as BranchDef[],
+  story: storyJson as unknown as StoryChapter[],
+  titles: titlesJson as unknown as PrestigeTitle[],
 };
 
 const productIndex = new Map(DATA.products.map((p) => [p.id, p]));

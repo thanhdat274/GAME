@@ -1,0 +1,8 @@
+[
+  {"id":"homecoming","chapter":1,"title":"Về quê giữ tiệm","unlockLevel":1,"portrait":"👵","dialog":["Bà gửi lại cho cháu tiệm tạp hóa nhỏ này.","Mở cửa đều đặn, chăm khách quen rồi tiệm sẽ lớn lên."],"goal":"Mở cửa hàng và phục vụ khách","rewardMoney":50000,"rewardExp":100},
+  {"id":"growing_shop","chapter":2,"title":"Tiệm lớn dần","unlockLevel":10,"portrait":"🧑","dialog":["Khách đông hơn rồi, cháu cần sắp xếp hàng hóa cho gọn.","Thử mở rộng quầy và theo dõi mặt hàng bán chạy."],"goal":"Đạt cấp 10","rewardMoney":100000,"rewardExp":250},
+  {"id":"first_helper","chapter":3,"title":"Có thêm người phụ","unlockLevel":15,"portrait":"👩‍💼","dialog":["Bé Lan muốn xin làm thu ngân phụ tiệm.","Xếp ca hợp lý để cả chủ lẫn nhân viên đều có ngày nghỉ."],"goal":"Đạt cấp 15","rewardMoney":150000,"rewardExp":350},
+  {"id":"rival_supermarket","chapter":4,"title":"Siêu thị đối diện","unlockLevel":24,"portrait":"🏬","dialog":["Siêu thị mới khai trương bên kia đường, khách vãng lai giảm thấy rõ.","Trong 10 ngày, giữ sao trung bình từ 4,5 và xây cộng đồng 20 khách quen."],"goal":"Giữ sao ≥ 4,5 trong 10 ngày và có 20 khách quen","rewardMoney":300000,"rewardExp":800,"rivalDays":10},
+  {"id":"grandma_visit","chapter":5,"title":"Bà về thăm tiệm","unlockLevel":28,"portrait":"👵","dialog":["Bà ghé thăm và thấy góc đồ ăn đông vui quá.","Bà nhờ cháu chuẩn bị vài món quen cho xóm mình."],"goal":"Đạt cấp 28","rewardMoney":250000,"rewardExp":600},
+  {"id":"open_chain","chapter":6,"title":"Lên phố mở chuỗi","unlockLevel":34,"portrait":"🏙️","dialog":["Tiệm đầu hẻm đã thành một thương hiệu nhỏ.","Mang kinh nghiệm lên phố, mở thêm cửa hàng và chăm từng khu phố."],"goal":"Mở một chi nhánh","rewardMoney":500000,"rewardExp":1200}
+]

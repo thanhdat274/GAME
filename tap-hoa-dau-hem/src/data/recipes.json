@@ -1,0 +1,11 @@
+[
+  {"id":"xuc_xich_nuong","name":"Xúc xích nướng","category":"food","output":"xuc_xich_nuong_tp","ingredients":{"xuc_xich":1},"station":"food_grill","unlockLevel":21,"prepSeconds":8,"shelfLifeDays":1,"steps":["Làm nóng bếp","Nướng đều hai mặt","Gắp ra khay"]},
+  {"id":"mi_ly","name":"Mì ly","category":"food","output":"mi_ly_tp","ingredients":{"mi_goi":1,"nuoc_da":1},"station":"hot_kettle","unlockLevel":21,"prepSeconds":5,"shelfLifeDays":1,"steps":["Mở nắp mì","Rót nước nóng","Chờ mì chín"]},
+  {"id":"banh_mi_trung","name":"Bánh mì trứng","category":"food","output":"banh_mi_trung_tp","ingredients":{"banh_mi":1,"trung_ga":1},"station":"bread_case","unlockLevel":23,"prepSeconds":9,"shelfLifeDays":1,"steps":["Nướng bánh mì","Chiên trứng","Kẹp nhân"]},
+  {"id":"trung_luoc","name":"Trứng luộc","category":"food","output":"trung_luoc_tp","ingredients":{"trung_ga":2},"station":"hot_kettle","unlockLevel":21,"prepSeconds":12,"shelfLifeDays":1,"steps":["Cho trứng vào nồi","Canh thời gian","Vớt trứng ra"]},
+  {"id":"tra_tac","name":"Trà tắc","category":"beverage","output":"tra_tac_tp","ingredients":{"tra_tac_base":1,"nuoc_da":1},"station":"blender","unlockLevel":25,"prepSeconds":7,"shelfLifeDays":1,"steps":["Cho trà và tắc","Thêm đá","Lắc đều"]},
+  {"id":"ca_phe_sua","name":"Cà phê sữa đá","category":"beverage","output":"ca_phe_sua_tp","ingredients":{"sua_tuoi":1,"ca_phe_bot":1,"nuoc_da":1},"station":"blender","unlockLevel":25,"prepSeconds":8,"shelfLifeDays":1,"steps":["Cho cà phê","Thêm sữa","Khuấy với đá"]},
+  {"id":"nuoc_mia","name":"Nước mía","category":"beverage","output":"nuoc_mia_tp","ingredients":{"mia":1,"nuoc_da":1},"station":"sugarcane_press","unlockLevel":25,"prepSeconds":7,"shelfLifeDays":1,"steps":["Cho mía vào máy","Ép lấy nước","Thêm đá"]},
+  {"id":"sinh_to","name":"Sinh tố","category":"beverage","output":"sinh_to_tp","ingredients":{"trai_cay":1,"sua_tuoi":1},"station":"blender","unlockLevel":26,"prepSeconds":9,"shelfLifeDays":1,"steps":["Cho trái cây","Thêm sữa","Xay nhuyễn"]},
+  {"id":"tra_sua","name":"Trà sữa","category":"beverage","output":"tra_sua_tp","ingredients":{"sua_tuoi":1,"tra_tac_base":1,"nuoc_da":1},"station":"blender","unlockLevel":26,"prepSeconds":10,"shelfLifeDays":1,"steps":["Ủ trà","Thêm sữa","Lắc với đá"]}
+]

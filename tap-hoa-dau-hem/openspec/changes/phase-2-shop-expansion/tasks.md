@@ -14,9 +14,9 @@
 - [x] 2.3 Core: BFS kiểm tra lối đi cửa → quầy → từng kệ; test các bố cục bị chặn
 - [x] 2.4 Scene: vẽ lưới, đất khóa (mờ + ổ khóa + giá), hiệu ứng dỡ rào khi mở
 - [x] 2.5 Build mode: kéo thả nội thất, tô xanh/đỏ, nút Xong/Hủy, chỉ có ở Buổi sáng
-- [ ] 2.6 Camera cuộn dọc bằng một ngón (ngưỡng 8px), quầy + khay tiền ghim ở dưới, nút "Về quầy"
+- [x] 2.6 Camera cuộn dọc bằng một ngón (ngưỡng 8px), quầy + khay tiền ghim ở dưới, nút "Về quầy"
 - [x] 2.7 Khách tự chọn hàng tìm đường trên lưới (A* đơn giản) tới từng khu có món cần rồi tới quầy; giữ luật Phase 1a: khách lấy hàng, người chơi chỉ nạp kệ và quét tại quầy
-- [ ] 2.8 Gộp nội thất tĩnh vào RenderTexture; kiểm thử 60fps với 5 khách trên 375x812
+- [x] 2.8 Gộp nội thất tĩnh vào RenderTexture; kiểm thử 60fps với 5 khách trên 375x812
 
 ## 3. Kho và thiết bị lạnh
 
@@ -24,7 +24,7 @@
 - [x] 3.2 Màn Kho: danh sách lô, bộ lọc nhóm / "Sắp hết hạn", dọn bỏ lô
 - [x] 3.3 Core: ô lạnh, ràng buộc `requiresCold`, giảm 50% sức mua với `prefersCold` để kệ thường; test
 - [x] 3.4 Tiền điện cuối ngày, thêm dòng vào tổng kết
-- [ ] 3.5 Asset: tủ lạnh, tủ đông, kệ sắt, kệ kho, icon hàng mới
+- [x] 3.5 Asset: tủ lạnh, tủ đông, kệ sắt, kệ kho, icon hàng mới
 
 ## 4. Hàng tươi và hạn dùng
 
@@ -73,4 +73,10 @@
 - Mô phỏng 8.1 (`npm run playtest -- 30 5`): người chơi dùng Gợi ý lên L9 ở ngày ~21–22, hàng tươi hỏng 7–9%, lãi ròng dương (145–218 nghìn/ngày cuối). Bot "người mới" tự nhập theo cảm tính hỏng ~75% hàng tươi — tổng kết đã có mẹo nhập ít hàng tươi.
 - Chơi thử trình duyệt 375×812 (giả lập, không phải điện thoại thật): nạp bản v2 L7 → migrate, mở Đất A, mua/kéo/xoay tủ lạnh, chặn lối đi bị từ chối, nhập hàng Cô Tư, bán xả, mặc cả, ghi sổ, tổng kết, các màn quản lý. Lỗi tìm thấy và đã sửa: tổng đơn lẻ 500đ không thối được (nay làm tròn 1.000đ), "Tự bày" tranh kệ qua lại giữa các khu, 7 hộp hướng dẫn liên tiếp, dòng khách chê giá hiện nhầm "Hết hàng".
 - Chưa làm / điều chỉnh so với kế hoạch: 2.6 dùng cuộn danh sách kệ một ngón (ngưỡng 8px) và quầy luôn ghim dưới, chưa có nút "Về quầy" và camera cuộn cả mặt bằng lúc bán; 2.7 khách tính thời gian đi theo đường BFS trên lưới nhưng hình vẽ lúc bán vẫn đi theo làn khu hàng; 2.8 chưa gộp RenderTexture/đo 60fps; 3.5 tủ/kệ trong màn Sắp xếp dùng emoji, chưa có pixel art riêng. Các mục 8.2–8.4 cần điện thoại thật, bản lưu người chơi thật và deploy.
+
+### Ghi nhận bổ sung 26/09/2026 (2.6, 2.8, 3.5)
+
+- 2.6: khu kệ lúc bán là "camera" dọc: kệ/tủ mua thêm xếp theo khoảng cách tới quầy (xa nhất ở trên), 3 kệ gốc sát quầy ở dưới; mặc định nhìn phía quầy, kéo một ngón (ngưỡng 8px) để xem kệ phía sau, chỉ báo "▲ kệ khác"/"▼ phía quầy", quầy và khay tiền luôn ghim dưới, nút "↓ Về quầy" hiện khi rời khỏi quầy. Bỏ tự cuộn theo khách vì làm giật khung nhìn khi người chơi đang xem.
+- 2.8: tường, sàn gạch và quầy trong màn bán được gộp vào RenderTexture (`bakeStatic`); ô kệ chỉ vẽ lại nền/nhãn hạn/nhãn khu khi trạng thái đổi. Đo trên trình duyệt giả lập 375×812 (máy tính, không phải điện thoại) với 7 khách: 58–60 FPS (`game.loop.actualFps`). Việc đo trên điện thoại tầm trung thuộc 8.2.
+- 3.5: pixel art riêng cho kệ gỗ, tủ lạnh, tủ đông, kệ kho, quầy, chậu cây và biểu tượng kệ sắt (`FURNITURE_SPRITES`), kích thước khớp footprint (16 điểm ảnh/ô, test kiểm tra); dùng trong màn Sắp xếp (tự xoay theo hướng đặt), thanh mua nội thất và nút nâng kho.
 

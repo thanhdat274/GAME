@@ -1,10 +1,11 @@
 import { compressSave, decompressSave } from './compress';
 import { DATA, product } from './data';
-import { createNewGame, defaultFixtures, emptySlots, type GameState, type Lot } from './state';
+import { applyLevelUps } from './progression';
+import { createNewGame, defaultFixtures, emptySlots, syncActiveStore, type GameState, type Lot } from './state';
 
 export const SAVE_KEY = 'thdh.save.v1';
 export const BACKUP_KEY = 'thdh.save.v1.bak';
-export const CURRENT_VERSION = 3;
+export const CURRENT_VERSION = 5;
 /** Bản lưu trước khi migrate lên version mới, giữ 14 ngày để khôi phục. */
 export const PRE_MIGRATE_KEY = 'thdh.save.premigrate';
 const PRE_MIGRATE_DAYS = 14;
@@ -91,6 +92,46 @@ const migrations: Record<number, Migration> = {
       fixtures: defaultFixtures(),
     };
   },
+  /** v3 (giai đoạn 2) -> v4 (giai đoạn 3): thêm nhân viên, lịch ca, quy tắc, lịch sử; giữ nguyên khu hàng và kho lô. */
+  3: (state) => ({
+    ...state,
+    version: 4,
+    staff: [],
+    staffBoard: null,
+    fixedCandidateUsed: false,
+    schedule: {},
+    scheduleReady: false,
+    rules: [],
+    planogram: null,
+    analytics: [],
+    managerStats: [],
+    manager: { enabled: false, speed: 1 },
+    wageDebt: 0,
+    camera: false,
+    morningNotes: [],
+    lastSeen: typeof state.lastSeen === 'number' ? state.lastSeen : Date.now(),
+    /** EXP dư từ giai đoạn 2 (bị chặn ở L9) được tính lên level khi tải. */
+    pendingLevelUp: true,
+  }),
+  /** v4 (giai đoạn 3) -> v5 (giai đoạn 4): đóng gói tiệm cũ thành cửa hàng chính. */
+  4: (state) => ({
+    ...state,
+    version: 5,
+    stores: [{ id: 'main', name: 'Tiệm chính', kind: 'main', data: {} }],
+    activeStoreId: 'main',
+    calendarStartMonth: 3,
+    calendarStartYear: 1,
+    activeEvents: [],
+    eventProgress: {},
+    eventHistory: [],
+    eventRollDay: 0,
+    eventRewards: [],
+    activeRecipes: [],
+    branchLastSimDay: {},
+    branchShipments: [],
+    storyProgress: [],
+    storyStarted: {},
+  }),
 };
 
 function knownProduct(id: string): boolean {
@@ -113,8 +154,9 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
   }
   // Bổ sung trường thiếu bằng giá trị mặc định (an toàn khi thêm trường không đổi version).
   const base = createNewGame();
-  const loaded = state as Partial<GameState>;
-  return {
+  const { pendingLevelUp, ...rest } = state as Partial<GameState> & { pendingLevelUp?: boolean };
+  const loaded = rest as Partial<GameState>;
+  const result = {
     ...base,
     ...loaded,
     settings: { ...base.settings, ...loaded.settings },
@@ -131,8 +173,26 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
       day: loaded.day ?? base.day,
       money: loaded.money ?? base.money,
     },
+    manager: { ...base.manager, ...loaded.manager },
+    stores: loaded.stores?.length ? loaded.stores : base.stores,
+    activeStoreId: loaded.activeStoreId ?? 'main',
+    calendarStartMonth: loaded.calendarStartMonth ?? base.calendarStartMonth,
+    calendarStartYear: loaded.calendarStartYear ?? base.calendarStartYear,
+    activeEvents: loaded.activeEvents ?? [],
+    eventProgress: loaded.eventProgress ?? {},
+    eventHistory: loaded.eventHistory ?? [],
+    eventRollDay: loaded.eventRollDay ?? 0,
+    eventRewards: loaded.eventRewards ?? [],
+    activeRecipes: loaded.activeRecipes ?? [],
+    branchLastSimDay: loaded.branchLastSimDay ?? {},
+    branchShipments: Array.isArray(loaded.branchShipments) ? loaded.branchShipments : [],
+    storyProgress: loaded.storyProgress ?? [],
+    storyStarted: loaded.storyStarted ?? {},
     version: CURRENT_VERSION,
   } as GameState;
+  syncActiveStore(result);
+  if (pendingLevelUp) applyLevelUps(result);
+  return result;
 }
 
 function defaultStore(): KeyValueStore | null {
@@ -147,9 +207,11 @@ export function saveGame(state: GameState, store: KeyValueStore | null = default
   if (!store) return false;
   try {
     if (markDirty) state.sync.dirty = true;
+    syncActiveStore(state);
     state.summary.level = state.level;
     state.summary.day = state.day;
     state.summary.money = state.money;
+    state.lastSeen = Date.now();
     const file: SaveFile = { version: CURRENT_VERSION, savedAt: Date.now(), state };
     store.setItem(SAVE_KEY, JSON.stringify(file));
     return true;

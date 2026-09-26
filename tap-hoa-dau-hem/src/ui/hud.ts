@@ -6,6 +6,7 @@ import { Bar, toast } from './widgets';
 import { C, HEX, W, txt } from './theme';
 import { cloudSaveEnabled } from '../services/firebase';
 import { getSyncStatus, onSyncStatus, syncNow, type SyncStatus } from '../services/sync';
+import { calendarDate } from '../core/calendar';
 
 export const HUD_H = 50;
 
@@ -19,13 +20,13 @@ export class Hud extends Phaser.GameObjects.Container {
   private shownMoney = -1;
   private cloudIcon?: Phaser.GameObjects.Text;
 
-  constructor(scene: Phaser.Scene, private gs: GameState, private opts: { onPause?: () => void; subtitle?: string } = {}) {
+  constructor(scene: Phaser.Scene, private gs: GameState, opts: { onPause?: () => void; subtitle?: string } = {}) {
     super(scene, 0, 0);
     const bg = scene.add.graphics();
     bg.fillStyle(C.hud, 1).fillRect(0, 0, W, HUD_H);
     bg.fillStyle(0x000000, 0.25).fillRect(0, HUD_H, W, 3);
     this.money = txt(scene, 10, 6, '', { size: 16, bold: true, color: HEX.yellow });
-    this.day = txt(scene, W / 2 + 18, 7, '', { size: 14, bold: true, color: HEX.cream, origin: [0.5, 0] });
+    this.day = txt(scene, W / 2 + 18, 7, '', { size: 9.5, bold: true, color: HEX.cream, origin: [0.5, 0], align: 'center' });
     this.stars = txt(scene, opts.onPause ? W - 48 : W - 10, 7, '', { size: 14, bold: true, color: HEX.cream, origin: [1, 0] });
     this.lv = txt(scene, 10, 29, '', { size: 12, bold: true, color: HEX.cream });
     this.bar = new Bar(scene, 50, 33, cloudSaveEnabled() ? W - 95 : W - 60, 9, C.yellow, 0xffffff);
@@ -75,8 +76,9 @@ export class Hud extends Phaser.GameObjects.Container {
       this.shownMoney = s.money;
       this.money.setText(`💰 ${formatMoney(s.money)}`);
     }
-    const when = s.phase === 'open' ? formatClock(s.clock) : this.opts.subtitle ?? 'Buổi sáng';
-    this.day.setText(`Ngày ${s.day} · ${when}`);
+    const date = calendarDate(s.day, { month: s.calendarStartMonth, year: s.calendarStartYear });
+    const when = s.phase === 'open' ? ` · ${formatClock(s.clock)}` : '';
+    this.day.setText(`Ngày ${date.day} · Tháng ${date.month} · Năm ${date.year} · Mùa ${date.seasonName}${when}`);
     this.stars.setText(s.ratings.length ? `⭐ ${averageRating(s).toFixed(1)}` : '⭐ –');
     this.lv.setText(`Lv ${s.level}`);
     this.bar.set(levelProgress(s.exp, s.level));

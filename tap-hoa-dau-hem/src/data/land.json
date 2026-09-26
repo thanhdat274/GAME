@@ -1,5 +1,5 @@
 {
-  "cols": 6,
+  "cols": 8,
   "rows": 8,
   "door": {
     "x": 0,
@@ -59,6 +59,39 @@
           "h": 3
         }
       ]
+    },
+    {
+      "id": "D",
+      "name": "Đất D · Mini Mart",
+      "level": 15,
+      "cost": 1200000,
+      "queueBonus": 1,
+      "miniMart": true,
+      "rects": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 4,
+          "h": 3
+        }
+      ],
+      "shopperBonus": 2
+    },
+    {
+      "id": "E",
+      "name": "Đất E · Góc đồ ăn",
+      "level": 21,
+      "cost": 1800000,
+      "queueBonus": 1,
+      "rects": [{ "x": 6, "y": 0, "w": 2, "h": 4 }]
+    },
+    {
+      "id": "F",
+      "name": "Đất F · Quầy nước",
+      "level": 25,
+      "cost": 2500000,
+      "queueBonus": 1,
+      "rects": [{ "x": 6, "y": 4, "w": 2, "h": 4 }]
     }
   ],
   "defaultLayout": [

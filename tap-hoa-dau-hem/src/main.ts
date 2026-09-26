@@ -13,6 +13,15 @@ import { MorningScene } from './scenes/MorningScene';
 import { ShopScene } from './scenes/ShopScene';
 import { SummaryScene } from './scenes/SummaryScene';
 import { TitleScene } from './scenes/TitleScene';
+import { StaffScene } from './scenes/StaffScene';
+import { ScheduleScene } from './scenes/ScheduleScene';
+import { RulesScene } from './scenes/RulesScene';
+import { AnalyticsScene } from './scenes/AnalyticsScene';
+import { CalendarScene } from './scenes/CalendarScene';
+import { CookScene, KitchenScene } from './scenes/KitchenScene';
+import { BranchesScene } from './scenes/BranchesScene';
+import { StoryScene } from './scenes/StoryScene';
+import { PrestigeScene } from './scenes/PrestigeScene';
 import { installRoundedRectFix } from './ui/roundrect';
 import { H, W, ZOOM } from './ui/theme';
 import { applyPendingCloud, configureCloudApplyGuard, enableOnlineRetry } from './services/sync';
@@ -29,8 +38,11 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   render: { antialias: true, roundPixels: false },
   input: { activePointers: 2 },
-  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, PricesScene, LedgerScene, QuestsScene, DecorScene],
+  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, PricesScene, LedgerScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene],
 });
+
+// Chỉ bản dev: đo FPS khi kiểm thử hiệu năng trên trình duyệt.
+if (import.meta.env.DEV) (window as unknown as { __thdhGame?: Phaser.Game }).__thdhGame = game;
 
 configureCloudApplyGuard(() => game.scene.isActive('Title') || game.scene.isActive('Morning'));
 let cloudScene = '';
@@ -48,7 +60,7 @@ window.addEventListener('thdh-cloud-loaded', () => {
 });
 
 // Lưu khi rời tab / tắt ứng dụng (chỉ khi đã vào game để không ghi đè bằng trạng thái mặc định).
-const inGame = () => ['Morning', 'Shop', 'Summary', 'Warehouse', 'Prices', 'Ledger', 'Quests', 'Decor'].some((k) => game.scene.isActive(k));
+const inGame = () => ['Morning', 'Shop', 'Summary', 'Warehouse', 'Prices', 'Ledger', 'Quests', 'Decor', 'Staff', 'Schedule', 'Rules', 'Analytics', 'Calendar', 'Kitchen', 'Cook', 'Branches', 'Story', 'Prestige'].some((k) => game.scene.isActive(k));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && inGame()) persist();
 });

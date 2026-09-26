@@ -160,6 +160,11 @@ export function counterFixture(state: GameState): Fixture | undefined {
   return state.fixtures.find((f) => furniture(f.type).kind === 'counter');
 }
 
+/** Mọi quầy thu ngân đang đặt (quầy gốc trước). */
+export function counterFixtures(state: GameState): Fixture[] {
+  return state.fixtures.filter((f) => furniture(f.type).kind === 'counter');
+}
+
 /** Nội thất khách cần tới được: quầy và mọi nội thất bày hàng. */
 function needsAccess(f: Fixture): boolean {
   const kind = furniture(f.type).kind;
@@ -222,7 +227,7 @@ export function walkTiles(state: GameState, from: Fixture | null, to: Fixture | 
 
 // ---------- Mua / bán / di chuyển nội thất ----------
 
-export type BuyFixtureResult = 'ok' | 'money' | 'level' | PlaceError;
+export type BuyFixtureResult = 'ok' | 'money' | 'level' | 'limit' | 'plot' | PlaceError;
 
 function freeShelfIndex(state: GameState, slots: number): number {
   for (let i = 3; i < state.shelves.length; i++) {
@@ -241,6 +246,8 @@ export function buyFixture(state: GameState, type: string, x: number, y: number,
   const def = furniture(type);
   if (def.fixed) return 'level';
   if (state.level < def.unlockLevel) return 'level';
+  if (def.requiresPlot && !state.land.includes(def.requiresPlot)) return 'plot';
+  if (def.limit !== undefined && state.fixtures.filter((f) => f.type === type).length >= def.limit) return 'limit';
   if (state.money < def.cost) return 'money';
   const error = placementError(state, type, x, y, rot);
   if (error) return error;
@@ -264,4 +271,24 @@ export function moveFixture(state: GameState, uid: number, x: number, y: number,
 
 export function sellValue(type: string): number {
   return Math.floor(furniture(type).cost * DATA.balance.sellBackRatio);
+}
+
+/** Mua và đặt nội thất vào chỗ trống đầu tiên hợp lệ mà không chặn lối đi (dùng cho mô phỏng). */
+export function placeAnywhere(state: GameState, type: string): boolean {
+  for (let y = 0; y < DATA.land.rows; y++) for (let x = 0; x < DATA.land.cols; x++) for (const rot of [0, 1] as const) {
+    const money = state.money;
+    if (buyFixture(state, type, x, y, rot) !== 'ok') continue;
+    if (checkPaths(state).ok) return true;
+    // Chặn lối đi: hoàn tác.
+    const f = state.fixtures.pop()!;
+    if (f.shelf !== undefined) state.shelves[f.shelf] = state.shelves[f.shelf].map(() => ({ productId: null, qty: 0 }));
+    state.nextUid--;
+    state.money = money;
+  }
+  return false;
+}
+
+/** Số khách duyệt hàng cùng lúc: mặc định + thưởng của mảnh đất lớn (Đất D mini-mart). */
+export function maxShoppersFor(state: GameState): number {
+  return DATA.balance.maxShoppers + state.land.reduce((sum, id) => sum + (plot(id).shopperBonus ?? 0), 0);
 }
