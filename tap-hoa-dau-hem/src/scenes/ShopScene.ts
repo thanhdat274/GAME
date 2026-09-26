@@ -68,6 +68,7 @@ export class ShopScene extends Phaser.Scene {
   private pauseLayer: Phaser.GameObjects.Container | null = null;
   private zoneRefillButtons: { zone: SaleZone; button: Button }[] = [];
   private questBtn: Button | null = null;
+  private restockBtn: Button | null = null;
   private counterBtn: Button | null = null;
   private questsDoneSeen = new Set<string>();
   private renderAcc = 0;
@@ -95,6 +96,7 @@ export class ShopScene extends Phaser.Scene {
     this.ending = false;
     this.zoneRefillButtons = [];
     this.questBtn = null;
+    this.restockBtn = null;
     this.counterBtn = null;
     this.questsDoneSeen = new Set((G.state.quests?.list ?? []).filter((q) => q.claimed || questDone(G.state, questDef(q.id))).map((q) => q.id));
     const s = G.state;
@@ -229,6 +231,10 @@ export class ShopScene extends Phaser.Scene {
       this.questBtn = new Button(this, W - 26, 286, { w: 40, h: 34, label: '🎯', size: 16, color: C.blue, onTap: () => this.showQuests() });
       this.questBtn.setDepth(210);
     }
+    // Luôn hiện: tạm dừng tiệm để nhập thêm hàng và bày lên kệ.
+    this.restockBtn = new Button(this, W - 26, 324, { w: 44, h: 36, label: '📦', size: 18, color: C.green, onTap: () => this.openRestock() });
+    this.restockBtn.setDepth(260);
+    this.add.text(W - 26, 344, 'Nhập hàng', { fontFamily: 'sans-serif', fontSize: '8px', color: '#fff6e2', backgroundColor: '#2f7a3d', padding: { x: 2, y: 1 } }).setOrigin(0.5, 0).setDepth(261);
   }
 
   /** Bảng nhiệm vụ nổi trong lúc bán (tạm dừng mô phỏng khi mở). */
@@ -367,6 +373,8 @@ export class ShopScene extends Phaser.Scene {
       vibrate(60);
       const v = this.views.get(customer.id);
       if (v) floatText(this, v.sprite.x, v.sprite.y - 70, '🙁 Hết!', HEX.red, 13);
+      // Nhắc nút nhập hàng khi khách hỏi món đã hết.
+      if (this.restockBtn && !this.tweens.isTweening(this.restockBtn)) this.tweens.add({ targets: this.restockBtn, scale: 1.2, yoyo: true, repeat: 2, duration: 160 });
     });
     e.on('itemScanned', () => this.renderPanel(true));
     e.on('counterRequested', ({ customer, productId, seconds }) => {
@@ -767,11 +775,15 @@ export class ShopScene extends Phaser.Scene {
         ? '🌙 Đã đóng cửa. Đang dọn tiệm...'
         : staffed ? '⏳ Quầy bạn đang trống.\nThu ngân lo quầy bên phải, bạn tranh thủ nạp kệ nhé!' : '⏳ Đang chờ khách...\nTranh thủ nạp kệ bằng nút + xanh nhé!';
       this.panelLayer.add(txt(this, W / 2, PANEL_Y + 100, msg, { size: 15, origin: [0.5, 0.5], align: 'center', color: HEX.muted, wrap: W - 40 }));
-      if (!this.session.closed && staffed && G.state.manager.enabled && hasFeature(G.state.level, 'manager') && !G.state.today.managerDay) {
-        this.panelLayer.add(new Button(this, W / 2, PANEL_Y + 184, { w: 200, h: 40, label: '🧑‍💼 Để nhân viên lo', size: 14, color: C.green, onTap: () => {
+      const managerBtn = !this.session.closed && staffed && G.state.manager.enabled && hasFeature(G.state.level, 'manager') && !G.state.today.managerDay;
+      if (managerBtn) {
+        this.panelLayer.add(new Button(this, W / 2, PANEL_Y + 160, { w: 200, h: 40, label: '🧑‍💼 Để nhân viên lo', size: 14, color: C.green, onTap: () => {
           G.state.today.managerDay = true;
           this.renderPanel(true);
         } }));
+      }
+      if (!this.session.closed) {
+        this.panelLayer.add(new Button(this, W / 2, PANEL_Y + (managerBtn ? 210 : 184), { w: 240, h: 40, label: '📦 Tạm dừng · nhập & bày hàng', size: 13, color: C.wood, onTap: () => this.openRestock() }));
       }
       return;
     }
@@ -1063,7 +1075,7 @@ export class ShopScene extends Phaser.Scene {
     y += 56;
     L.add(new Button(this, W / 2, y, { w: 220, h: 50, label: '▶ Tiếp tục', onTap: () => this.resume() }));
     y += 58;
-    L.add(new Button(this, W / 2, y, { w: 220, h: 44, label: '📦 Nhập thêm hàng', color: C.green, onTap: () => this.openRestock() }));
+    L.add(new Button(this, W / 2, y, { w: 220, h: 44, label: '📦 Nhập & bày hàng', color: C.green, onTap: () => this.openRestock() }));
     y += 54;
     const autoLabel = () => (G.state.settings.autoChange ? '🧮 Tự thối tiền: Bật' : '✋ Tự thối tiền: Tắt');
     const autoBtn = new Button(this, W / 2, y, {
@@ -1174,6 +1186,7 @@ export class ShopScene extends Phaser.Scene {
   /** Tạm dừng bán để nhập thêm hàng: màn Nhập hàng phủ lên, tiệm đứng yên tới khi quay lại. */
   private openRestock(): void {
     if (this.ending) return;
+    if (this.session.closed) { toast(this, 'Tiệm đã đóng cửa, mai nhập tiếp nhé!'); return; }
     this.pauseLayer?.destroy();
     this.pauseLayer = null;
     if (!G.liveSnapshot) this.session.paused = true;

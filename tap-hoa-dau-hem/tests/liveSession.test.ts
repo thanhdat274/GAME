@@ -53,5 +53,9 @@ describe('phiên tiệm dùng chung', () => {
     expect(bought.dayRuntime).not.toBeNull();
     expect(warehouseQty(bought.state, 'mi_goi')).toBe(5);
     expect(bought.state.money).toBe(opened.state.money - 5 * product('mi_goi').cost);
+
+    const placed = applyLiveShopCommand(bought, { type: 'assignShelf', shelf: 0, slot: 1, productId: 'mi_goi' }).aggregate;
+    expect(placed.state.shelves[0][1]).toMatchObject({ productId: 'mi_goi', qty: 5 });
+    expect(placed.dayRuntime).not.toBeNull();
   });
 });

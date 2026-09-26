@@ -77,36 +77,35 @@ export function applyLiveShopCommand(
 
   switch (command.type) {
     case 'buyStock':
-      // Nhập hàng được cả buổi sáng lẫn khi tạm dừng giữa giờ bán.
-      if (state.phase !== 'morning') requirePhase(state, 'open');
+      requireStocking(state);
       result = buyStock(state, command.cart, command.supplierId ?? 'co_tu');
       break;
     case 'assignShelf':
-      requirePhase(state, 'morning');
+      requireStocking(state);
       result = assignSlot(state, command.shelf, command.slot, command.productId);
       break;
     case 'clearShelf':
-      requirePhase(state, 'morning');
+      requireStocking(state);
       clearSlot(state, command.shelf, command.slot);
       result = true;
       break;
     case 'refillShelf':
-      requirePhase(state, 'morning');
+      requireStocking(state);
       result = refillSlot(state, command.shelf, command.slot);
       break;
     case 'assignCounter':
-      requirePhase(state, 'morning');
+      requireStocking(state);
       result = assignCounterSlot(state, command.slot, command.productId);
       break;
     case 'refillCounter':
-      requirePhase(state, 'morning');
+      requireStocking(state);
       result = refillCounterSlot(state, command.slot);
       break;
     case 'setClearance':
       result = setClearance(state, command.shelf, command.slot, command.pct);
       break;
     case 'autoArrange':
-      requirePhase(state, 'morning');
+      requireStocking(state);
       autoArrange(state);
       result = true;
       break;
@@ -278,6 +277,11 @@ export function advanceLiveShop(aggregate: LiveShopAggregate, elapsedSeconds: nu
 
 function requirePhase(state: GameState, phase: GameState['phase']): void {
   if (state.phase !== phase) throw new Error(`Lệnh này không dùng được ở pha ${state.phase}.`);
+}
+
+/** Nhập và bày hàng: buổi sáng, hoặc khi tạm dừng giữa giờ bán. */
+function requireStocking(state: GameState): void {
+  if (state.phase !== 'morning') requirePhase(state, 'open');
 }
 
 function requireDayRuntime(aggregate: LiveShopAggregate): DaySessionSnapshot {
