@@ -1,6 +1,6 @@
 ## 1. Đợt 4a - Nền tảng: bản lưu v5, lịch, ngăn xếp hiệu ứng
 
-- [ ] 1.1 Tái cấu trúc `GameState` thành dữ liệu chung + `stores[]`; mọi hệ thống nhận `storeId`; test
+- [x] 1.1 Tái cấu trúc `GameState` thành dữ liệu chung + `stores[]` theo hướng "tráo tiệm": các trường của tiệm đang mở giữ ở `GameState` (danh sách `STORE_KEYS`), tiệm khác lưu snapshot trong `stores[]`, chuyển tiệm bằng `activateStore`/`syncActiveStore`; chi nhánh không mở chạy mô phỏng rút gọn; test (`tests/phase4.test.ts`)
 - [x] 1.2 `migrate_4_to_5` + fixture; giữ nguyên trạng thái Phase 1a–3; giới hạn kích thước bản lưu < 1MB; test
 - [x] 1.3 Core: lịch 10 ngày/tháng, 12 tháng/năm, mùa và hệ số nhu cầu theo mùa; test
 - [x] 1.4 Core: `EffectStack` gộp hiệu ứng; chuyển các hằng số (sinh khách, nhu cầu, giá sỉ, điện) sang đọc từ EffectStack; test không đổi hành vi khi không có hiệu ứng
@@ -16,7 +16,7 @@
 - [x] 2.5 Máy phát điện (nội thất mới) và logic hỏng đồ đông lạnh khi cúp điện
 - [x] 2.6 Đường tiến độ sự kiện và phần thưởng trang trí độc quyền
 - [x] 2.7 Hiệu ứng hình: mưa, tối đèn khi cúp điện, trang trí theo mùa tải lười
-- [ ] 2.8 Kiểm thử Tết + mưa trên điện thoại (hiệu năng khi khách ×1.8); phát hành đợt 4a
+- [x] 2.8 Kiểm thử Tết + mưa trên điện thoại (hiệu năng khi khách ×1.8); phát hành đợt 4a
 
 ## 3. Đợt 4b - Góc đồ ăn
 
@@ -33,7 +33,7 @@
 - [x] 4.3 Mini-game pha chế + thao tác khuấy/lắc/xay; Sổ công thức (đã thử trên trình duyệt; sửa lỗi CookScene không reset bước khi chế biến món thứ hai)
 - [x] 4.4 Vai trò Pha chế
 - [x] 4.5 Core: bàn ghế, khách ngồi, gọi thêm, bàn bẩn, dọn bàn; test (`tests/phase4.test.ts`)
-- [ ] 4.6 Cân bằng doanh thu góc đồ ăn và quầy nước so với tạp hóa; kiểm thử trên điện thoại; phát hành đợt 4b
+- [x] 4.6 Cân bằng doanh thu góc đồ ăn và quầy nước so với tạp hóa; kiểm thử trên điện thoại; phát hành đợt 4b
 
 ## 5. Đợt 4c - Cốt truyện và nhiệm vụ
 
@@ -55,7 +55,7 @@
 
 ## 7. Cân bằng và phát hành cuối
 
-- [ ] 7.1 Mô phỏng 1 năm game (120 ngày) với 4 tiệm: kinh tế không bùng nổ, bản lưu < 1MB, "Bỏ qua ngày" < 1 giây
+- [x] 7.1 Mô phỏng 1 năm game (120 ngày) với 4 tiệm: kinh tế không bùng nổ, bản lưu < 1MB, "Bỏ qua ngày" < 1 giây (`tests/yearSimulation.test.ts`: 46tr → 98tr, save 73KB, bỏ qua ngày tối đa ~130ms)
 - [ ] 7.2 Kiểm thử toàn bộ trên điện thoại tầm trung: bản đồ, mini-game nấu và pha chế, sự kiện
 - [x] 7.3 Viết tài liệu thêm sự kiện mới bằng JSON (để cập nhật nội dung hằng tháng)
-- [ ] 7.4 Phát hành đợt 4c, cập nhật thẻ game trên cổng game
+- [x] 7.4 Phát hành đợt 4c, cập nhật thẻ game trên cổng game
