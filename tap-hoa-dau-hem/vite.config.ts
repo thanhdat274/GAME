@@ -34,6 +34,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,json}'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        // Trang xử lý đăng nhập Firebase phải tới mạng, không được trả index.html từ cache.
+        navigateFallbackDenylist: [/^\/__\//],
       },
     }),
   ],

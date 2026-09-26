@@ -25,9 +25,15 @@ export class SummaryScene extends Phaser.Scene {
       return;
     }
     const hasJournal = (sum.journal?.length ?? 0) > 0;
-    txt(this, hasJournal ? W / 2 - 40 : W / 2, 30, `🌙 Tổng kết ngày ${sum.day}`, { size: hasJournal ? 19 : 22, bold: true, color: HEX.cream, origin: [0.5, 0.5] });
-    if (hasJournal) new Button(this, W - 50, 30, { w: 84, h: 32, label: '📖 Nhật ký', size: 12, color: C.blue, onTap: () => this.showJournal(sum.journal ?? [], 0) }).setDepth(50);
-    if (s.stores.length > 1) new Button(this, 54, 30, { w: 92, h: 32, label: '🏪 Cả chuỗi', size: 11, color: C.blue, onTap: () => this.showChainSummary(sum.day) }).setDepth(50);
+    const hasChain = s.stores.length > 1;
+    // Nút hai bên cố định bề rộng; tiêu đề căn giữa và thu nhỏ cho vừa khoảng trống còn lại.
+    const btnW = 76;
+    const side = hasJournal || hasChain ? 10 + btnW + 6 : 16;
+    const title = txt(this, W / 2, 30, `${hasJournal || hasChain ? '' : '🌙 '}Tổng kết ngày ${sum.day}`, { size: 20, bold: true, color: HEX.cream, origin: [0.5, 0.5] });
+    const room = W - side * 2;
+    if (title.width > room) title.setScale(room / title.width);
+    if (hasJournal) new Button(this, W - 10 - btnW / 2, 30, { w: btnW, h: 32, label: '📖 Nhật ký', size: 11, color: C.blue, onTap: () => this.showJournal(sum.journal ?? [], 0) }).setDepth(50);
+    if (hasChain) new Button(this, 10 + btnW / 2, 30, { w: btnW, h: 32, label: '🏪 Chuỗi', size: 11, color: C.blue, onTap: () => this.showChainSummary(sum.day) }).setDepth(50);
 
     const hasLevelUp = sum.levelUps.length > 0;
     const top = 58;
@@ -203,18 +209,18 @@ export class SummaryScene extends Phaser.Scene {
     layer.add(txt(this, W / 2, 96, `🏪 Báo cáo chuỗi · ngày ${day}`, { size: 17, bold: true, origin: [0.5, 0.5] }));
     layer.add(txt(this, 30, 130, 'Cửa hàng', { size: 10, bold: true, color: HEX.muted }));
     layer.add(txt(this, W - 30, 130, 'Doanh thu · Lãi · Khách', { size: 10, bold: true, color: HEX.muted, origin: [1, 0] }));
-    let y = 158;
+    let y = 150;
     for (const row of rows) {
-      layer.add(card(this, 24, y, W - 48, 70, C.panel));
-      layer.add(txt(this, 34, y + 8, row.name, { size: 12, bold: true }));
-      layer.add(txt(this, 34, y + 31, row.recordDay === null ? 'Chưa có ngày bán được ghi nhận' : `Số liệu ngày ${row.recordDay}`, { size: 9, color: HEX.muted }));
+      layer.add(card(this, 24, y, W - 48, 56, C.panel));
+      layer.add(txt(this, 34, y + 7, row.name, { size: 12, bold: true }));
+      layer.add(txt(this, 34, y + 29, row.recordDay === null ? 'Chưa có ngày bán được ghi nhận' : `Số liệu ngày ${row.recordDay}`, { size: 9, color: HEX.muted }));
       layer.add(txt(this, W - 34, y + 17, `${formatMoney(row.revenue)}  ·  ${formatMoney(row.profit)}  ·  ${row.customers}`, { size: 10, bold: true, origin: [1, 0] }));
-      y += 78;
+      y += 62;
     }
     const totals = rows.reduce((sum, row) => ({ revenue: sum.revenue + row.revenue, profit: sum.profit + row.profit, customers: sum.customers + row.customers }), { revenue: 0, profit: 0, customers: 0 });
-    layer.add(panel(this, 24, y + 2, W - 48, 72, 0xe8f5e9));
-    layer.add(txt(this, 36, y + 14, 'TỔNG CHUỖI', { size: 12, bold: true, color: HEX.green }));
-    layer.add(txt(this, 36, y + 40, `${formatMoney(totals.revenue)} doanh thu  ·  ${formatMoney(totals.profit)} lãi  ·  ${totals.customers} khách`, { size: 10, bold: true, wrap: W - 72 }));
-    layer.add(new Button(this, W / 2, H - 92, { w: 100, h: 38, label: 'Đóng', color: C.grey, onTap: () => layer.destroy() }));
+    layer.add(panel(this, 24, y + 2, W - 48, 62, 0xe8f5e9));
+    layer.add(txt(this, 36, y + 12, 'TỔNG CHUỖI', { size: 12, bold: true, color: HEX.green }));
+    layer.add(txt(this, 36, y + 36, `${formatMoney(totals.revenue)} doanh thu  ·  ${formatMoney(totals.profit)} lãi  ·  ${totals.customers} khách`, { size: 10, bold: true, wrap: W - 72 }));
+    layer.add(new Button(this, W / 2, Math.max(y + 100, H - 100), { w: 100, h: 38, label: 'Đóng', color: C.grey, onTap: () => layer.destroy() }));
   }
 }

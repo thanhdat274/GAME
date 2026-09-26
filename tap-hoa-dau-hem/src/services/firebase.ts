@@ -35,7 +35,7 @@ export async function getFirebase(): Promise<FirebaseServices> {
     ]).then(([appSdk, authSdk, firestoreSdk]) => {
       const config = {
         apiKey: env.VITE_FIREBASE_API_KEY,
-        authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || window.location.hostname,
+        authDomain: resolveAuthDomain(window.location.hostname, env.VITE_FIREBASE_AUTH_DOMAIN, env.VITE_AUTH_PROXY_HOSTS),
         projectId: env.VITE_FIREBASE_PROJECT_ID,
         storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
         messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
@@ -59,6 +59,16 @@ export async function getFirebase(): Promise<FirebaseServices> {
     });
   }
   return services;
+}
+
+/**
+ * Domain có proxy `/__/auth` (rewrite trong vercel.json) phải dùng chính nó làm authDomain:
+ * trình duyệt chặn lưu trữ bên thứ ba nên redirect qua firebaseapp.com quay về không có phiên.
+ */
+export function resolveAuthDomain(hostname: string, configured?: string, proxyHosts = 'tap-hoa-dau-hem.vercel.app'): string {
+  const proxied = proxyHosts.split(',').map((host) => host.trim()).filter(Boolean);
+  if (proxied.includes(hostname)) return hostname;
+  return configured || hostname;
 }
 
 export function hasAuthHint(): boolean {
