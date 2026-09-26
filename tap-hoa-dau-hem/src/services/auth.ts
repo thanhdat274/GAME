@@ -13,14 +13,29 @@ export async function signInWithGoogle(): Promise<'redirect' | 'popup'> {
   const { auth, authSdk } = await getFirebase();
   const Provider = authSdk.GoogleAuthProvider as unknown as new () => any;
   const provider = new Provider();
+  provider.setCustomParameters?.({ prompt: 'select_account' });
   if (prefersRedirect(navigator.userAgent, navigator.maxTouchPoints)) {
     setAuthHint(true);
-    await authSdk.signInWithRedirect(auth, provider);
+    try {
+      await authSdk.signInWithRedirect(auth, provider);
+    } catch (error) {
+      setAuthHint(false);
+      throw error;
+    }
     return 'redirect';
   }
   await authSdk.signInWithPopup(auth, provider);
   setAuthHint(true);
   return 'popup';
+}
+
+export function googleSignInErrorMessage(error: unknown): string {
+  const code = (error as { code?: string } | null)?.code;
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return 'Bạn đã hủy đăng nhập. Tiến trình vẫn được lưu trên máy.';
+  if (code === 'auth/popup-blocked') return 'Trình duyệt đã chặn cửa sổ Google. Hãy cho phép cửa sổ bật lên rồi thử lại.';
+  if (code === 'auth/unauthorized-domain') return 'Tên miền này chưa được thêm vào Authorized domains trong Firebase Authentication.';
+  if (code === 'auth/network-request-failed') return 'Không kết nối được Google. Kiểm tra mạng rồi thử lại.';
+  return error instanceof Error ? error.message : 'Có lỗi khi đăng nhập Google.';
 }
 
 export async function finishRedirectSignIn(): Promise<AccountUser | null> {
@@ -35,10 +50,21 @@ export async function currentAccount(): Promise<AccountUser | null> {
   if (!hasAuthHint()) return null;
   const { auth, authSdk } = await getFirebase();
   return new Promise((resolve, reject) => {
-    const unsubscribe = authSdk.onAuthStateChanged(auth, (user: any) => {
-      unsubscribe();
-      resolve(user ? toAccountUser(user) : null);
-    }, reject);
+    let settled = false;
+    let unsubscribe: (() => void) | undefined;
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      unsubscribe?.();
+      action();
+    };
+    const detach = authSdk.onAuthStateChanged(auth, (user: any) => {
+      finish(() => resolve(user ? toAccountUser(user) : null));
+    }, (error: unknown) => finish(() => reject(error)));
+    unsubscribe = detach;
+    // Firebase calls the observer asynchronously, but keep this safe for SDK
+    // adapters and tests that may resolve the initial auth state synchronously.
+    if (settled) detach();
   });
 }
 

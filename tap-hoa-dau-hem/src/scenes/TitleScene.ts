@@ -7,7 +7,7 @@ import { drawStorefront } from '../ui/art';
 import { play, setSoundEnabled, startMusic, stopMusic } from '../ui/sound';
 import { Button, dialog, toast, type DialogButton } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
-import { currentAccount, deleteCurrentAccount, signInWithGoogle, signOutGoogle, type AccountUser } from '../services/auth';
+import { currentAccount, deleteCurrentAccount, googleSignInErrorMessage, signInWithGoogle, signOutGoogle, type AccountUser } from '../services/auth';
 import { chromeIntentUrl, detectInAppBrowser } from '../services/inAppBrowser';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
 import { getPendingConflict, onSyncStatus, resolveConflict, startSync, syncNow, type SyncStatus } from '../services/sync';
@@ -16,6 +16,7 @@ import { joinLiveShop, liveShopEnabled } from '../services/liveShop';
 import { applyOfflineIncome, offlineElapsed, offlineUnlocked, type OfflineReport } from '../core/offline';
 import { formatMoney } from '../core/state';
 import { getServerNow } from '../services/serverTime';
+import { cacheGoogleAvatar } from '../ui/avatar';
 
 const INTRO = [
   { icon: '👵', text: 'Cháu ơi, bà già rồi, đứng tiệm không nổi nữa...' },
@@ -27,6 +28,11 @@ export class TitleScene extends Phaser.Scene {
   private account: AccountUser | null = null;
   private syncStatus: SyncStatus = 'guest';
   private accountLabel?: Phaser.GameObjects.Text;
+  private accountAvatarPlaceholder?: Phaser.GameObjects.Text;
+  private accountAvatar?: Phaser.GameObjects.Image;
+  private accountAvatarMask?: Phaser.GameObjects.Graphics;
+  private accountAvatarTextureKey?: string;
+  private accountAvatarPosition?: { x: number; y: number };
   private statusLabel?: Phaser.GameObjects.Text;
   private syncDot?: Phaser.GameObjects.Graphics;
   private syncMessage: string | null = null;
@@ -42,6 +48,9 @@ export class TitleScene extends Phaser.Scene {
     this.conflictOpen = false;
     this.continuing = false;
     this.account = null;
+    this.accountAvatar = undefined;
+    this.accountAvatarMask = undefined;
+    this.accountAvatarTextureKey = undefined;
     setupCamera(this);
 
     // Vẽ toàn bộ phối cảnh tiệm tạp hóa hoài niệm (bầu trời, mây trôi, ánh nắng, tiệm cổ xưa, dây đèn vàng, mèo tam thể, vỉa hè)
@@ -82,7 +91,8 @@ export class TitleScene extends Phaser.Scene {
       // Icon tròn 'G'
       pillG.fillStyle(0xffffff, 1).fillCircle(pillX - pillW / 2 + 16, pillY, 11);
       pillG.lineStyle(1, 0xe5d8c5, 1).strokeCircle(pillX - pillW / 2 + 16, pillY, 11);
-      txt(this, pillX - pillW / 2 + 16, pillY, 'G', { size: 13, bold: true, color: '#4285f4', origin: [0.5, 0.5] });
+      this.accountAvatarPlaceholder = txt(this, pillX - pillW / 2 + 16, pillY, 'G', { size: 13, bold: true, color: '#4285f4', origin: [0.5, 0.5] });
+      this.accountAvatarPosition = { x: pillX - pillW / 2 + 16, y: pillY };
 
       this.accountLabel = txt(this, pillX - pillW / 2 + 32, pillY, 'Đăng nhập', {
         size: 11,
@@ -335,13 +345,40 @@ export class TitleScene extends Phaser.Scene {
         const rawName = this.account.displayName ?? 'Tài khoản';
         const shortName = rawName.length > 11 ? rawName.slice(0, 9) + '…' : rawName;
         this.accountLabel?.setText(shortName);
+        void this.refreshAccountAvatar(this.account);
       } else {
         this.accountLabel?.setText('Đăng nhập');
+        this.clearAccountAvatar();
       }
       this.updateSyncDot(this.syncStatus);
     } catch {
       // Cloud setup errors are shown only when the player opens the account panel.
     }
+  }
+
+  private async refreshAccountAvatar(account: AccountUser): Promise<void> {
+    const position = this.accountAvatarPosition;
+    if (!position || !account.photoURL) return;
+    const key = `google-avatar-${encodeURIComponent(account.uid)}`;
+    if (!(await cacheGoogleAvatar(this, account.photoURL, key))) return;
+    if (!this.scene.isActive() || this.account?.uid !== account.uid) return;
+    this.clearAccountAvatar();
+    this.accountAvatarTextureKey = key;
+    this.accountAvatar = this.add.image(position.x, position.y, key).setDisplaySize(22, 22);
+    const maskShape = this.make.graphics({}, false).setPosition(position.x, position.y);
+    maskShape.fillStyle(0xffffff, 1).fillCircle(0, 0, 11);
+    this.accountAvatarMask = maskShape;
+    this.accountAvatar.setMask(maskShape.createGeometryMask());
+    this.accountAvatarPlaceholder?.setVisible(false);
+  }
+
+  private clearAccountAvatar(): void {
+    this.accountAvatar?.destroy();
+    this.accountAvatar = undefined;
+    this.accountAvatarMask?.destroy();
+    this.accountAvatarMask = undefined;
+    this.accountAvatarTextureKey = undefined;
+    this.accountAvatarPlaceholder?.setVisible(true);
   }
 
   private async openAccount(): Promise<void> {
@@ -359,7 +396,9 @@ export class TitleScene extends Phaser.Scene {
       await startSync();
       this.statusLabel?.setText(this.statusText('syncing'));
     } catch (error) {
-      dialog(this, { icon: '☁️', title: 'Chưa đăng nhập được', body: error instanceof Error ? error.message : 'Có lỗi khi đăng nhập Google.', buttons: [{ label: 'Đóng', color: C.grey }] });
+      const message = googleSignInErrorMessage(error);
+      if (message.startsWith('Bạn đã hủy')) toast(this, message);
+      else dialog(this, { icon: '☁️', title: 'Chưa đăng nhập được', body: message, buttons: [{ label: 'Đóng', color: C.grey }] });
     }
   }
 
@@ -379,7 +418,7 @@ export class TitleScene extends Phaser.Scene {
     const intent = chromeIntentUrl();
     if (intent) buttons.push({ label: 'Mở bằng Chrome', color: C.green, onTap: () => { location.href = intent; } });
     buttons.push({ label: 'Tiếp tục chơi khách', color: C.grey });
-    dialog(this, { icon: '🌐', title: 'Mở game bằng trình duyệt', body: `Google không cho đăng nhập trong ${browserName}. Bấm ⋯ rồi chọn “Mở bằng trình duyệt”.`, buttons });
+    dialog(this, { icon: '🌐', title: 'Mở game bằng trình duyệt', body: `Google không cho đăng nhập trong ${browserName}. Bấm ⋯ rồi chọn “Mở bằng trình duyệt”.`, buttons, illustration: 'open-browser' });
   }
 
   private showSignedInMenu(): void {
@@ -394,7 +433,7 @@ export class TitleScene extends Phaser.Scene {
     if (backups.length) buttons.splice(2, 0, { label: 'Khôi phục bản cũ', color: C.wood, onTap: () => this.confirmRestoreBackup() });
     buttons.splice(buttons.length - 1, 0, { label: 'Quyền riêng tư', color: C.wood, onTap: () => { window.open('./privacy.html', '_blank', 'noopener'); } });
     const lastSync = G.state.sync.lastSyncedAt ? new Date(G.state.sync.lastSyncedAt).toLocaleString('vi-VN') : 'Chưa có';
-    dialog(this, { icon: '☁️', title: this.account?.displayName ?? 'Tài khoản Google', body: `${this.account?.email ?? ''}\n${this.statusText(this.syncStatus, this.syncMessage ?? undefined)}\nLần đồng bộ cuối: ${lastSync}`, buttons });
+    dialog(this, { icon: '☁️', title: this.account?.displayName ?? 'Tài khoản Google', body: `${this.account?.email ?? ''}\n${this.statusText(this.syncStatus, this.syncMessage ?? undefined)}\nLần đồng bộ cuối: ${lastSync}`, buttons, portraitKey: this.accountAvatarTextureKey });
   }
 
   private async joinSharedShop(): Promise<void> {
@@ -459,6 +498,7 @@ export class TitleScene extends Phaser.Scene {
       await signOutGoogle();
       this.account = null;
       this.accountLabel?.setText('Đăng nhập');
+      this.clearAccountAvatar();
       this.updateSyncDot('guest');
     } catch (error) {
       toast(this, error instanceof Error ? error.message : 'Không đăng xuất được.');
@@ -480,6 +520,7 @@ export class TitleScene extends Phaser.Scene {
       await deleteCurrentAccount();
       this.account = null;
       this.accountLabel?.setText('Đăng nhập');
+      this.clearAccountAvatar();
       this.updateSyncDot('guest');
       dialog(this, { title: 'Đã xóa dữ liệu cloud', body: 'Bạn có muốn xóa luôn bản lưu trên máy này không?', buttons: [
         { label: 'Giữ trên máy', color: C.blue },

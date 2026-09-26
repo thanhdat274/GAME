@@ -135,7 +135,7 @@ export interface DialogButton {
 /** Hộp thoại chặn thao tác bên dưới. Trả về container để có thể đóng thủ công. */
 export function dialog(
   scene: Phaser.Scene,
-  o: { title?: string; body: string; icon?: string; buttons: DialogButton[]; width?: number },
+  o: { title?: string; body: string; icon?: string; buttons: DialogButton[]; width?: number; illustration?: 'open-browser'; portraitKey?: string },
 ): Phaser.GameObjects.Container {
   const w = o.width ?? 300;
   const layer = scene.add.container(0, 0).setDepth(2000);
@@ -146,6 +146,35 @@ export function dialog(
   if (o.icon) {
     items.push(txt(scene, W / 2, y + 26, o.icon, { size: 40, emoji: true, origin: [0.5, 0.5] }));
     y += 56;
+  }
+  if (o.portraitKey && scene.textures.exists(o.portraitKey)) {
+    const portrait = scene.add.image(W / 2, y + 20, o.portraitKey).setDisplaySize(40, 40);
+    items.push(portrait);
+    y += 48;
+  }
+  if (o.illustration === 'open-browser') {
+    const illustrationY = y + 31;
+    const g = scene.add.graphics();
+    g.fillStyle(0xf5ead7, 1).fillRoundedRect(W / 2 - 119, y, 238, 62, 12);
+    g.lineStyle(1, 0xe5d4b9, 1).strokeRoundedRect(W / 2 - 119, y, 238, 62, 12);
+    g.fillStyle(0x168de2, 1).fillCircle(W / 2 - 78, illustrationY - 4, 14);
+    g.fillStyle(0xffffff, 1).fillRoundedRect(W / 2 - 87, illustrationY - 10, 18, 12, 5);
+    g.fillTriangle(W / 2 - 77, illustrationY, W / 2 - 72, illustrationY + 6, W / 2 - 69, illustrationY);
+    g.fillStyle(0xc4a77c, 1).fillRoundedRect(W / 2 - 101, illustrationY + 15, 46, 3, 2);
+    g.fillStyle(0x9a633a, 1).fillRoundedRect(W / 2 - 97, illustrationY + 21, 38, 3, 2);
+    g.lineStyle(3, 0x9a633a, 1).lineBetween(W / 2 - 35, illustrationY - 4, W / 2 + 13, illustrationY - 4);
+    g.fillStyle(0x9a633a, 1).fillTriangle(W / 2 + 14, illustrationY - 4, W / 2 + 5, illustrationY - 10, W / 2 + 5, illustrationY + 2);
+    g.fillStyle(0xfdfbf6, 1).fillRoundedRect(W / 2 + 27, illustrationY - 19, 74, 42, 7);
+    g.lineStyle(1.5, 0x9a633a, 1).strokeRoundedRect(W / 2 + 27, illustrationY - 19, 74, 42, 7);
+    g.fillStyle(0x9a633a, 1).fillRoundedRect(W / 2 + 27, illustrationY - 19, 74, 9, 6);
+    g.fillStyle(0xf1c85b, 1).fillCircle(W / 2 + 34, illustrationY - 14, 1.5);
+    g.fillStyle(0xf1c85b, 1).fillCircle(W / 2 + 40, illustrationY - 14, 1.5);
+    g.fillStyle(0x4b9d69, 1).fillCircle(W / 2 + 64, illustrationY + 2, 10);
+    g.fillStyle(0xfdfbf6, 1).fillCircle(W / 2 + 64, illustrationY + 2, 4);
+    items.push(g);
+    items.push(txt(scene, W / 2 - 78, illustrationY + 11, 'Ứng dụng', { size: 8, bold: true, color: HEX.ink, origin: [0.5, 0.5] }));
+    items.push(txt(scene, W / 2 + 64, illustrationY + 11, 'Chrome / Safari', { size: 7, bold: true, color: HEX.ink, origin: [0.5, 0.5] }));
+    y += 72;
   }
   if (o.title) {
     const t = txt(scene, W / 2, y + 12, o.title, { size: 19, bold: true, origin: [0.5, 0], align: 'center', wrap: w - 30 });

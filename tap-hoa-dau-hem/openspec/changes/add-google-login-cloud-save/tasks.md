@@ -17,19 +17,22 @@
 ## 3. Đăng nhập
 
 - [x] 3.1 `src/services/firebase.ts`: Firebase SDK từ dependency khóa phiên bản, tải bằng dynamic import/chunk khi bấm đăng nhập hoặc có cờ `thdh.auth.hint`; tôn trọng `VITE_CLOUD_SAVE=off`
-- [ ] 3.2 `src/services/auth.ts`: popup trên desktop, redirect trên điện thoại, `browserLocalPersistence`, lắng nghe `onAuthStateChanged`, xử lý hủy/lỗi
-- [ ] 3.3 Rewrite Vercel `/__/auth/:path*` → `<project>.firebaseapp.com`, đặt `authDomain` là domain game; thử redirect trên iOS Safari và Chrome Android
+- [x] 3.2 `src/services/auth.ts`: popup trên desktop, redirect trên điện thoại, `browserLocalPersistence`, lắng nghe `onAuthStateChanged`, xử lý hủy/lỗi; unit test popup/redirect/cancel/error/observer/sign-out/delete
+- [x] 3.3 Cấu hình rewrite Vercel `/__/auth/:path*` và `authDomain` theo domain game; có unit test chọn auth domain
+- [ ] 3.3a Kiểm thử redirect Google thực tế trên iOS Safari và Chrome Android
 - [x] 3.4 `src/services/inAppBrowser.ts`: nhận diện FBAN/FBAV/FB_IAB/Messenger/Instagram/Zalo/TikTok/Line/WebView; test với danh sách user agent mẫu
-- [ ] 3.5 Hộp hướng dẫn "Mở bằng trình duyệt" (ảnh minh họa, Sao chép link, mở Chrome bằng intent trên Android)
-- [ ] 3.6 Nút đăng nhập ở màn tiêu đề và Cài đặt; ảnh đại diện nhỏ trên HUD
-- [ ] 3.7 Lời mời đăng nhập một lần sau ngày game thứ 3 (có "Để sau" / "Không nhắc nữa")
+- [x] 3.5 Hộp hướng dẫn "Mở bằng trình duyệt", Sao chép link, mở Chrome bằng intent trên Android
+- [x] 3.5a Thêm minh họa vector mô tả luồng từ ứng dụng nhúng sang trình duyệt ngoài vào hộp hướng dẫn
+- [x] 3.6 Nút đăng nhập ở màn tiêu đề và mục Cài đặt
+- [x] 3.6a Ảnh đại diện Google nhỏ trong pill tài khoản trên màn tiêu đề
+- [x] 3.7 Lời mời đăng nhập một lần sau ngày game thứ 3 (có "Để sau" / "Không nhắc nữa")
 
 ## 4. Lưu cloud và đồng bộ
 
 - [x] 4.1 `src/services/cloudSave.ts`: `pull()` có timeout 5 giây, `push()` trong transaction kiểm tra `revision == baseRevision`, trả về kết quả ok / conflict / offline / error; có test mock transaction và timeout
 - [x] 4.2 Bộ điều phối đồng bộ: kích hoạt khi hết ngày, lên level, Lưu ngay, tab ẩn; khoảng cách tối thiểu 30 giây; thử lại khi có sự kiện `online`; lỗi 3 lần thì báo
 - [x] 4.3 Luồng khi mở game theo design D7 (cloud rỗng / cloud mới hơn / local dirty / cả hai thay đổi); chỉ áp bản cloud ở màn tiêu đề hoặc buổi sáng
-- [ ] 4.4 Hộp thoại xung đột hai thẻ, nhãn "Tiến trình xa hơn", xác nhận lần hai; lưu bản bị bỏ vào `thdh.save.discarded` 7 ngày và cho khôi phục
+- [x] 4.4 Hộp thoại xung đột, nhãn "Tiến trình xa hơn", xác nhận lần hai; lưu bản bị bỏ vào `thdh.save.discarded` 7 ngày và cho khôi phục; unit tests cho xử lý xung đột
 - [x] 4.5 Biểu tượng trạng thái đồng bộ trên HUD (khách, đang, đã, chưa đồng bộ, lỗi)
 - [x] 4.6 `src/services/serverTime.ts`: `getServerNow()` qua `serverTimestamp()` + cache độ lệch trong phiên
 - [x] 4.7 Chặn đẩy khi bản nén > 900KB, báo lỗi
@@ -44,10 +47,12 @@
 
 ## 6. Tài khoản và quyền riêng tư
 
-- [ ] 6.1 Màn Tài khoản: ảnh, tên, trạng thái đồng bộ, lần đồng bộ cuối, Lưu ngay, Khôi phục bản bị bỏ, Đăng xuất, Xóa tài khoản, link Quyền riêng tư
+- [x] 6.1 Hộp Tài khoản: tên/email, trạng thái đồng bộ, lần đồng bộ cuối, Lưu ngay, Khôi phục bản bị bỏ, Đăng xuất, Xóa tài khoản, link Quyền riêng tư
+- [x] 6.1a Hiển thị ảnh đại diện Google trong hộp Tài khoản
 - [x] 6.2 Đăng xuất: đồng bộ lần cuối, cảnh báo khi còn `dirty`, xóa cờ `thdh.auth.hint`
 - [x] 6.3 Xóa tài khoản: xác nhận hai bước, xóa các tài liệu cloud hiện dùng, `user.delete()`, xử lý đăng nhập cũ, hỏi xóa bản local
-- [ ] 6.4 Trang `public/privacy.html` tiếng Việt (dữ liệu thu thập, mục đích, nơi lưu, cách xóa, liên hệ email thật của chủ dự án)
+- [x] 6.4 Trang `public/privacy.html` tiếng Việt nêu dữ liệu thu thập, mục đích, nơi lưu và cách xóa
+- [ ] 6.4a Bổ sung email liên hệ thật của chủ dự án vào trang quyền riêng tư và màn đồng ý OAuth
 
 ## 7. Kiểm thử thực tế và phát hành
 
@@ -64,3 +69,11 @@
 - Hoàn tất 2.3, 4.3, 4.8b: summary lấy đúng tiến trình khi migrate; thời gian chơi loại trừ tạm dừng và tab ẩn; đồng bộ D7 chỉ áp cloud tại Title/Morning, kiểm tra lại sau các thao tác bất đồng bộ.
 - Bổ sung kiểm thử `tests/sync.test.ts`, `tests/playClock.test.ts` và hồi quy migration: cloud rỗng/mới hơn/cùng revision, local dirty, offline/reconnect, xung đột liên tiếp, thay đổi trong lúc pull/push, sign-out, lỗi giải nén và cooldown.
 - Giữ nguyên các mục Firebase Console, Emulator, kiểm thử thiết bị thật và deploy chưa xác minh. Chưa archive change hoặc chuyển sang Phase 2.
+
+### Kiểm tra tiếp theo 27/09/2026
+
+- Bổ sung xử lý lỗi đăng nhập thân thiện, `prompt=select_account`, bảo đảm observer auth tự unsubscribe kể cả khi callback lỗi/đến đồng bộ; unit tests auth/cloud liên quan 46/46 pass.
+- Chạy toàn bộ test: 294/294 pass; `tsc --noEmit` và production build đều pass.
+- Đã xác nhận qua code và unit tests các mục 3.2, 3.3 (phần cấu hình), 3.5 (phần chức năng), 3.6 (nút), 3.7, 4.4, 6.1 (phần chức năng), 6.4 (phần nội dung). Tách riêng các phần còn thiếu ở 3.3a, 3.5a, 3.6a, 6.1a, 6.4a.
+- Firebase Console/OAuth thật, Firebase Emulator, kiểm tra Network, đổi máy/xung đột/offline trên hai thiết bị, mở từ app mạng xã hội và theo dõi sau deploy vẫn chưa được xác minh.
+- Hoàn tất phần giao diện còn thiếu 3.5a, 3.6a và 6.1a: minh họa vector cho trình duyệt ngoài, tải avatar Google vào texture Phaser với fallback chữ G khi lỗi hoặc quá thời gian chờ; TypeScript và production build pass.
