@@ -40,7 +40,8 @@
     "newPricey": 5,
     "cheapPrice": 8000,
     "freshFactor": 0.8,
-    "newFresh": 3
+    "newFresh": 3,
+    "perishableMaxDays": 7
   },
   "orderLineWeights": [
     0.6,

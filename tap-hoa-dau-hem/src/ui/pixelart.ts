@@ -763,6 +763,23 @@ for (const [id, source] of Object.entries({
   ca_phe_bot: 'nuoc_ngot', mia: 'banh_mi', trai_cay: 'rau_muong',
 })) PRODUCT_SPRITES[id] = PRODUCT_SPRITES[source];
 
+// Hàng tạp hóa bổ sung: mượn hình món gần giống cho tới khi có sprite riêng.
+for (const [id, source] of Object.entries({
+  bot_canh: 'muoi', bot_ngot: 'muoi', hat_nem: 'duong', nuoc_tuong: 'nuoc_mam', tuong_ot: 'nuoc_mam', hu_tieu_goi: 'mi_goi',
+  chao_goi: 'mi_goi', sua_dac: 'sua_hop', ca_hop: 'xuc_xich', pate_hop: 'xuc_xich', tieu_xay: 'muoi', mam_tom: 'nuoc_mam',
+  ca_phe_hoa_tan: 'banh_quy', bot_chien: 'duong', dau_hao: 'nuoc_mam', bun_kho: 'gao', giam: 'dau_an',
+  keo_cao_su: 'keo', banh_gao: 'snack', banh_bong_lan: 'banh_quy', banh_socola: 'banh_quy', dau_phong: 'snack',
+  rong_bien: 'snack', kho_ga: 'que_cay',
+  khan_giay: 'giay_vs', ban_chai: 'kem_danh_rang', nuoc_rua_chen: 'dau_an', bot_giat: 'gao', tui_rac: 'giay_vs',
+  dau_goi: 'dau_an', nhang_muoi: 'bat_lua', khau_trang: 'xa_phong', nhang: 'bat_lua', nuoc_lau_san: 'dau_an',
+  bang_ve_sinh: 'xa_phong', bong_den: 'pin', ta_giay: 'giay_vs',
+  sua_dau_nanh: 'sua_hop', bia_lon: 'nuoc_ngot', ca_phe_lon: 'tang_luc', nuoc_cam: 'tra_xanh', nuoc_yen: 'nuoc_ngot',
+  sua_chua_uong: 'sua_hop',
+  ca_chua: 'trai_cay', hanh_la: 'rau_muong', sua_chua: 'sua_tuoi', chuoi: 'trai_cay', khoai_tay: 'trung_ga',
+  bun_tuoi: 'dau_hu', cha_lua: 'xuc_xich', thit_heo: 'xuc_xich',
+  ca_vien: 'ha_cao', bo_vien: 'ha_cao', canh_ga: 'cha_gio', tom_dong_lanh: 'cha_gio', sim_dt: 'the_cao',
+})) PRODUCT_SPRITES[id] = PRODUCT_SPRITES[source];
+
 // Phase 4 fixtures inherit footprint-compatible cabinet art as temporary placeholders.
 for (const [id, source] of Object.entries({
   food_grill: 'counter', hot_kettle: 'storage_rack', bread_case: 'shelf', food_table_2: 'storage_rack', food_table_4: 'counter',
