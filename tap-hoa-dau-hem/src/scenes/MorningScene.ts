@@ -53,6 +53,11 @@ const TUTORIALS: Record<string, { icon: string; title: string; body: string }> =
 const LIST_TOP = 100;
 const LIST_BOTTOM = 548;
 const ROW_H = 66;
+/** Tâm hàng ô quầy và hàng chip đầu tiên khi bật chế độ "Sau quầy". */
+const COUNTER_SLOT_Y = 382;
+const COUNTER_CHIP_Y = 452;
+const COUNTER_X0 = 96;
+const COUNTER_DX = 72;
 
 interface Row {
   p: Product;
@@ -472,7 +477,8 @@ export class MorningScene extends Phaser.Scene {
     g.fillStyle(C.floorB, 1).fillRect(0, 300, W, 250);
     g.fillStyle(C.woodDark, 1).fillRect(0, 300, W, 4);
     this.whLabel = txt(this, 12, 310, '', { size: 14, bold: true, color: HEX.white });
-    this.hint = txt(this, W - 12, 312, '', { size: 11, color: HEX.cream, origin: [1, 0] });
+    // Dòng hướng dẫn nằm riêng dưới tiêu đề kho để không bị nút "Sau quầy" che.
+    this.hint = txt(this, 12, 336, '', { size: 11, color: HEX.cream });
     this.counterPanel = this.add.container(0, 0);
     this.chips = this.add.container(0, 0);
     this.counterTabBtn = new Button(this, W - 58, 318, {
@@ -587,22 +593,26 @@ export class MorningScene extends Phaser.Scene {
     const items = Object.entries(warehouseTotals(G.state)).filter(([id, q]) => q > 0 && !!product(id).behindCounter === this.counterMode);
     if (items.length === 0) {
       const message = this.counterMode ? 'Chưa có hàng sau quầy trong kho.' : 'Kho trống. Qua tab "Nhập hàng" để mua hàng.';
-      this.chips.add(txt(this, W / 2, 420, message, { size: 13, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: 300 }));
+      this.chips.add(txt(this, W / 2, this.counterMode ? COUNTER_CHIP_Y + 20 : 420, message, { size: 13, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: 300 }));
       this.counterPanel.setVisible(G.state.level >= 3 && this.counterMode);
       if (this.counterMode) this.renderCounterSlots();
       return;
     }
+    // Chế độ sau quầy: hàng ô quầy chiếm phần trên nên chip trong kho nhỏ hơn, 6 cột.
+    const cols = this.counterMode ? 6 : 5;
+    const cw = this.counterMode ? 54 : 60;
+    const ch = this.counterMode ? 60 : 66;
     items.forEach(([id, q], i) => {
-      const x = 42 + (i % 5) * 69;
-      const y = 390 + Math.floor(i / 5) * 72;
+      const x = this.counterMode ? 31 + (i % cols) * 59.5 : 42 + (i % cols) * 69;
+      const y = this.counterMode ? COUNTER_CHIP_Y + Math.floor(i / cols) * 66 : 390 + Math.floor(i / cols) * 72;
       const p = product(id);
       const sel = this.selected === id;
       const bg = this.add.graphics();
-      bg.fillStyle(sel ? C.yellow : C.slot, 1).fillRoundedRect(-30, -32, 60, 66, 10);
-      bg.lineStyle(sel ? 3 : 2, sel ? C.red : C.slotEdge, 1).strokeRoundedRect(-30, -32, 60, 66, 10);
-      const icon = productIcon(this, 0, -8, p, 36);
-      const label = txt(this, 0, 22, `x${q}`, { size: 12, bold: true, origin: [0.5, 0.5] });
-      const chip = this.add.container(x, y, [bg, icon, label]).setSize(60, 66).setInteractive({ useHandCursor: true, draggable: true });
+      bg.fillStyle(sel ? C.yellow : C.slot, 1).fillRoundedRect(-cw / 2, -ch / 2, cw, ch, 10);
+      bg.lineStyle(sel ? 3 : 2, sel ? C.red : C.slotEdge, 1).strokeRoundedRect(-cw / 2, -ch / 2, cw, ch, 10);
+      const icon = productIcon(this, 0, -8, p, this.counterMode ? 32 : 36);
+      const label = txt(this, 0, ch / 2 - 11, `x${q}`, { size: 12, bold: true, origin: [0.5, 0.5] });
+      const chip = this.add.container(x, y, [bg, icon, label]).setSize(cw, ch).setInteractive({ useHandCursor: true, draggable: true });
       chip.on('pointerup', (ptr: Phaser.Input.Pointer) => {
         if (ptr.getDistance() > 10) return;
         this.selected = sel ? null : id;
@@ -633,8 +643,8 @@ export class MorningScene extends Phaser.Scene {
           }
           play('pick');
           this.afterArrange();
-        } else if (p.behindCounter && this.counterMode && ptr.worldY >= 310 && ptr.worldY < 375) {
-          const counterSlot = Math.floor((ptr.worldX - 48) / 68);
+        } else if (p.behindCounter && this.counterMode && Math.abs(ptr.worldY - COUNTER_SLOT_Y) <= 26) {
+          const counterSlot = Math.round((ptr.worldX - COUNTER_X0) / COUNTER_DX);
           if (counterSlot >= 0 && counterSlot < G.state.counter.length) {
             if (G.liveSnapshot) { void this.liveCommand({ type: 'assignCounter', slot: counterSlot, productId: id }); return; }
             assignCounterSlot(G.state, counterSlot, id);
@@ -652,10 +662,14 @@ export class MorningScene extends Phaser.Scene {
     const unlocked = G.state.level >= 3;
     this.counterPanel.setVisible(unlocked && this.counterMode);
     if (!unlocked) return;
-    this.counterPanel.add(txt(this, 12, 334, 'SAU QUẦY', { size: 9, bold: true, color: HEX.cream }));
+    const band = this.add.graphics();
+    band.fillStyle(C.woodDark, 0.35).fillRoundedRect(6, COUNTER_SLOT_Y - 27, W - 12, 54, 10);
+    band.fillStyle(C.woodDark, 1).fillRect(12, COUNTER_CHIP_Y - 42, W - 24, 2);
+    this.counterPanel.add(band);
+    this.counterPanel.add(txt(this, 30, COUNTER_SLOT_Y, 'SAU\nQUẦY', { size: 10, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center' }));
     G.state.counter.forEach((slot, i) => {
-      const x = 82 + i * 68;
-      const y = 338;
+      const x = COUNTER_X0 + i * COUNTER_DX;
+      const y = COUNTER_SLOT_Y;
       const bg = this.add.graphics();
       bg.fillStyle(C.slot, 1).fillRoundedRect(x - 27, y - 20, 54, 40, 8);
       bg.lineStyle(1, C.slotEdge, 1).strokeRoundedRect(x - 27, y - 20, 54, 40, 8);
