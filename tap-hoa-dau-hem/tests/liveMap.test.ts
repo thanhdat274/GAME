@@ -74,3 +74,26 @@ describe('sơ đồ trực tiếp: nhân viên rảnh', () => {
     expect(staffGoal(s, 'receive', null)).toEqual({ kind: 'fixture', uid: 99 });
   });
 });
+
+describe('người chơi rời quầy (góc nhìn trên xuống)', () => {
+  it('khách đầu hàng chờ tới khi người chơi quay lại quầy', () => {
+    const s = stockedGame();
+    s.settings.autoScan = false;
+    const session = new DaySession(s, 7);
+    session.playerAtCounter = false;
+    const step = DATA.balance.tickMs / 1000;
+    let waited = false;
+    for (let i = 0; i < 6000 && !waited; i++) {
+      session.tick(step);
+      if (session.front) {
+        expect(session.front.status).toBe('waiting');
+        waited = true;
+      }
+    }
+    expect(waited).toBe(true);
+    session.playerAtCounter = true;
+    session.tick(step);
+    expect(['scanning', 'paying']).toContain(session.front?.status);
+    expect(session.snapshot().playerAtCounter).toBe(true);
+  });
+});

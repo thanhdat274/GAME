@@ -17,6 +17,8 @@ export type Goal =
   | { kind: 'behind'; lane: number }
   /** Ra khỏi tiệm (đi giao hàng): đi tới cửa rồi ẩn. */
   | { kind: 'away' }
+  /** Đi tới một ô trống (người chơi chạm ô). */
+  | { kind: 'cell'; x: number; y: number }
   /** Đứng yên tại chỗ. */
   | { kind: 'stay' };
 
@@ -25,6 +27,7 @@ export function goalKey(g: Goal): string {
     case 'fixture': return `f${g.uid}`;
     case 'queue': return `q${g.lane}:${g.index}`;
     case 'behind': return `b${g.lane}`;
+    case 'cell': return `c${g.x},${g.y}`;
     default: return g.kind;
   }
 }
@@ -140,6 +143,8 @@ export function goalCells(state: GameState, goal: Goal, grid: boolean[], lines: 
       const cells = accessCells(state, f, grid);
       return cells.length ? cells : null;
     }
+    case 'cell':
+      return grid[goal.y * DATA.land.cols + goal.x] ? [{ x: goal.x, y: goal.y }] : null;
     case 'queue': {
       const line = lines(goal.lane);
       return [line[Math.min(goal.index, line.length - 1)]];

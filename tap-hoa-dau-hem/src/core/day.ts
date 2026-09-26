@@ -152,6 +152,7 @@ export interface DaySessionSnapshot {
   incidents?: Incident[];
   fleeing?: Customer[];
   playerAway?: number;
+  playerAtCounter?: boolean;
   counters?: { nextOrderId: number; nextIncidentId: number; nextLaneId: number; taskAcc: number; missedAlerted: string[] };
 }
 
@@ -178,6 +179,11 @@ export class DaySession {
   readonly fleeing: Customer[] = [];
   /** Người chơi đang tự đi giao hàng (giây còn lại); quầy bỏ trống. */
   playerAway = 0;
+  /**
+   * Góc nhìn trên xuống: người chơi phải đứng ở quầy mới quét giỏ / tính tiền được.
+   * Khi rời quầy, khách đầu hàng đứng chờ (vẫn mất kiên nhẫn) cho tới khi người chơi quay lại.
+   */
+  playerAtCounter = true;
   /** Tự phục vụ quầy người chơi (bỏ qua ngày, mô phỏng): quét, thối tiền tự động. */
   autoPlayer = false;
   /** Giây giữa hai thao tác của người chơi tự động (0 = tức thì). */
@@ -227,6 +233,7 @@ export class DaySession {
     session.incidents.push(...structuredClone(snapshot.incidents ?? []));
     session.fleeing.push(...structuredClone(snapshot.fleeing ?? []));
     session.playerAway = snapshot.playerAway ?? 0;
+    session.playerAtCounter = snapshot.playerAtCounter ?? true;
     if (snapshot.counters) {
       session.nextOrderId = snapshot.counters.nextOrderId;
       session.nextIncidentId = snapshot.counters.nextIncidentId;
@@ -263,6 +270,7 @@ export class DaySession {
       incidents: structuredClone(this.incidents),
       fleeing: structuredClone(this.fleeing),
       playerAway: this.playerAway,
+      playerAtCounter: this.playerAtCounter,
       counters: {
         nextOrderId: this.nextOrderId, nextIncidentId: this.nextIncidentId, nextLaneId: this.nextLaneId,
         taskAcc: this.taskAcc, missedAlerted: [...this.missedAlerted],
@@ -602,6 +610,7 @@ export class DaySession {
   private promoteFront(): void {
     const c = this.front;
     if (!c || c.status !== 'waiting') return;
+    if (!this.playerAtCounter && !this.autoPlayer) return;
     c.status = 'scanning';
     this.events.emit('customerFront', c);
     const request = c.order.find((line) => line.counterLine && line.picked === 0 && line.missing === 0);
