@@ -2,6 +2,7 @@ import { DATA } from './data';
 import { openBranch, visitStore } from './branches';
 import { createNewGame, emptySlots, syncActiveStore, type GameState } from './state';
 import { ensureDiningTables } from './dining';
+import { cellsFor, warehouseCapacity } from './stock';
 
 /** A disposable, fully unlocked profile used to inspect end-game content. */
 export function createMaxLevelSimulation(): GameState {
@@ -18,9 +19,7 @@ export function createMaxLevelSimulation(): GameState {
   state.tutorialsSeen = DATA.levels.levels.flatMap((level) => level.features ?? []);
   state.loginPromptSeen = true;
   state.activeRecipes = DATA.recipes.filter((recipe) => recipe.unlockLevel <= maxLevel).map((recipe) => recipe.id);
-  state.warehouse = DATA.products
-    .filter((item) => item.unlockLevel <= maxLevel && !item.recipeOnly)
-    .map((item) => ({ productId: item.id, qty: 80, exp: item.shelfLifeDays ? state.day + item.shelfLifeDays - 1 : null }));
+  state.warehouseTier = DATA.balance.warehouseTiers.length - 1;
 
   const fixturePlan: Array<{ type: string; x: number; y: number; rot: 0 | 1 }> = [
     { type: 'food_grill', x: 6, y: 0, rot: 0 },
@@ -37,9 +36,21 @@ export function createMaxLevelSimulation(): GameState {
     state.fixtures.push({ uid: state.nextUid++, ...fixture });
   }
 
+  // Nạp kho vừa sức chứa (mỗi món một chồng 10 đơn vị) để hồ sơ không vượt giới hạn ô.
+  const capacity = warehouseCapacity(state);
+  let used = 0;
+  state.warehouse = [];
+  for (const item of DATA.products.filter((p) => p.unlockLevel <= maxLevel && !p.recipeOnly)) {
+    const cells = cellsFor(item.id, 10);
+    if (used + cells > capacity) continue;
+    used += cells;
+    state.warehouse.push({ productId: item.id, qty: 10, exp: item.shelfLifeDays ? state.day + item.shelfLifeDays - 1 : null });
+  }
+
   state.counter = emptySlots(DATA.balance.counterSlots);
+  // Chừa một nửa quầy trống để thử chế biến món/pha nước ngay.
   const counterProducts = ['the_cao', 'gas_mini', 'bat_lua', ...state.activeRecipes.map((id) => DATA.recipes.find((recipe) => recipe.id === id)?.output).filter((id): id is string => !!id)];
-  counterProducts.slice(0, state.counter.length).forEach((id, index) => {
+  counterProducts.slice(0, Math.floor(state.counter.length / 2)).forEach((id, index) => {
     state.counter[index] = { productId: id, qty: 20, lots: [{ qty: 20, exp: state.day + 1 }] };
   });
   const shelfProducts = DATA.products.filter((item) => !item.behindCounter && item.unlockLevel <= maxLevel);

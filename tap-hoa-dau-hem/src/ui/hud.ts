@@ -78,8 +78,23 @@ export class Hud extends Phaser.GameObjects.Container {
     }
     const date = calendarDate(s.day, { month: s.calendarStartMonth, year: s.calendarStartYear });
     const when = s.phase === 'open' ? ` · ${formatClock(s.clock)}` : '';
-    this.day.setText(`Ngày ${date.day} · Tháng ${date.month} · Năm ${date.year} · Mùa ${date.seasonName}${when}`);
     this.stars.setText(s.ratings.length ? `⭐ ${averageRating(s).toFixed(1)}` : '⭐ –');
+    // Chữ ngày nằm giữa tiền và sao; tiền lớn thì rút gọn để không đè lên nhau.
+    const left = this.money.x + this.money.width + 6;
+    const right = this.stars.x - this.stars.width - 6;
+    const avail = Math.max(40, right - left);
+    const variants = [
+      `Ngày ${date.day} · Tháng ${date.month} · Năm ${date.year} · Mùa ${date.seasonName}${when}`,
+      `Ngày ${date.day} · T${date.month}/N${date.year} · ${date.seasonName}${when}`,
+      `N${date.day} · T${date.month} · ${date.seasonName}${when}`,
+    ];
+    this.day.setScale(1);
+    for (const text of variants) {
+      this.day.setText(text);
+      if (this.day.width <= avail) break;
+    }
+    if (this.day.width > avail) this.day.setScale(avail / this.day.width);
+    this.day.setX(left + avail / 2);
     this.lv.setText(`Lv ${s.level}`);
     this.bar.set(levelProgress(s.exp, s.level));
   }

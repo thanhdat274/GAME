@@ -3,6 +3,7 @@ import { calendarDate, seasonDemandMultiplier } from '../src/core/calendar';
 import { EffectStack, validateEventsData } from '../src/core/effects';
 import { scheduleEvents } from '../src/core/eventScheduler';
 import { activateStore, addStoreSnapshot, createNewGame, lotsFrom } from '../src/core/state';
+import { warehouseCapacity, warehouseCellsUsed } from '../src/core/stock';
 import { migrate } from '../src/core/save';
 import saveV4 from './fixtures/save-v4.json';
 import eventData from '../src/data/events.json';
@@ -277,5 +278,7 @@ describe('nền tảng phase 4a', () => {
     expect(state.activeRecipes).toContain('tra_sua');
     expect(ensureDiningTables(state).map((table) => table.status)).toEqual(['clean', 'clean']);
     expect(state.money).toBeGreaterThan(0);
+    expect(warehouseCellsUsed(state.warehouse)).toBeLessThanOrEqual(warehouseCapacity(state));
+    expect(state.counter.some((slot) => slot.productId === null)).toBe(true);
   });
 });

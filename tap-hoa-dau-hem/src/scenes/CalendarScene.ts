@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import eventData from '../data/events.json';
 import { calendarDate } from '../core/calendar';
+import { DATA } from '../core/data';
 import { eventDefinition } from '../core/eventScheduler';
 import { G, persist } from '../game';
 import { Button, panel } from '../ui/widgets';
@@ -40,7 +41,7 @@ export class CalendarScene extends Phaser.Scene {
     txt(this, 30, 306, 'Sắp tới', { size: 14, bold: true, color: HEX.ink });
     const active = state.activeEvents.map((event) => ({ name: eventDefinition(event.id)?.name ?? event.id, line: `Đang diễn ra · còn tới ngày ${event.endsDay}` }));
     const upcoming = [...SEASONAL].sort((a, b) => ((a.start.month - date.month + 12) % 12) - ((b.start.month - date.month + 12) % 12)).slice(0, 4)
-      .map((event) => ({ name: event.name, line: `Ngày ${event.start.day} tháng ${event.start.month} · nhập: ${(event.items ?? []).join(', ') || 'hàng theo mùa'}` }));
+      .map((event) => ({ name: event.name, line: `Ngày ${event.start.day} tháng ${event.start.month} · nhập: ${(event.items ?? []).map((id) => DATA.products.find((item) => item.id === id)?.name ?? id).join(', ') || 'hàng theo mùa'}` }));
     [...active, ...upcoming].slice(0, 5).forEach((event, i) => {
       const y = 342 + i * 43;
       txt(this, 30, y, event.name, { size: 12, bold: true, color: HEX.ink });

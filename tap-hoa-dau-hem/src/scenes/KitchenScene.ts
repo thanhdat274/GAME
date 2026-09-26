@@ -42,6 +42,7 @@ export class KitchenScene extends Phaser.Scene {
       }) }).setEnabled(!locked && station));
       this.list.add(new Button(this, W - 57, y + 65, { w: 78, h: 27, label: 'Chế biến', size: 10, color: C.blue, onTap: this.list.guard(() => {
         if (locked || !station || !enough || !active) { toast(this, 'Mở bán món và chuẩn bị đủ nguyên liệu trước'); return; }
+        if (!s.counter.some((slot) => slot.productId === output.id || slot.productId === null || slot.qty <= 0)) { toast(this, 'Quầy đã đầy · bán bớt hoặc dọn một ô quầy trước'); return; }
         this.scene.start('Cook', { recipeId: recipe.id });
       }) }).setEnabled(!locked && station && enough && active));
       y += h;
@@ -74,6 +75,18 @@ export class CookScene extends Phaser.Scene {
   create(data: { recipeId: string }): void {
     setupCamera(this);
     this.recipeId = data.recipeId;
+    // Phaser tái dùng instance scene: reset trạng thái của lượt chế biến trước.
+    this.step = 0;
+    this.goodSteps = 0;
+    this.missedSteps = 0;
+    this.progress = 0;
+    this.elapsed = 0;
+    this.waiting = false;
+    this.finished = false;
+    this.controls = [];
+    this.marker = undefined;
+    this.target = undefined;
+    this.meterFill = undefined;
     this.variantId = undefined;
     this.variantButtons = [];
     const recipe = DATA.recipes.find((r) => r.id === this.recipeId);

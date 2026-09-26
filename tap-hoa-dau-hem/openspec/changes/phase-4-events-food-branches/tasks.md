@@ -29,8 +29,8 @@
 ## 4. Đợt 4b - Quầy nước và bàn ghế
 
 - [x] 4.1 Đất F và nội thất quầy nước (quầy, máy xay, máy ép mía)
-- [ ] 4.2 Core: công thức theo thứ tự, biến thể (ít đường, nhiều đá), đánh giá Ngon/Tạm được; test
-- [ ] 4.3 Mini-game pha chế + thao tác khuấy/lắc/xay; Sổ công thức
+- [x] 4.2 Core: công thức theo thứ tự, biến thể (ít đường, nhiều đá), đánh giá Ngon/Tạm được; test (`tests/phase4.test.ts`, đã thử trên trình duyệt)
+- [x] 4.3 Mini-game pha chế + thao tác khuấy/lắc/xay; Sổ công thức (đã thử trên trình duyệt; sửa lỗi CookScene không reset bước khi chế biến món thứ hai)
 - [x] 4.4 Vai trò Pha chế
 - [x] 4.5 Core: bàn ghế, khách ngồi, gọi thêm, bàn bẩn, dọn bàn; test (`tests/phase4.test.ts`)
 - [ ] 4.6 Cân bằng doanh thu góc đồ ăn và quầy nước so với tạp hóa; kiểm thử trên điện thoại; phát hành đợt 4b
