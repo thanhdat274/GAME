@@ -3,7 +3,7 @@ import { DATA, product, supplier, type Category } from '../core/data';
 import type { LiveShopCommand } from '../core/liveSession';
 import { formatMoney, priceOf, shelfQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
 import {
-  assignCounterSlot, assignSlot, autoArrange, buyStock, checkCart, clearSlot, hasPlaceFor, refillCounterSlot, refillSlot,
+  assignCounterSlot, assignSlot, buyStock, checkCart, clearSlot, counterFreeForNew, hasPlaceFor, planNewProducts, slotFreeForNew,
   suggestCart, supplierUnlocked, unitCost, warehouseCapacity, warehouseCellsUsed, type Cart,
 } from '../core/stock';
 import { G, persist } from '../game';
@@ -216,8 +216,11 @@ export class RestockScene extends Phaser.Scene {
     this.arrangeLayer = this.add.container(0, 0);
     this.shelves = new ShelfView(this, SHELF_TOP, {
       onSlotTap: (r, c) => this.onSlotTap(r, c),
-      onRefill: (r, c) => this.shelfAction({ type: 'refillShelf', shelf: r, slot: c }, () => refillSlot(G.state, r, c)),
-      onRemove: (r, c) => this.shelfAction({ type: 'clearShelf', shelf: r, slot: c }, () => clearSlot(G.state, r, c)),
+      onRemove: (r, c) => {
+        // Chỉ dọn ô đã bán hết để đổi món; ô còn hàng giữ nguyên (tránh dọn rồi bày lại để nạp tức thì).
+        if ((G.state.shelves[r]?.[c]?.qty ?? 0) > 0) { toast(this, 'Ô còn hàng, đang bán thì chưa dọn được.', H * 0.62); return; }
+        this.shelfAction({ type: 'clearShelf', shelf: r, slot: c }, () => clearSlot(G.state, r, c));
+      },
     }, G.state);
     const g = this.add.graphics();
     g.fillStyle(C.floorB, 1).fillRect(0, FLOOR_Y, W, FOOT_Y - FLOOR_Y);
@@ -229,18 +232,18 @@ export class RestockScene extends Phaser.Scene {
     const foot = this.add.graphics();
     foot.fillStyle(C.hud, 1).fillRect(0, FOOT_Y, W, H - FOOT_Y);
     const note = txt(this, 12, FOOT_Y + 10, 'Bày xong bấm "Bán tiếp" để mở lại tiệm.', { size: 11, color: HEX.cream });
-    const auto = new Button(this, 76, H - 30, { w: 132, h: 46, label: '✨ Tự bày', color: C.blue, onTap: () => this.autoArrange() });
+    const auto = new Button(this, 76, H - 30, { w: 132, h: 46, label: '✨ Tự bày', color: C.blue, onTap: () => void this.autoArrange() });
     const resume = new Button(this, W - 84, H - 30, { w: 152, h: 48, label: 'Bán tiếp ▶', color: C.red, size: 17, onTap: () => this.close() });
     this.arrangeLayer.add([this.shelves, g, this.whLabel, this.hint, foot, note, auto, resume]);
   }
 
   private renderArrange(): void {
     const s = G.state;
-    this.shelves.render(s, { mode: 'arrange' });
+    this.shelves.render(s, { mode: 'arrange', noRefill: true });
     this.whLabel.setText(`📦 Kho · ${warehouseCellsUsed(s.warehouse)}/${warehouseCapacity(s)} ô`);
     this.hint.setText(this.selected
       ? `Chạm ô kệ để bày ${product(this.selected).name}`
-      : 'Chạm món rồi chạm ô kệ (ô trống hoặc thay món). Hàng 🔐 chạm là vào quầy.');
+      : 'Chạm món rồi chạm ô kệ trống để bày. Hàng 🔐 chạm là vào quầy trống.');
     this.chips.clear();
     const items = Object.entries(warehouseTotals(s)).filter(([, q]) => q > 0);
     if (!items.length) {
@@ -276,35 +279,45 @@ export class RestockScene extends Phaser.Scene {
     if (!slot) return;
     if (this.selected) {
       const id = this.selected;
+      // Giữa giờ bán chỉ bày món mới vào ô trống; ô đang bày thì nạp bằng nút + (có thời gian nạp) ở màn bán.
+      if (!slotFreeForNew(G.state, r, c, id)) { this.refillHint(); return; }
       this.shelfAction({ type: 'assignShelf', shelf: r, slot: c, productId: id }, () => assignSlot(G.state, r, c, id), () => {
         if (warehouseQty(G.state, id) <= 0) this.selected = null;
       });
-    } else if (slot.productId) {
-      this.shelfAction({ type: 'refillShelf', shelf: r, slot: c }, () => refillSlot(G.state, r, c));
+    } else if (slot.productId && slot.qty > 0) {
+      this.refillHint();
     } else {
       toast(this, 'Chọn một món trong kho trước', H * 0.62);
     }
   }
 
-  /** Hàng sau quầy: nạp vào ô quầy đang bày món đó, không có thì dùng ô quầy trống. */
+  private refillHint(): void {
+    toast(this, 'Ô này đang có hàng. Nạp thêm bằng nút + xanh ở màn bán nhé!', H * 0.62);
+  }
+
+  /** Hàng sau quầy: đưa vào một ô quầy trống (món đang có ở quầy thì không nạp tức thì). */
   private toCounter(id: string): void {
     const counter = G.state.counter;
-    let index = counter.findIndex((slot) => slot.productId === id);
-    if (index < 0) index = counter.findIndex((slot) => !slot.productId || slot.qty === 0);
-    if (index < 0) { toast(this, 'Quầy đã kín món khác. Sắp lại quầy vào buổi sáng.', H * 0.62, C.redDark); return; }
-    const assign = counter[index].productId === id;
+    if (counter.some((slot) => slot.productId === id && slot.qty > 0)) { toast(this, `${product(id).name} đang có ở quầy rồi.`, H * 0.62); return; }
+    const index = counter.findIndex((_, i) => counterFreeForNew(G.state, i, id));
+    if (index < 0) { toast(this, 'Quầy không còn ô trống. Sắp lại quầy vào buổi sáng.', H * 0.62, C.redDark); return; }
     this.shelfAction(
-      assign ? { type: 'refillCounter', slot: index } : { type: 'assignCounter', slot: index, productId: id },
-      () => (assign ? refillCounterSlot(G.state, index) : assignCounterSlot(G.state, index, id)),
+      { type: 'assignCounter', slot: index, productId: id },
+      () => assignCounterSlot(G.state, index, id),
       () => toast(this, `Đã đưa ${product(id).name} vào quầy`, H * 0.62, C.greenDark),
     );
   }
 
-  private autoArrange(): void {
-    if (G.liveSnapshot) { void this.liveCommand({ type: 'autoArrange' }).then(() => this.renderArrange()); return; }
-    const unplaced = autoArrange(G.state);
-    play('pick');
-    persist();
+  /** Tự bày giữa giờ bán: chỉ xếp món chưa có ô vào ô trống hợp lệ, không nạp ô đang bày. */
+  private async autoArrange(): Promise<void> {
+    const { placements, unplaced } = planNewProducts(G.state);
+    if (!placements.length && !unplaced.length) { toast(this, 'Món nào trong kho cũng đã có ô trên kệ.', H * 0.62); return; }
+    for (const { shelf, slot, productId } of placements) {
+      if (G.liveSnapshot) { if (!(await this.liveCommand({ type: 'assignShelf', shelf, slot, productId }))) break; }
+      else assignSlot(G.state, shelf, slot, productId);
+    }
+    if (placements.length) play('pick');
+    if (!G.liveSnapshot) persist();
     this.renderArrange();
     if (unplaced.length) {
       const groups = [...new Set(unplaced.map((id) => ZONE_NAMES[product(id).category as Exclude<Category, 'counter'>]?.toLowerCase() ?? 'sau quầy'))].join(', ');

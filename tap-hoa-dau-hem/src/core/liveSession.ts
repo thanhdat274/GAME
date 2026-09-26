@@ -10,6 +10,8 @@ import {
   assignSlot,
   autoArrange,
   buyStock,
+  counterFreeForNew,
+  slotFreeForNew,
   clearSlot,
   refillCounterSlot,
   refillSlot,
@@ -82,30 +84,33 @@ export function applyLiveShopCommand(
       break;
     case 'assignShelf':
       requireStocking(state);
+      if (state.phase === 'open' && !slotFreeForNew(state, command.shelf, command.slot, command.productId)) throw new Error('Giữa giờ bán chỉ bày món mới vào ô trống.');
       result = assignSlot(state, command.shelf, command.slot, command.productId);
       break;
     case 'clearShelf':
       requireStocking(state);
+      if (state.phase === 'open' && (state.shelves[command.shelf]?.[command.slot]?.qty ?? 0) > 0) throw new Error('Giữa giờ bán chỉ dọn ô đã hết hàng.');
       clearSlot(state, command.shelf, command.slot);
       result = true;
       break;
     case 'refillShelf':
-      requireStocking(state);
+      requirePhase(state, 'morning');
       result = refillSlot(state, command.shelf, command.slot);
       break;
     case 'assignCounter':
       requireStocking(state);
+      if (state.phase === 'open' && !counterFreeForNew(state, command.slot, command.productId)) throw new Error('Giữa giờ bán chỉ đưa món mới vào ô quầy trống.');
       result = assignCounterSlot(state, command.slot, command.productId);
       break;
     case 'refillCounter':
-      requireStocking(state);
+      requirePhase(state, 'morning');
       result = refillCounterSlot(state, command.slot);
       break;
     case 'setClearance':
       result = setClearance(state, command.shelf, command.slot, command.pct);
       break;
     case 'autoArrange':
-      requireStocking(state);
+      requirePhase(state, 'morning');
       autoArrange(state);
       result = true;
       break;
