@@ -32,4 +32,14 @@ Quy tắc chỉ cho chủ tài khoản truy cập `users/{uid}/saves/main` và `
 
 Điền email liên hệ thật vào `public/privacy.html`, cấu hình OAuth, deploy quy tắc trước, rồi mới deploy game. Cần kiểm tra đăng nhập redirect trên iOS Safari và Android Chrome, đổi máy, xung đột hai máy và offline sau khi Firebase project hoạt động.
 
-SDK Firebase và lz-string được tải lười từ CDN khi người chơi đăng nhập; người chơi khách chỉ dùng code local. Đây là lựa chọn thay cho dependency npm vì môi trường hiện tại không cài được gói mới. Nếu chuyển sang npm sau này, giữ nguyên API trong `src/services/` và thay lớp tải module.
+Firebase được đóng thành các chunk riêng và chỉ tải khi người chơi dùng tài khoản; `lz-string` cũng là chunk tải lười, chỉ cần khi nén hoặc giải nén save cloud. Người chơi khách không tải các chunk này. Các package và phiên bản đã khóa trong `package-lock.json`.
+
+Deploy rules bằng `npm run deploy:rules` sau khi cài Firebase CLI và đăng nhập đúng tài khoản chủ dự án. Nếu project ID thay đổi, cập nhật script trong `package.json` và đích rewrite trong `vercel.json` trước khi deploy.
+
+## 5. Phiên chơi realtime hai thiết bị
+
+Phiên dùng chung được lưu riêng tại `users/{uid}/live/main`; client chỉ đọc snapshot và gửi command qua Cloud Functions. Sau khi Functions và rules đã deploy, đặt `VITE_LIVE_SESSION=on` trong `.env.local` và môi trường web để hiện nút **Chơi chung trên hai máy** ở menu tài khoản. Để thử emulator, đặt `VITE_USE_FIREBASE_EMULATORS=true`; Auth, Firestore, Functions dùng lần lượt các cổng `9099`, `8080`, `5001`.
+
+Firebase Functions cần gói Blaze, nên trước khi deploy hãy kiểm tra billing và đặt budget alerts. Chạy `npm run functions:build` để biên dịch backend; dùng `npm run emulators` để chạy Auth/Firestore/Functions cục bộ. Khi môi trường đã sẵn sàng, `npm run deploy:live` deploy Functions cùng Firestore rules.
+
+Realtime là phiên chơi có server xử lý, khác với cloud save snapshot. Rules chặn client ghi thẳng trạng thái live; chỉ callable Functions dùng Admin SDK mới ghi được. Không deploy trước khi emulator test race-command và flow hai thiết bị đạt.

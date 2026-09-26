@@ -10,7 +10,11 @@
     "test": "vitest run",
     "simulate": "vite-node scripts/simulate.ts",
     "icons": "node scripts/make-icons.mjs",
-    "playtest": "vite-node scripts/playtest.ts"
+    "playtest": "vite-node scripts/playtest.ts",
+    "functions:build": "npm --prefix functions run build",
+    "deploy:rules": "firebase deploy --only firestore:rules --project tap-hoa-dau-hem",
+    "deploy:live": "firebase deploy --only functions,firestore:rules --project tap-hoa-dau-hem",
+    "emulators": "firebase emulators:start --only auth,firestore,functions --project demo-tap-hoa-dau-hem"
   },
   "dependencies": {
     "firebase": "^12.19.0",

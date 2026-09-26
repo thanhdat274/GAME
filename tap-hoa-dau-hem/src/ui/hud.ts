@@ -50,10 +50,19 @@ export class Hud extends Phaser.GameObjects.Container {
     this.add(zone);
 
     if (opts.onPause) {
-      const pz = scene.add.zone(W - 22, 16, 44, 32).setInteractive({ useHandCursor: true });
-      const icon = txt(scene, W - 22, 15, '⏸', { size: 18, color: HEX.cream, origin: [0.5, 0.5] });
-      pz.on('pointerup', () => opts.onPause?.());
-      this.add([icon, pz]);
+      const btnG = scene.add.graphics();
+      btnG.fillStyle(0x000000, 0.25).fillRoundedRect(W - 36, 4, 28, 22, 6);
+      btnG.fillStyle(0x4a2e1b, 1).fillRoundedRect(W - 36, 3, 28, 22, 6);
+      btnG.lineStyle(1.2, 0x8a5a32, 1).strokeRoundedRect(W - 36, 3, 28, 22, 6);
+      const icon = txt(scene, W - 22, 14, '⏸', { size: 13, color: HEX.cream, origin: [0.5, 0.5] });
+      const pz = scene.add.zone(W - 22, 14, 38, 28).setInteractive({ useHandCursor: true });
+      pz.on('pointerdown', () => btnG.setAlpha(0.7));
+      pz.on('pointerout', () => btnG.setAlpha(1));
+      pz.on('pointerup', () => {
+        btnG.setAlpha(1);
+        opts.onPause?.();
+      });
+      this.add([btnG, icon, pz]);
     }
     this.setDepth(500);
     scene.add.existing(this);

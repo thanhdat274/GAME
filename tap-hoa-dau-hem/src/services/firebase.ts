@@ -46,8 +46,13 @@ export async function getFirebase(): Promise<FirebaseServices> {
         persistence: authSdk.browserLocalPersistence,
         popupRedirectResolver: authSdk.browserPopupRedirectResolver,
       });
+      const db = firestoreSdk.getFirestore(app);
+      if (import.meta.env.DEV && env.VITE_USE_FIREBASE_EMULATORS === 'true') {
+        authSdk.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+        firestoreSdk.connectFirestoreEmulator(db, '127.0.0.1', 8080);
+      }
       auth.languageCode = 'vi';
-      return { app, auth, db: firestoreSdk.getFirestore(app), appSdk, authSdk, firestoreSdk };
+      return { app, auth, db, appSdk, authSdk, firestoreSdk };
     }).catch((error) => {
       services = null;
       throw error;

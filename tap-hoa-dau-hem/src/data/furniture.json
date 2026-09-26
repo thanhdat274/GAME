@@ -1,0 +1,7 @@
+[
+  { "id": "shelf", "name": "Kệ gỗ", "icon": "🗄️", "kind": "shelf", "w": 2, "h": 1, "slots": 6, "cost": 80000, "unlockLevel": 5, "power": 0 },
+  { "id": "fridge", "name": "Tủ lạnh", "icon": "🧊", "kind": "fridge", "w": 1, "h": 2, "slots": 6, "cost": 120000, "unlockLevel": 5, "power": 5000 },
+  { "id": "freezer", "name": "Tủ đông", "icon": "❄️", "kind": "freezer", "w": 2, "h": 1, "slots": 4, "cost": 180000, "unlockLevel": 9, "power": 8000 },
+  { "id": "storage_rack", "name": "Kệ kho", "icon": "📦", "kind": "storage", "w": 1, "h": 1, "slots": 0, "cost": 50000, "unlockLevel": 8, "power": 0, "storageCells": 10 },
+  { "id": "counter", "name": "Quầy thu ngân", "icon": "🧾", "kind": "counter", "w": 2, "h": 1, "slots": 0, "cost": 0, "unlockLevel": 1, "power": 0, "fixed": true }
+]

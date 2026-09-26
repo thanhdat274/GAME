@@ -6,6 +6,17 @@ export class Rng {
     this.s = seed >>> 0;
   }
 
+  /** Persistable internal state for deterministic continuation across server requests. */
+  snapshot(): number {
+    return this.s;
+  }
+
+  static restore(state: number): Rng {
+    const rng = new Rng(0);
+    rng.s = state >>> 0;
+    return rng;
+  }
+
   /** Số thực trong [0, 1). */
   next(): number {
     this.s = (this.s + 0x6d2b79f5) >>> 0;

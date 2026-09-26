@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Kệ và ô kệ
-Tiệm SHALL có 2 kệ, mỗi kệ 6 ô; mỗi ô chứa một loại hàng, tối đa 5 đơn vị. Kệ thứ 3 mở ở level 3.
+Tiệm SHALL có 2 kệ, mỗi kệ 6 ô; mỗi ô chứa một loại hàng, tối đa 10 đơn vị. Kệ thứ 3 mở ở level 3.
 
 #### Scenario: Bày hàng
 - **WHEN** người chơi kéo gói mì từ khay kho vào một ô trống
-- **THEN** ô đó được gán cho mì gói và nạp tối đa 5 gói từ kho
+- **THEN** ô đó được gán cho mì gói và nạp tối đa 10 gói từ kho
 
 #### Scenario: Ô đã có loại khác
 - **WHEN** người chơi thả loại hàng khác vào ô đang chứa hàng

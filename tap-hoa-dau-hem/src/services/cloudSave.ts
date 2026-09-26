@@ -20,13 +20,13 @@ export interface CloudSnapshot {
 }
 
 export async function compressSave(state: GameState): Promise<string> {
-  const compressed = compressState(state);
+  const compressed = await compressState(state);
   if (typeof compressed !== 'string') throw new Error('Không nén được bản lưu.');
   return compressed;
 }
 
 export async function decompressSave(data: string): Promise<GameState> {
-  const state = decompressState<GameState>(data);
+  const state = await decompressState<GameState>(data);
   if (!state || typeof state !== 'object' || typeof state.level !== 'number' || typeof state.day !== 'number') {
     throw new Error('Bản lưu cloud không đúng định dạng.');
   }
@@ -48,7 +48,11 @@ export async function push(state: GameState): Promise<CloudResult<number>> {
   if (!navigator.onLine) return { status: 'offline' };
   try {
     const data = await compressSave(state);
-    if (utf8Bytes(data) > MAX_COMPRESSED_CHARS) return { status: 'error', message: 'Bản lưu quá lớn để đồng bộ.' };
+    const compressedBytes = utf8Bytes(data);
+    if (compressedBytes > MAX_COMPRESSED_CHARS) {
+      console.warn(`[cloud-save] Bản lưu vượt giới hạn: ${compressedBytes} byte.`);
+      return { status: 'error', message: 'Bản lưu quá lớn để đồng bộ.' };
+    }
     const { db, auth, firestoreSdk } = await getFirebase();
     const user = auth.currentUser;
     if (!user) return { status: 'error', message: 'Bạn chưa đăng nhập.' };
@@ -117,7 +121,9 @@ async function withTimeout<T>(operation: () => Promise<CloudResult<T>>, timeoutM
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      operation().catch((error) => ({ status: 'error', message: error instanceof Error ? error.message : 'Lỗi kết nối cloud.' }) as const),
+      operation().catch((error) => navigator.onLine
+        ? ({ status: 'error', message: error instanceof Error ? error.message : 'Lỗi kết nối cloud.' } as const)
+        : ({ status: 'offline' } as const)),
       new Promise<CloudResult<T>>((resolve) => { timer = setTimeout(() => resolve({ status: 'error', message: 'Cloud phản hồi quá lâu.' }), timeoutMs); }),
     ]);
   } finally {

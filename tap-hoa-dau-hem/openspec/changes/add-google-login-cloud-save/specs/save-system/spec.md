@@ -4,8 +4,8 @@
 Bản lưu local SHALL có thêm khối `sync` gồm `baseRevision`, `dirty`, `lastSyncedAt`, `deviceId` (sinh ngẫu nhiên một lần cho mỗi thiết bị); bản lưu cũ không có khối này MUST được bổ sung giá trị mặc định khi tải mà không cần tăng version.
 
 #### Scenario: Bản lưu giai đoạn 1 cũ
-- **WHEN** tải bản lưu v1 không có `sync`
-- **THEN** `sync` được thêm với `baseRevision: 0`, `dirty: true` và `deviceId` mới
+- **WHEN** tải bản lưu v1 chưa có cấu trúc self-service và không có `sync`
+- **THEN** chạy migration giai đoạn 1a v1→v2 trước, sau đó bổ sung `sync` với `baseRevision: 0`, `dirty: true` và `deviceId` mới; việc thêm `sync` không tăng `schemaVersion` lần nữa
 
 #### Scenario: Lưu local sau khi thay đổi
 - **WHEN** game tự lưu local khi chuyển pha

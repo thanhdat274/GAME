@@ -1,5 +1,5 @@
 import { getFirebase, hasAuthHint, setAuthHint } from './firebase';
-import { isInAppBrowser } from './inAppBrowser';
+import { isInAppBrowser, prefersRedirect } from './inAppBrowser';
 
 export interface AccountUser {
   uid: string;
@@ -13,7 +13,7 @@ export async function signInWithGoogle(): Promise<'redirect' | 'popup'> {
   const { auth, authSdk } = await getFirebase();
   const Provider = authSdk.GoogleAuthProvider as unknown as new () => any;
   const provider = new Provider();
-  if (matchMedia('(pointer: coarse)').matches) {
+  if (prefersRedirect(navigator.userAgent, navigator.maxTouchPoints)) {
     setAuthHint(true);
     await authSdk.signInWithRedirect(auth, provider);
     return 'redirect';

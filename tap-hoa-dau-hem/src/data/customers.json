@@ -1,6 +1,14 @@
 [
-  { "id": "hoc_sinh", "name": "Học sinh", "prefs": { "dry": 1, "snack": 6, "household": 0.5 }, "patience": 18, "maxItems": 3, "tipMul": 0.5, "weight": 3, "shirt": "#ffffff", "pants": "#1e3a8a", "hair": "#222222", "skin": "#f2c9a0" },
-  { "id": "noi_tro", "name": "Bà nội trợ", "prefs": { "dry": 6, "snack": 1, "household": 2 }, "patience": 22, "maxItems": 3, "tipMul": 0.8, "weight": 3, "shirt": "#c2185b", "pants": "#4e342e", "hair": "#3e2723", "skin": "#e8b98a" },
-  { "id": "xe_om", "name": "Chú xe ôm", "prefs": { "dry": 3, "snack": 2, "household": 1 }, "patience": 14, "maxItems": 2, "tipMul": 1, "weight": 2, "shirt": "#2e7d32", "pants": "#37474f", "hair": "#111111", "skin": "#c68e5c" },
-  { "id": "van_phong", "name": "Cô văn phòng", "prefs": { "dry": 1, "snack": 2, "household": 5 }, "patience": 20, "maxItems": 3, "tipMul": 1.5, "weight": 2, "shirt": "#90caf9", "pants": "#263238", "hair": "#5d4037", "skin": "#f5d0b0" }
+  { "id": "hoc_sinh", "name": "Học sinh", "prefs": { "dry": 1, "snack": 6, "household": 0.5, "drink": 5, "fresh": 0.5, "frozen": 4 }, "patience": 18, "maxItems": 3, "tipMul": 0.5, "counterRequestChance": 0.04, "priceSensitivity": 1.8, "weight": 3, "shirt": "#ffffff", "pants": "#1e3a8a", "hair": "#222222", "skin": "#f2c9a0" },
+  { "id": "noi_tro", "name": "Bà nội trợ", "prefs": { "dry": 6, "snack": 1, "household": 2, "drink": 1, "fresh": 6, "frozen": 2 }, "patience": 22, "maxItems": 3, "tipMul": 0.8, "counterRequestChance": 0.08, "priceSensitivity": 1.2, "bargainChance": 0.3, "weight": 3, "shirt": "#c2185b", "pants": "#4e342e", "hair": "#3e2723", "skin": "#e8b98a" },
+  { "id": "xe_om", "name": "Chú xe ôm", "prefs": { "dry": 3, "snack": 2, "household": 1, "drink": 4, "fresh": 1, "frozen": 1 }, "patience": 14, "maxItems": 2, "tipMul": 1, "counterRequestChance": 0.2, "priceSensitivity": 1, "weight": 2, "shirt": "#2e7d32", "pants": "#37474f", "hair": "#111111", "skin": "#c68e5c" },
+  { "id": "van_phong", "name": "Cô văn phòng", "prefs": { "dry": 1, "snack": 2, "household": 5, "drink": 3, "fresh": 2, "frozen": 2 }, "patience": 20, "maxItems": 3, "tipMul": 1.5, "counterRequestChance": 0.12, "priceSensitivity": 0.5, "weight": 2, "shirt": "#90caf9", "pants": "#263238", "hair": "#5d4037", "skin": "#f5d0b0" },
+  { "id": "hang_xom", "name": "Hàng xóm", "prefs": { "dry": 4, "snack": 1, "household": 2, "drink": 2, "fresh": 4, "frozen": 1 }, "patience": 26, "maxItems": 3, "tipMul": 0.6, "counterRequestChance": 0.1, "priceSensitivity": 0.8, "creditChance": 0.5, "unlockLevel": 7, "weight": 1.5, "shirt": "#8d6e63", "pants": "#3e2723", "hair": "#9e9e9e", "skin": "#d9a877",
+    "neighbors": [
+      { "name": "Chú Sáu", "shirt": "#5d7fa3", "pants": "#37474f", "hair": "#9e9e9e", "skin": "#c68e5c" },
+      { "name": "Cô Bảy", "shirt": "#ad1457", "pants": "#4e342e", "hair": "#3e2723", "skin": "#f2c9a0" },
+      { "name": "Bác Tám", "shirt": "#6d4c41", "pants": "#263238", "hair": "#e0e0e0", "skin": "#d9a877" },
+      { "name": "Dì Năm", "shirt": "#00897b", "pants": "#3e2723", "hair": "#4e342e", "skin": "#e8b98a" },
+      { "name": "Anh Hai", "shirt": "#f57c00", "pants": "#1e3a8a", "hair": "#111111", "skin": "#c68e5c" }
+    ] }
 ]

@@ -6,8 +6,8 @@ import { makeChange } from '../src/core/change';
 import { DATA, product } from '../src/core/data';
 import { DaySession, endDay, openShop, startNextDay } from '../src/core/day';
 import { Rng } from '../src/core/rng';
-import { createNewGame, formatMoney, shelfCount, unlockedProducts, type GameState } from '../src/core/state';
-import { autoArrange, buyStock, checkCart, findSlotWith } from '../src/core/stock';
+import { createNewGame, formatMoney, shelfCount, unlockedProducts, type GameState, warehouseQty } from '../src/core/state';
+import { assignCounterSlot, autoArrange, buyStock, checkCart } from '../src/core/stock';
 
 const days = Number(process.argv[2] ?? 7);
 const skill = Number(process.argv[3] ?? 0.8);
@@ -19,7 +19,7 @@ function restock(s: GameState): void {
   const cart: Record<string, number> = {};
   for (const p of products) {
     const target = Math.max(8, Math.ceil((s.yesterdaySold[p.id] ?? 0) * 1.3));
-    const have = (s.warehouse[p.id] ?? 0) + s.shelves.flat().filter((x) => x.productId === p.id).reduce((a, b) => a + b.qty, 0);
+    const have = warehouseQty(s, p.id) + s.shelves.flat().filter((x) => x.productId === p.id).reduce((a, b) => a + b.qty, 0);
     let want = Math.max(0, target - have);
     while (want > 0) {
       cart[p.id] = (cart[p.id] ?? 0) + 1;
@@ -47,13 +47,14 @@ function playDay(s: GameState): void {
       for (let c = 0; c < 6; c++) if (s.shelves[r][c].qty <= 1) d.startRefill(r, c);
     const c = d.front;
     if (!c || cooldown > 0) continue;
-    if (c.status === 'picking') {
-      const line = c.order.find((l) => l.picked < l.qty && findSlotWith(s, l.productId));
-      if (line) {
-        const pos = findSlotWith(s, line.productId)!;
-        if (d.pick(pos.shelf, pos.slot) === 'busy') continue;
+    if (c.status === 'scanning') {
+      if (!c.counterRequestResolved) {
+        const line = c.order.find((item) => item.counterLine && item.missing === 0);
+        const slot = line ? s.counter.findIndex((item) => item.productId === line.productId && item.qty > 0) : -1;
+        if (slot >= 0) d.serveCounterRequest(slot);
       } else {
-        d.checkout();
+        const line = c.order.find((item) => item.picked > item.scanned);
+        if (line) d.scanItem(line.productId);
       }
       cooldown = react;
       changeTimer = 0;
@@ -75,6 +76,10 @@ console.log('Ngày | Lv | EXP  | Khách (vui/bỏ) | Doanh thu | Lãi gộp | Ti
 for (let i = 0; i < days; i++) {
   restock(s);
   autoArrange(s);
+  if (s.level >= 3) {
+    const counterProduct = unlockedProducts(s.level).find((p) => p.behindCounter && warehouseQty(s, p.id) > 0);
+    if (counterProduct) assignCounterSlot(s, 0, counterProduct.id);
+  }
   playDay(s);
   const sum = endDay(s);
   console.log(
@@ -92,5 +97,5 @@ for (let i = 0; i < days; i++) {
   );
   startNextDay(s);
 }
-const stockValue = Object.entries(s.warehouse).reduce((a, [id, q]) => a + product(id).cost * q, 0);
+const stockValue = s.warehouse.reduce((a, lot) => a + product(lot.productId).cost * lot.qty, 0);
 console.log(`Giá trị hàng tồn kho: ${formatMoney(stockValue)} | Vốn ban đầu ${formatMoney(DATA.balance.startMoney)}`);

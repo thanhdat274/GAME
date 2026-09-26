@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BACKUP_KEY, SAVE_KEY, deleteSave, loadGame, migrate, saveGame, type KeyValueStore } from '../src/core/save';
-import { createNewGame } from '../src/core/state';
+import { createNewGame, lotsFrom, warehouseQty } from '../src/core/state';
 
 class MemoryStore implements KeyValueStore {
   data = new Map<string, string>();
@@ -24,13 +24,13 @@ describe('lưu game', () => {
     const store = new MemoryStore();
     const s = createNewGame();
     s.money = 123000;
-    s.warehouse = { mi_goi: 7 };
+    s.warehouse = lotsFrom({ mi_goi: 7 });
     expect(saveGame(s, store)).toBe(true);
     const res = loadGame(store);
     expect(res.status).toBe('ok');
     if (res.status === 'ok') {
       expect(res.state.money).toBe(123000);
-      expect(res.state.warehouse).toEqual({ mi_goi: 7 });
+      expect(res.state.warehouse).toEqual(lotsFrom({ mi_goi: 7 }));
     }
   });
 
@@ -53,7 +53,7 @@ describe('lưu game', () => {
     const old = createNewGame() as unknown as Record<string, unknown>;
     old.settings = { sound: false };
     const state = migrate({ version: 1, state: old });
-    expect(state.settings).toEqual({ sound: false, autoChange: true });
+    expect(state.settings).toEqual({ sound: false, autoChange: true, autoScan: false });
   });
 
   it('bản lưu cũ đang giữa ngày (chưa có "missed") vẫn tải được', () => {
@@ -76,6 +76,48 @@ describe('lưu game', () => {
     expect(state.summary).toMatchObject({ level: 1, day: 1, playSeconds: 0 });
   });
 
+  it('migrate v1 gán khu theo nhóm nhiều nhất và trả hàng sai khu về kho', () => {
+    const old = createNewGame() as unknown as Record<string, unknown>;
+    const shelves = old.shelves as { productId: string | null; qty: number }[][];
+    shelves[0][0] = { productId: 'mi_goi', qty: 4 };
+    shelves[0][1] = { productId: 'mi_goi', qty: 3 };
+    shelves[0][2] = { productId: 'keo', qty: 2 };
+    delete old.zones;
+    delete old.counter;
+    old.settings = { sound: true, autoChange: true };
+    const state = migrate({ version: 1, state: old });
+    expect(state.zones[0]).toBe('dry');
+    expect(state.shelves[0][2]).toEqual({ productId: null, qty: 0 });
+    expect(warehouseQty(state, 'keo')).toBe(2);
+    expect(state.counter.every((slot) => !slot.productId)).toBe(true);
+    expect(state.settings.autoScan).toBe(false);
+  });
+
+  it('migrate v1 giữ ngày và thống kê khi bản lưu ở giữa ngày', () => {
+    const old = createNewGame() as unknown as Record<string, unknown>;
+    old.phase = 'open';
+    old.clock = 735;
+    old.day = 8;
+    old.today = { ...(old.today as object), revenue: 42000, sold: { mi_goi: 7 } };
+    delete old.zones;
+    delete old.counter;
+    const state = migrate({ version: 1, state: old });
+    expect(state).toMatchObject({ phase: 'open', clock: 735, day: 8, today: { revenue: 42000, sold: { mi_goi: 7 } } });
+  });
+
+  it('migrate v1 giữ nguyên kệ chỉ có một nhóm hàng', () => {
+    const old = createNewGame() as unknown as Record<string, unknown>;
+    const shelves = old.shelves as { productId: string | null; qty: number }[][];
+    shelves[0][0] = { productId: 'mi_goi', qty: 4 };
+    shelves[0][1] = { productId: 'muoi', qty: 2 };
+    delete old.zones;
+    delete old.counter;
+    const state = migrate({ version: 1, state: old });
+    expect(state.zones[0]).toBe('dry');
+    expect(state.shelves[0][0]).toMatchObject({ productId: 'mi_goi', qty: 4 });
+    expect(state.shelves[0][1]).toMatchObject({ productId: 'muoi', qty: 2 });
+  });
+
   it('lưu local đánh dấu dirty, còn ghi sau đồng bộ giữ trạng thái sạch', () => {
     const store = new MemoryStore();
     const state = createNewGame();
@@ -93,6 +135,12 @@ describe('lưu game', () => {
 
   it('từ chối bản lưu mới hơn game', () => {
     expect(() => migrate({ version: 99, state: {} })).toThrow();
+  });
+
+  it('summary của bản lưu cũ phản ánh tiến trình thật ngay khi tải', () => {
+    const old = { ...createNewGame(), day: 9, level: 4, money: 850000 } as Record<string, unknown>;
+    delete old.summary;
+    expect(migrate({ version: 2, state: old }).summary).toEqual({ day: 9, level: 4, money: 850000, playSeconds: 0 });
   });
 
   it('localStorage ném lỗi thì không làm hỏng game', () => {

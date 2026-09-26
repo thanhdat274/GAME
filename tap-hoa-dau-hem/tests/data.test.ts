@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { DATA, validateLevels, validateProducts } from '../src/core/data';
 
 describe('dữ liệu mặt hàng', () => {
-  it('products.json hợp lệ và có 14 món', () => {
+  it('products.json hợp lệ và có 33 món (17 + 16 giai đoạn 2)', () => {
     expect(validateProducts(DATA.products)).toEqual([]);
-    expect(DATA.products).toHaveLength(14);
+    expect(DATA.products).toHaveLength(33);
   });
 
   it('levels.json hợp lệ', () => {
