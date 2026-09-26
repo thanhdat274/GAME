@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { CustomerType, Product } from '../core/data';
-import { PALETTE, PRODUCT_SPRITES, type Sprite } from './pixelart';
+import { FURNITURE_SPRITES, PALETTE, PRODUCT_SPRITES, type Sprite } from './pixelart';
 import { C, H, HEX, W, emoji, txt, ZOOM } from './theme';
 import { play } from './sound';
 
@@ -96,6 +96,37 @@ export function spriteTexture(scene: Phaser.Scene, key: string, rows: Sprite): s
   return key;
 }
 
+/**
+ * Ảnh nội thất pixel art vừa khung w×h (tọa độ logic), phóng theo số nguyên điểm ảnh canvas để không nhòe.
+ * `rot` = 1 thì xoay 90° (footprint đổi chiều).
+ */
+export function furnitureImage(scene: Phaser.Scene, id: string, x: number, y: number, w: number, h: number, rot: 0 | 1 = 0): Phaser.GameObjects.Image | null {
+  const rows = FURNITURE_SPRITES[id];
+  if (!rows) return null;
+  const key = spriteTexture(scene, `furn_${id}`, rows);
+  const sw = rows[0].length;
+  const sh = rows.length;
+  // Khi xoay, chiều rộng ảnh nằm theo trục dọc của khung.
+  const fw = rot ? h : w;
+  const fh = rot ? w : h;
+  const k = Math.max(1, Math.floor(Math.min((fw * ZOOM) / sw, (fh * ZOOM) / sh)));
+  return scene.add.image(x, y, key).setScale(k / ZOOM).setAngle(rot ? 90 : 0);
+}
+
+/**
+ * Gộp các Graphics tĩnh vào một RenderTexture (độ phân giải thật = logic × ZOOM) rồi hủy Graphics,
+ * để mỗi khung hình không phải vẽ lại hàng trăm hình chữ nhật.
+ */
+export function bakeStatic(scene: Phaser.Scene, parts: Phaser.GameObjects.Graphics[], depth = 0): Phaser.GameObjects.RenderTexture {
+  const rt = scene.add.renderTexture(0, 0, W * ZOOM, H * ZOOM).setOrigin(0, 0).setScale(1 / ZOOM).setDepth(depth);
+  for (const g of parts) {
+    g.setScale(ZOOM);
+    rt.draw(g, 0, 0);
+    g.destroy();
+  }
+  return rt;
+}
+
 export function productTexture(scene: Phaser.Scene, id: string): string | null {
   const rows = PRODUCT_SPRITES[id];
   return rows ? spriteTexture(scene, `icon_${id}`, rows) : null;
@@ -164,7 +195,7 @@ export function bill(scene: Phaser.Scene, x: number, y: number, v: number, w = 7
 }
 
 /** Tường, sàn, cửa ra vào của tiệm (bên trong). */
-export function drawShopInterior(scene: Phaser.Scene, top: number, floorY: number, bottom: number): void {
+export function drawShopInterior(scene: Phaser.Scene, top: number, floorY: number, bottom: number): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
   g.fillStyle(C.wall, 1).fillRect(0, top, W, floorY - top);
   for (let x = 0; x < W; x += 24) g.fillStyle(C.wallLine, 1).fillRect(x, top, 2, floorY - top);
@@ -185,6 +216,7 @@ export function drawShopInterior(scene: Phaser.Scene, top: number, floorY: numbe
   g.fillStyle(C.red, 1).fillRoundedRect(W - 50, floorY + 44, 46, 26, 4);
   g.lineStyle(2, C.yellow, 1).strokeRoundedRect(W - 47, floorY + 47, 40, 20, 3);
   g.fillStyle(0x000000, 0.12).fillRect(W - 6, floorY, 6, bottom - floorY);
+  return g;
 }
 
 /** Mặt tiền tiệm cho màn tiêu đề: phong cách hoài niệm Sài Gòn/Việt Nam xưa. */

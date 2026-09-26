@@ -3,7 +3,7 @@ import { hasFeature, product, type Category } from '../core/data';
 import { formatMoney, type Lot } from '../core/state';
 import { discardLot, nextWarehouseTier, stowHolding, upgradeWarehouse, warehouseCapacity, warehouseCellsUsed } from '../core/stock';
 import { G, persist } from '../game';
-import { productIcon } from '../ui/art';
+import { furnitureImage, productIcon } from '../ui/art';
 import { PAGE_TOP, ScrollArea, card, pageFrame } from '../ui/page';
 import { ZONE_NAMES } from '../ui/shelves';
 import { play } from '../ui/sound';
@@ -42,6 +42,7 @@ export class WarehouseScene extends Phaser.Scene {
     this.header = txt(this, 14, PAGE_TOP + 4, '', { size: 13, bold: true });
     const tier = nextWarehouseTier(G.state);
     if (tier && hasFeature(G.state.level, 'warehouse')) {
+      furnitureImage(this, 'shelf_steel', W - 152, PAGE_TOP + 12, 26, 26);
       new Button(this, W - 74, PAGE_TOP + 12, {
         w: 132, h: 30, size: 11, color: C.blue,
         label: `⬆ ${tier.name} · ${formatMoney(tier.cost)}`,

@@ -32,6 +32,9 @@ const game = new Phaser.Game({
   scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, PricesScene, LedgerScene, QuestsScene, DecorScene],
 });
 
+// Chỉ bản dev: đo FPS khi kiểm thử hiệu năng trên trình duyệt.
+if (import.meta.env.DEV) (window as unknown as { __thdhGame?: Phaser.Game }).__thdhGame = game;
+
 configureCloudApplyGuard(() => game.scene.isActive('Title') || game.scene.isActive('Morning'));
 let cloudScene = '';
 game.events.on('step', () => {

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { product, type Category } from '../core/data';
+import { counterFixture, walkTiles } from '../core/layout';
 import { MAX_SHELVES, fixtureOfShelf, shelfKind, shelfUsable, shelfCount, type GameState } from '../core/state';
 import { canRefill, slotFreshness, zoneFill, zoneOf } from '../core/stock';
 import { productIcon } from './art';
@@ -24,6 +25,8 @@ export interface ShelfCallbacks {
   onSlotTap: (shelf: number, slot: number) => void;
   onRefill?: (shelf: number, slot: number) => void;
   onRemove?: (shelf: number, slot: number) => void;
+  /** Gọi khi khung nhìn cuộn; `atCounter` = đang nhìn các kệ sát quầy. */
+  onScroll?: (atCounter: boolean) => void;
 }
 
 export interface ShelfRenderOpts {
@@ -45,6 +48,9 @@ interface SlotView {
   removeBtn: Phaser.GameObjects.Container;
   progress: Phaser.GameObjects.Graphics;
   glow: Phaser.GameObjects.Graphics;
+  /** Khóa trạng thái nền / nhãn hạn đã vẽ, để render() chỉ vẽ lại khi thay đổi. */
+  bgKey: string;
+  freshKey: string;
 }
 
 interface RowView {
@@ -53,15 +59,29 @@ interface RowView {
   lock: Phaser.GameObjects.Container;
   label: Phaser.GameObjects.Text;
   tween: Phaser.Tweens.Tween | null;
+  /** Nội dung nhãn khu đang hiển thị (tránh vẽ lại chữ khi không đổi). */
+  labelKey: string;
 }
 
-/** Kệ hiển thị: 3 kệ gốc (kể cả đang khóa) và mọi nội thất có ô đang đặt trên mặt bằng. */
+/**
+ * Kệ hiển thị theo không gian tiệm, từ trên xuống: kệ/tủ mua thêm (xa quầy nhất ở trên cùng),
+ * rồi 3 kệ gốc sát quầy (giữ đúng thứ tự giai đoạn 1). Khung nhìn mặc định ở phía quầy.
+ */
 export function displayShelves(state: GameState): number[] {
-  const out: number[] = [];
+  const base: number[] = [];
+  const extra: number[] = [];
   for (let i = 0; i < state.shelves.length; i++) {
-    if (i < MAX_SHELVES ? !!fixtureOfShelf(state, i) : shelfUsable(state, i)) out.push(i);
+    if (i < MAX_SHELVES) { if (fixtureOfShelf(state, i)) base.push(i); }
+    else if (shelfUsable(state, i)) extra.push(i);
   }
-  return out;
+  const counter = counterFixture(state) ?? null;
+  const dist = new Map(extra.map((i) => {
+    let tiles = 0;
+    try { tiles = walkTiles(state, counter, fixtureOfShelf(state, i) ?? null); } catch { tiles = 0; }
+    return [i, tiles] as const;
+  }));
+  extra.sort((a, b) => dist.get(b)! - dist.get(a)! || a - b);
+  return [...extra, ...base];
 }
 
 /**
@@ -76,6 +96,9 @@ export class ShelfView extends Phaser.GameObjects.Container {
   private scrollY = 0;
   private maxScroll = 0;
   private readonly viewH: number;
+  private moreUp: Phaser.GameObjects.Text | null = null;
+  private moreDown: Phaser.GameObjects.Text | null = null;
+  private scrollTween: Phaser.Tweens.Tween | null = null;
 
   constructor(scene: Phaser.Scene, readonly top: number, private cb: ShelfCallbacks, state: GameState, viewRows = MAX_SHELVES) {
     super(scene, 0, 0);
@@ -106,13 +129,21 @@ export class ShelfView extends Phaser.GameObjects.Container {
       const label = txt(scene, 12, y - 8, '', { size: 9, bold: true, color: HEX.ink });
       label.setBackgroundColor(kind === 'shelf' ? '#f3dfbd' : '#d9eefb').setPadding(3, 1, 3, 1);
       this.content.add(label);
-      const row: RowView = { shelf, slots, lock, label, tween: null };
+      const row: RowView = { shelf, slots, lock, label, tween: null, labelKey: '' };
       this.rows.push(row);
       this.byShelf.set(shelf, row);
     });
     this.maxScroll = Math.max(0, this.rows.length * ROW_PITCH - this.viewH);
-    if (this.maxScroll > 0) this.enableScroll();
+    if (this.maxScroll > 0) {
+      this.enableScroll();
+      // Chỉ báo còn kệ phía trên / dưới khung nhìn.
+      this.moreUp = txt(scene, 352, this.top - 6, '▲ kệ khác', { size: 9, bold: true, color: HEX.white, origin: [1, 0.5] });
+      this.moreDown = txt(scene, 352, this.top + this.viewH - 6, '▼ phía quầy', { size: 9, bold: true, color: HEX.white, origin: [1, 0.5] });
+      for (const t of [this.moreUp, this.moreDown]) t.setBackgroundColor('#3b2618cc').setPadding(4, 1, 4, 1);
+      this.add([this.moreUp, this.moreDown]);
+    }
     scene.add.existing(this);
+    this.setScroll(this.maxScroll);
   }
 
   /** Số kệ vượt quá khung nhìn (để scene hiện gợi ý "kéo để xem thêm"). */
@@ -143,27 +174,42 @@ export class ShelfView extends Phaser.GameObjects.Container {
       if (!active || !p.isDown) return;
       if (!dragging && Math.abs(p.worldY - startY) < 8) return;
       dragging = true;
+      this.scrollTween?.remove();
       this.setScroll(startScroll - (p.worldY - startY));
     });
     s.input.on('pointerup', () => { active = false; });
     s.input.on('wheel', (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
-      if (this.visible && this.inView(p.worldY)) this.setScroll(this.scrollY + dy * 0.5);
+      if (!this.visible || !this.inView(p.worldY)) return;
+      this.setScroll(this.scrollY + dy * 0.5);
     });
   }
 
   setScroll(y: number): void {
     this.scrollY = Phaser.Math.Clamp(y, 0, this.maxScroll);
     this.content.y = -this.scrollY;
+    this.moreUp?.setVisible(this.scrollY > 4);
+    this.moreDown?.setVisible(this.scrollY < this.maxScroll - 4);
+    this.cb.onScroll?.(this.atCounter);
   }
 
-  /** Cuộn để thấy kệ `shelf`. */
-  scrollToShelf(shelf: number): void {
-    const index = this.rows.findIndex((r) => r.shelf === shelf);
-    if (index < 0) return;
-    const y = index * ROW_PITCH;
-    if (y < this.scrollY) this.setScroll(y);
-    else if (y + ROW_PITCH > this.scrollY + this.viewH) this.setScroll(y + ROW_PITCH - this.viewH);
+  /** Đang nhìn các kệ sát quầy (vị trí mặc định). */
+  get atCounter(): boolean {
+    return this.scrollY >= this.maxScroll - 4;
   }
+
+  private animateTo(y: number): void {
+    const target = Phaser.Math.Clamp(y, 0, this.maxScroll);
+    this.scrollTween?.remove();
+    const from = { v: this.scrollY };
+    this.scrollTween = this.scene.tweens.add({ targets: from, v: target, duration: 260, ease: 'Sine.easeOut', onUpdate: () => this.setScroll(from.v) });
+  }
+
+  /** Nút "Về quầy": cuộn về các kệ sát quầy. */
+  scrollToCounter(): void {
+    this.animateTo(this.maxScroll);
+  }
+
+
 
   private slotPos(index: number, c: number): { x: number; y: number } {
     return { x: X0 + c * (SLOT_W + GAP) + SLOT_W / 2, y: this.top + index * ROW_PITCH + SLOT_H / 2 };
@@ -217,7 +263,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
       if (p.getDistance() < 12 && this.inView(p.worldY)) this.cb.onSlotTap(r, c);
     });
     this.content.add(root);
-    return { root, bg, icon: null, iconId: null, qty, out, fresh, refillBtn, removeBtn, progress, glow };
+    return { root, bg, icon: null, iconId: null, qty, out, fresh, refillBtn, removeBtn, progress, glow, bgKey: '', freshKey: '' };
   }
 
   /** Ô kệ tại tọa độ (dùng khi thả hàng kéo từ kho). */
@@ -247,8 +293,12 @@ export class ShelfView extends Phaser.GameObjects.Container {
       zoneLabel.setVisible(!locked && (!!zone || !!prefix));
       if (!locked && zone) {
         const fill = zoneFill(state, zone);
-        zoneLabel.setText(`${prefix ? `${prefix} · ` : ''}${ZONE_NAMES[zone]} · ${Math.round(fill.fill * 100)}%`);
-        zoneLabel.setColor(fill.alert === 'critical' ? HEX.red : fill.alert === 'low' ? '#9a6200' : HEX.ink);
+        const text = `${prefix ? `${prefix} · ` : ''}${ZONE_NAMES[zone]} · ${Math.round(fill.fill * 100)}%`;
+        const color = fill.alert === 'critical' ? HEX.red : fill.alert === 'low' ? '#9a6200' : HEX.ink;
+        if (row.labelKey !== text + color) {
+          row.labelKey = text + color;
+          zoneLabel.setText(text).setColor(color);
+        }
         const alerting = fill.alert !== 'ok';
         if (alerting && !row.tween) {
           row.tween = this.scene.tweens.add({ targets: zoneLabel, alpha: 0.35, yoyo: true, repeat: -1, duration: fill.alert === 'critical' ? 260 : 520 });
@@ -258,7 +308,10 @@ export class ShelfView extends Phaser.GameObjects.Container {
           zoneLabel.setAlpha(1);
         }
       } else {
-        if (prefix) zoneLabel.setText(prefix).setColor(HEX.ink);
+        if (prefix && row.labelKey !== prefix) {
+          row.labelKey = prefix;
+          zoneLabel.setText(prefix).setColor(HEX.ink);
+        }
         if (row.tween) {
           row.tween.remove();
           row.tween = null;
@@ -268,9 +321,13 @@ export class ShelfView extends Phaser.GameObjects.Container {
       row.slots.forEach((v, c) => {
         const slot = state.shelves[r][c];
         const empty = !slot.productId || slot.qty === 0;
-        v.bg.clear();
-        v.bg.fillStyle(kind === 'shelf' ? C.slot : 0xeef7fd, locked ? 0.4 : 1).fillRoundedRect(-SLOT_W / 2, -SLOT_H / 2, SLOT_W, SLOT_H, 7);
-        v.bg.lineStyle(2, kind === 'shelf' ? C.slotEdge : 0x9cc3de, 1).strokeRoundedRect(-SLOT_W / 2, -SLOT_H / 2, SLOT_W, SLOT_H, 7);
+        const bgKey = `${kind}|${locked}`;
+        if (v.bgKey !== bgKey) {
+          v.bgKey = bgKey;
+          v.bg.clear();
+          v.bg.fillStyle(kind === 'shelf' ? C.slot : 0xeef7fd, locked ? 0.4 : 1).fillRoundedRect(-SLOT_W / 2, -SLOT_H / 2, SLOT_W, SLOT_H, 7);
+          v.bg.lineStyle(2, kind === 'shelf' ? C.slotEdge : 0x9cc3de, 1).strokeRoundedRect(-SLOT_W / 2, -SLOT_H / 2, SLOT_W, SLOT_H, 7);
+        }
         if (v.iconId !== slot.productId) {
           v.icon?.destroy();
           v.icon = null;
@@ -286,11 +343,15 @@ export class ShelfView extends Phaser.GameObjects.Container {
         v.out.setVisible(!locked && !!slot.productId && slot.qty === 0 && !whHas);
         // Nhãn hạn dùng: đỏ = hết hạn hôm nay, vàng = hết hạn ngày mai; bán xả hiện phần trăm giảm.
         const freshness = !empty ? slotFreshness(slot, state.day) : null;
-        if (slot.clearance && !empty) v.fresh.setText(`-${slot.clearance}%`).setBackgroundColor(HEX.red).setVisible(true);
-        else if (freshness) v.fresh.setText(freshness === 'today' ? 'HẠN' : 'MAI').setBackgroundColor(freshness === 'today' ? HEX.red : '#d49a00').setVisible(true);
-        else v.fresh.setVisible(false);
+        const freshKey = slot.clearance && !empty ? `c${slot.clearance}` : freshness ?? '';
+        if (v.freshKey !== freshKey) {
+          v.freshKey = freshKey;
+          if (slot.clearance && !empty) v.fresh.setText(`-${slot.clearance}%`).setBackgroundColor(HEX.red).setVisible(true);
+          else if (freshness) v.fresh.setText(freshness === 'today' ? 'HẠN' : 'MAI').setBackgroundColor(freshness === 'today' ? HEX.red : '#d49a00').setVisible(true);
+          else v.fresh.setVisible(false);
+        }
         const prog = o.refilling?.(r, c) ?? null;
-        v.progress.clear();
+        if (prog !== null || v.progress.commandBuffer.length) v.progress.clear();
         if (prog !== null) {
           v.progress.fillStyle(0x000000, 0.35).fillRoundedRect(-SLOT_W / 2 + 4, SLOT_H / 2 - 9, SLOT_W - 8, 6, 3);
           v.progress.fillStyle(C.green, 1).fillRoundedRect(-SLOT_W / 2 + 4, SLOT_H / 2 - 9, (SLOT_W - 8) * prog, 6, 3);

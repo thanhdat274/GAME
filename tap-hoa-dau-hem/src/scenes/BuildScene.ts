@@ -9,6 +9,7 @@ import { formatMoney, type Fixture, type GameState } from '../core/state';
 import { sellFixture } from '../core/stock';
 import { G, persist } from '../game';
 import { play } from '../ui/sound';
+import { furnitureImage } from '../ui/art';
 import { Button, dialog, toast } from '../ui/widgets';
 import { C, H, HEX, W, emoji, setupCamera, txt } from '../ui/theme';
 
@@ -152,10 +153,13 @@ export class BuildScene extends Phaser.Scene {
     const bad = this.blocked.has(f.uid);
     g.lineStyle(sel || bad ? 3 : 1.5, bad ? C.red : sel ? C.yellow : 0x000000, sel || bad ? 1 : 0.35).strokeRoundedRect(3, 3, w * CELL - 6, h * CELL - 6, 6);
     c.add(g);
-    c.add(emoji(this, (w * CELL) / 2, (h * CELL) / 2 - (w * h > 1 ? 7 : 0), def.icon, w * h > 1 ? 18 : 16));
+    // Pixel art theo footprint gốc; nội thất xoay thì ảnh xoay 90°.
+    const img = furnitureImage(this, f.type, (w * CELL) / 2, (h * CELL) / 2, w * CELL - 8, h * CELL - 8, f.rot);
+    c.add(img ?? emoji(this, (w * CELL) / 2, (h * CELL) / 2, def.icon, 18));
     if (w * h > 1) {
       const label = f.shelf !== undefined ? `${def.kind === 'shelf' ? 'Kệ' : def.name} ${f.shelf + 1}` : def.name;
-      c.add(txt(this, (w * CELL) / 2, (h * CELL) / 2 + 13, label, { size: 9, bold: true, color: def.kind === 'counter' ? HEX.cream : HEX.ink, origin: [0.5, 0.5] }));
+      const tag = txt(this, (w * CELL) / 2, h * CELL - 8, label, { size: 8, bold: true, color: HEX.white, origin: [0.5, 0.5] });
+      c.add(tag.setBackgroundColor('#000000aa').setPadding(3, 0, 3, 0));
     }
     return c;
   }
@@ -191,7 +195,7 @@ export class BuildScene extends Phaser.Scene {
         const active = this.placing === it.id;
         const b = new Button(this, x, y, {
           w: cw, h: 70, size: 9, color: active ? C.yellow : locked ? C.grey : C.wood,
-          label: `${it.icon}\n${it.name}\n${locked ? `Lv ${it.level}` : formatMoney(it.cost)}`,
+          label: `\n\n${it.name}\n${locked ? `Lv ${it.level}` : formatMoney(it.cost)}`,
           onTap: () => {
             if (locked) { toast(this, `Mở ở level ${it.level}`); return; }
             this.placing = active ? null : it.id;
@@ -200,6 +204,8 @@ export class BuildScene extends Phaser.Scene {
           },
         });
         b.setEnabled(!locked);
+        const icon = furnitureImage(this, it.id, 0, -16, cw - 14, 26);
+        if (icon) b.add(icon.setAlpha(locked ? 0.5 : 1));
         L.add(b);
       });
     }

@@ -10,7 +10,7 @@ import { orderTotal } from '../core/customers';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand, startLivePulses, stopLivePulses, suspendLiveShop } from '../services/liveShop';
 import { cloudSaveEnabled } from '../services/firebase';
-import { bill, customerSprite, drawShopInterior, productIcon, setWalkFrame } from '../ui/art';
+import { bakeStatic, bill, customerSprite, drawShopInterior, productIcon, setWalkFrame } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
 import { ShelfView } from '../ui/shelves';
 import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sound';
@@ -64,6 +64,7 @@ export class ShopScene extends Phaser.Scene {
   private pauseLayer: Phaser.GameObjects.Container | null = null;
   private zoneRefillButtons: { zone: SaleZone; button: Button }[] = [];
   private questBtn: Button | null = null;
+  private counterBtn: Button | null = null;
   private questsDoneSeen = new Set<string>();
   private renderAcc = 0;
   private ending = false;
@@ -82,6 +83,7 @@ export class ShopScene extends Phaser.Scene {
     this.ending = false;
     this.zoneRefillButtons = [];
     this.questBtn = null;
+    this.counterBtn = null;
     this.questsDoneSeen = new Set((G.state.quests?.list ?? []).filter((q) => q.claimed || questDone(G.state, questDef(q.id))).map((q) => q.id));
     const s = G.state;
     this.session = G.liveSnapshot?.dayRuntime
@@ -91,14 +93,19 @@ export class ShopScene extends Phaser.Scene {
     // Chỉ bản dev: cho phép kiểm thử trên trình duyệt truy cập phiên bán (không có trong bản build).
     if (import.meta.env.DEV) (window as unknown as { __thdhShop?: ShopScene }).__thdhShop = this;
 
-    drawShopInterior(this, HUD_H, FLOOR_Y, PANEL_Y);
+    // Tường, sàn gạch và quầy là hình tĩnh: gộp vào RenderTexture để giảm chi phí vẽ mỗi khung hình.
+    bakeStatic(this, [drawShopInterior(this, HUD_H, FLOOR_Y, PANEL_Y)], 0);
     this.shelves = new ShelfView(this, SHELF_TOP, {
       onSlotTap: (r, c) => this.onSlotTap(r, c),
       onRefill: (r, c) => {
         if (G.liveSnapshot) void this.liveCommand({ type: 'startRefill', shelf: r, slot: c });
         else if (this.session.startRefill(r, c)) play('step');
       },
+      onScroll: (atCounter) => this.counterBtn?.setVisible(!atCounter),
     }, s);
+    // Tiệm nhiều kệ: kéo một ngón để xem kệ phía sau, nút này đưa khung nhìn về các kệ sát quầy.
+    this.counterBtn = new Button(this, W - 58, SHELF_TOP + 3 * 64 - 8, { w: 100, h: 26, label: '↓ Về quầy', size: 11, color: C.blue, onTap: () => this.shelves.scrollToCounter() });
+    this.counterBtn.setDepth(260).setVisible(!this.shelves.atCounter);
     this.drawCounter();
     this.addZoneRefillButtons();
     this.hud = new Hud(this, s, { onPause: () => this.pause() });
@@ -132,10 +139,11 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private drawCounter(): void {
-    const g = this.add.graphics().setDepth(200);
+    const g = this.add.graphics();
     g.fillStyle(C.woodLight, 1).fillRect(0, COUNTER_Y, W - 56, 10);
     g.fillStyle(C.wood, 1).fillRect(0, COUNTER_Y + 10, W - 56, PANEL_Y - COUNTER_Y - 10);
     for (let x = 16; x < W - 56; x += 40) g.fillStyle(C.woodDark, 1).fillRect(x, COUNTER_Y + 16, 2, PANEL_Y - COUNTER_Y - 22);
+    bakeStatic(this, [g], 200);
     txt(this, 22, COUNTER_Y - 10, '🧾', { size: 22, emoji: true, origin: [0.5, 0.5] }).setDepth(201);
     txt(this, W - 90, COUNTER_Y + 30, 'QUẦY', { size: 12, bold: true, color: '#f6e3c4', origin: [0.5, 0.5] }).setDepth(201);
   }
@@ -247,11 +255,10 @@ export class ShopScene extends Phaser.Scene {
   private wireEvents(): void {
     const e = this.session.events;
     e.on('customerArrived', (c) => this.addCustomer(c));
-    e.on('customerBrowse', ({ customer, zone, shelf, tiles }) => {
+    e.on('customerBrowse', ({ customer, zone, tiles }) => {
       const v = this.views.get(customer.id);
       if (!v) return;
       const x = ZONE_X[zone as SaleZone] ?? 175;
-      if (shelf !== null) this.shelves.scrollToShelf(shelf);
       v.sprite.setY(FEET_Y - 48).setFlipX(x > v.sprite.x);
       const walker = this.startWalking(v.sprite, lookOf(customer));
       const seconds = DATA.balance.zoneWalkSeconds + Math.max(0, tiles - 3) * DATA.balance.walkSecondsPerTile;
