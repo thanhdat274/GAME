@@ -37,6 +37,8 @@ export interface ShelfRenderOpts {
   /** Món khách đang cần (để nhấp nháy gợi ý). */
   highlight?: Set<string>;
   refilling?: (shelf: number, slot: number) => number | null;
+  /** Ẩn nút + nạp nhanh (bày kệ lúc tạm dừng giữa giờ bán). */
+  noRefill?: boolean;
 }
 
 interface SlotView {
@@ -352,7 +354,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
           v.progress.fillStyle(0x000000, 0.35).fillRoundedRect(-SLOT_W / 2 + 4, SLOT_H / 2 - 9, SLOT_W - 8, 6, 3);
           v.progress.fillStyle(C.green, 1).fillRoundedRect(-SLOT_W / 2 + 4, SLOT_H / 2 - 9, (SLOT_W - 8) * prog, 6, 3);
         }
-        v.refillBtn.setVisible(!locked && prog === null && canRefill(state, r, c));
+        v.refillBtn.setVisible(!o.noRefill && !locked && prog === null && canRefill(state, r, c));
         v.removeBtn.setVisible(o.mode === 'arrange' && !locked && !!slot.productId);
         const glow = !locked && !empty && !!slot.productId && !!o.highlight?.has(slot.productId);
         v.glow.setVisible(glow);

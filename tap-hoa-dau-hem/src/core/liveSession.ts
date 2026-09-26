@@ -10,6 +10,8 @@ import {
   assignSlot,
   autoArrange,
   buyStock,
+  counterFreeForNew,
+  slotFreeForNew,
   clearSlot,
   refillCounterSlot,
   refillSlot,
@@ -77,16 +79,17 @@ export function applyLiveShopCommand(
 
   switch (command.type) {
     case 'buyStock':
-      // Nhập hàng được cả buổi sáng lẫn khi tạm dừng giữa giờ bán.
-      if (state.phase !== 'morning') requirePhase(state, 'open');
+      requireStocking(state);
       result = buyStock(state, command.cart, command.supplierId ?? 'co_tu');
       break;
     case 'assignShelf':
-      requirePhase(state, 'morning');
+      requireStocking(state);
+      if (state.phase === 'open' && !slotFreeForNew(state, command.shelf, command.slot, command.productId)) throw new Error('Giữa giờ bán chỉ bày món mới vào ô trống.');
       result = assignSlot(state, command.shelf, command.slot, command.productId);
       break;
     case 'clearShelf':
-      requirePhase(state, 'morning');
+      requireStocking(state);
+      if (state.phase === 'open' && (state.shelves[command.shelf]?.[command.slot]?.qty ?? 0) > 0) throw new Error('Giữa giờ bán chỉ dọn ô đã hết hàng.');
       clearSlot(state, command.shelf, command.slot);
       result = true;
       break;
@@ -95,7 +98,8 @@ export function applyLiveShopCommand(
       result = refillSlot(state, command.shelf, command.slot);
       break;
     case 'assignCounter':
-      requirePhase(state, 'morning');
+      requireStocking(state);
+      if (state.phase === 'open' && !counterFreeForNew(state, command.slot, command.productId)) throw new Error('Giữa giờ bán chỉ đưa món mới vào ô quầy trống.');
       result = assignCounterSlot(state, command.slot, command.productId);
       break;
     case 'refillCounter':
@@ -278,6 +282,11 @@ export function advanceLiveShop(aggregate: LiveShopAggregate, elapsedSeconds: nu
 
 function requirePhase(state: GameState, phase: GameState['phase']): void {
   if (state.phase !== phase) throw new Error(`Lệnh này không dùng được ở pha ${state.phase}.`);
+}
+
+/** Nhập và bày hàng: buổi sáng, hoặc khi tạm dừng giữa giờ bán. */
+function requireStocking(state: GameState): void {
+  if (state.phase !== 'morning') requirePhase(state, 'open');
 }
 
 function requireDayRuntime(aggregate: LiveShopAggregate): DaySessionSnapshot {
