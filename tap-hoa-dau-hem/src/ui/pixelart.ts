@@ -749,3 +749,22 @@ export const FURNITURE_SPRITES: Record<string, Sprite> = {
     '.ssssssssssssss.',
   ],
 };
+
+// Giai đoạn 3: kệ đôi khung thép (chứa gấp đôi) và quầy thu ngân 2 (máy tính tiền màu xanh dương).
+FURNITURE_SPRITES.shelf_double = FURNITURE_SPRITES.shelf.map((row) => row.replace(/[te]/g, 's').replace(/B/g, 'S'));
+FURNITURE_SPRITES.counter2 = FURNITURE_SPRITES.counter.map((row) => row.replace(/n/g, 'l'));
+
+// Phase 4 product art: reuse matching item silhouettes until bespoke sprites are drawn.
+for (const [id, source] of Object.entries({
+  banh_tet: 'banh_mi', hat_dua: 'snack', bao_li_xi: 'keo', banh_trung_thu: 'banh_quy', long_den: 'bat_lua',
+  tap_vo: 'gao', but_bi: 'bat_lua', ao_mua: 'sua_tuoi', xuc_xich_nuong_tp: 'xuc_xich', mi_ly_tp: 'mi_goi',
+  banh_mi_trung_tp: 'banh_mi', trung_luoc_tp: 'trung_ga', tra_tac_tp: 'tra_xanh', ca_phe_sua_tp: 'nuoc_ngot',
+  nuoc_mia_tp: 'nuoc_ngot', sinh_to_tp: 'sua_hop', tra_sua_tp: 'sua_hop', tra_tac_base: 'tra_xanh',
+  ca_phe_bot: 'nuoc_ngot', mia: 'banh_mi', trai_cay: 'rau_muong',
+})) PRODUCT_SPRITES[id] = PRODUCT_SPRITES[source];
+
+// Phase 4 fixtures inherit footprint-compatible cabinet art as temporary placeholders.
+for (const [id, source] of Object.entries({
+  food_grill: 'counter', hot_kettle: 'storage_rack', bread_case: 'shelf', food_table_2: 'storage_rack', food_table_4: 'counter',
+  drink_counter: 'counter', blender: 'storage_rack', sugarcane_press: 'counter', drink_table_2: 'storage_rack', generator: 'counter',
+})) FURNITURE_SPRITES[id] = FURNITURE_SPRITES[source];

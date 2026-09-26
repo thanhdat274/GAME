@@ -2,8 +2,9 @@ import Phaser from 'phaser';
 import { DATA, product } from '../core/data';
 import { questDef, questDone } from '../core/quests';
 import { startNextDay } from '../core/day';
-import { formatMoney } from '../core/state';
+import { formatClock, formatMoney, type JournalEntry } from '../core/state';
 import { G, persist } from '../game';
+import { card } from '../ui/page';
 import { dispatchLiveCommand } from '../services/liveShop';
 import { play } from '../ui/sound';
 import { Button, panel } from '../ui/widgets';
@@ -23,7 +24,10 @@ export class SummaryScene extends Phaser.Scene {
       this.scene.start('Morning');
       return;
     }
-    txt(this, W / 2, 30, `🌙 Tổng kết ngày ${sum.day}`, { size: 22, bold: true, color: HEX.cream, origin: [0.5, 0.5] });
+    const hasJournal = (sum.journal?.length ?? 0) > 0;
+    txt(this, hasJournal ? W / 2 - 40 : W / 2, 30, `🌙 Tổng kết ngày ${sum.day}`, { size: hasJournal ? 19 : 22, bold: true, color: HEX.cream, origin: [0.5, 0.5] });
+    if (hasJournal) new Button(this, W - 50, 30, { w: 84, h: 32, label: '📖 Nhật ký', size: 12, color: C.blue, onTap: () => this.showJournal(sum.journal ?? [], 0) }).setDepth(50);
+    if (s.stores.length > 1) new Button(this, 54, 30, { w: 92, h: 32, label: '🏪 Cả chuỗi', size: 11, color: C.blue, onTap: () => this.showChainSummary(sum.day) }).setDepth(50);
 
     const hasLevelUp = sum.levelUps.length > 0;
     const top = 58;
@@ -41,10 +45,15 @@ export class SummaryScene extends Phaser.Scene {
       rows.push([`Hàng hỏng${items ? `: ${items}` : ''}`, `-${formatMoney(sum.spoiledCost)}`, HEX.red]);
     }
     if (sum.electricity) rows.push(['Tiền điện', `-${formatMoney(sum.electricity)}`, HEX.red]);
+    if (sum.wages) rows.push([`Lương nhân viên${sum.wageDebt ? ` (nợ ${formatMoney(sum.wageDebt)})` : ''}`, `-${formatMoney(sum.wages)}`, HEX.red]);
+    if (sum.bonuses) rows.push(['Thưởng nhân viên', `-${formatMoney(sum.bonuses)}`, HEX.red]);
+    if (sum.theftCost) rows.push(['Mất trộm', `-${formatMoney(sum.theftCost)}`, HEX.red]);
+    if (sum.fines) rows.push(['Kẻ trộm bồi thường', `+${formatMoney(sum.fines)}`, HEX.green]);
+    if (sum.deliveryFees) rows.push(['Phí giao hàng', `+${formatMoney(sum.deliveryFees)}`, HEX.green]);
     if (sum.debtGiven) rows.push(['Cho ghi sổ', formatMoney(sum.debtGiven), '#1f5fa0']);
     if (sum.debtCollectedAmount) rows.push(['Thu nợ', `+${formatMoney(sum.debtCollectedAmount)}`, HEX.green]);
     if (sum.badDebt) rows.push(['Nợ khó đòi', `-${formatMoney(sum.badDebt)}`, HEX.red]);
-    if (sum.netProfit !== undefined && (sum.spoiledCost || sum.electricity || sum.debtCollectedAmount)) {
+    if (sum.netProfit !== undefined && (sum.spoiledCost || sum.electricity || sum.debtCollectedAmount || sum.wages || sum.theftCost)) {
       rows.push(['Lãi ròng', formatMoney(sum.netProfit), sum.netProfit >= 0 ? HEX.green : HEX.red]);
     }
     rows.push(
@@ -54,8 +63,8 @@ export class SummaryScene extends Phaser.Scene {
       ['EXP nhận được', `+${sum.expGained}`, HEX.green],
     );
     let y = top + 18;
-    const pitch = rows.length > 10 ? 22 : 28;
-    const size = rows.length > 10 ? 13 : 15;
+    const pitch = rows.length > 15 ? 18 : rows.length > 10 ? 22 : 28;
+    const size = rows.length > 15 ? 12 : rows.length > 10 ? 13 : 15;
     for (const [label, value, color] of rows) {
       txt(this, 34, y, label, { size, color: HEX.ink });
       txt(this, W - 34, y, value, { size, bold: true, color: color ?? HEX.ink, origin: [1, 0] });
@@ -68,6 +77,10 @@ export class SummaryScene extends Phaser.Scene {
     }
     if (sum.spoiledCost) {
       const t = txt(this, W / 2, y + 2, 'Mẹo: nhập ít hàng tươi hơn, hoặc bán xả hàng hết hạn trong ngày.', { size: 11, color: HEX.muted, origin: [0.5, 0], align: 'center', wrap: 290 });
+      y += t.height + 6;
+    }
+    if (sum.staffLevelUps?.length) {
+      const t = txt(this, W / 2, y + 2, `⭐ ${sum.staffLevelUps.join(' · ')}`, { size: 12, bold: true, color: '#b7411f', origin: [0.5, 0], align: 'center', wrap: 290 });
       y += t.height + 6;
     }
     for (const id of sum.achievements ?? []) {
@@ -90,7 +103,7 @@ export class SummaryScene extends Phaser.Scene {
       const byZone = new Map<string, number>();
       for (const m of missed) {
         const category = product(m.productId).category;
-        const zone = ({ dry: 'Đồ khô', snack: 'Ăn vặt', household: 'Đồ dùng', drink: 'Đồ uống', fresh: 'Đồ tươi', frozen: 'Đông lạnh', counter: 'Sau quầy' } as const)[category];
+        const zone = ({ dry: 'Đồ khô', snack: 'Ăn vặt', household: 'Đồ dùng', drink: 'Đồ uống', fresh: 'Đồ tươi', frozen: 'Đông lạnh', counter: 'Sau quầy', food: 'Đồ ăn', beverage: 'Đồ pha chế' } as const)[category];
         byZone.set(zone, (byZone.get(zone) ?? 0) + m.qty);
       }
       const busiestZone = [...byZone.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -155,5 +168,53 @@ export class SummaryScene extends Phaser.Scene {
         this.scene.start('Morning', { gift });
       },
     });
+  }
+
+  /** Tab Nhật ký: các sự việc trong ngày theo giờ game, 14 dòng mỗi trang. */
+  private showJournal(entries: JournalEntry[], page: number): void {
+    const per = 14;
+    const pages = Math.max(1, Math.ceil(entries.length / per));
+    const L = this.add.container(0, 0).setDepth(2000);
+    L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
+    L.add(panel(this, 14, 40, W - 28, H - 80));
+    L.add(txt(this, W / 2, 64, `📖 Nhật ký ngày ${G.state.lastSummary?.day ?? ''}`, { size: 18, bold: true, origin: [0.5, 0.5] }));
+    entries.slice(page * per, page * per + per).forEach((e, i) => {
+      L.add(txt(this, 26, 92 + i * 30, formatClock(e.m), { size: 12, bold: true, color: '#1f5fa0' }));
+      L.add(txt(this, 70, 92 + i * 30, e.t, { size: 12, wrap: W - 100 }));
+    });
+    const go = (p: number) => () => { L.destroy(); this.showJournal(entries, p); };
+    L.add(new Button(this, 60, H - 70, { w: 70, h: 36, label: '◀', color: C.wood, onTap: go(page - 1) }).setEnabled(page > 0));
+    L.add(txt(this, W / 2 - 50, H - 70, `${page + 1}/${pages}`, { size: 13, origin: [0.5, 0.5] }));
+    L.add(new Button(this, 140, H - 70, { w: 70, h: 36, label: '▶', color: C.wood, onTap: go(page + 1) }).setEnabled(page < pages - 1));
+    L.add(new Button(this, W - 80, H - 70, { w: 110, h: 40, label: 'Đóng', color: C.grey, onTap: () => L.destroy() }));
+  }
+
+  /** Latest per-store ledger plus an at-a-glance chain total. */
+  private showChainSummary(day: number): void {
+    persist();
+    const rows = G.state.stores.map((store) => {
+      const records = Array.isArray(store.data.analytics) ? store.data.analytics as { day: number; revenue: number; profit: number; customers: number }[] : [];
+      const record = [...records].reverse().find((item) => item.day <= day);
+      return { name: store.name, revenue: record?.revenue ?? 0, profit: record?.profit ?? 0, customers: record?.customers ?? 0, recordDay: record?.day ?? null };
+    });
+    const layer = this.add.container(0, 0).setDepth(2000);
+    layer.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.66).setInteractive());
+    layer.add(panel(this, 14, 70, W - 28, H - 140));
+    layer.add(txt(this, W / 2, 96, `🏪 Báo cáo chuỗi · ngày ${day}`, { size: 17, bold: true, origin: [0.5, 0.5] }));
+    layer.add(txt(this, 30, 130, 'Cửa hàng', { size: 10, bold: true, color: HEX.muted }));
+    layer.add(txt(this, W - 30, 130, 'Doanh thu · Lãi · Khách', { size: 10, bold: true, color: HEX.muted, origin: [1, 0] }));
+    let y = 158;
+    for (const row of rows) {
+      layer.add(card(this, 24, y, W - 48, 70, C.panel));
+      layer.add(txt(this, 34, y + 8, row.name, { size: 12, bold: true }));
+      layer.add(txt(this, 34, y + 31, row.recordDay === null ? 'Chưa có ngày bán được ghi nhận' : `Số liệu ngày ${row.recordDay}`, { size: 9, color: HEX.muted }));
+      layer.add(txt(this, W - 34, y + 17, `${formatMoney(row.revenue)}  ·  ${formatMoney(row.profit)}  ·  ${row.customers}`, { size: 10, bold: true, origin: [1, 0] }));
+      y += 78;
+    }
+    const totals = rows.reduce((sum, row) => ({ revenue: sum.revenue + row.revenue, profit: sum.profit + row.profit, customers: sum.customers + row.customers }), { revenue: 0, profit: 0, customers: 0 });
+    layer.add(panel(this, 24, y + 2, W - 48, 72, 0xe8f5e9));
+    layer.add(txt(this, 36, y + 14, 'TỔNG CHUỖI', { size: 12, bold: true, color: HEX.green }));
+    layer.add(txt(this, 36, y + 40, `${formatMoney(totals.revenue)} doanh thu  ·  ${formatMoney(totals.profit)} lãi  ·  ${totals.customers} khách`, { size: 10, bold: true, wrap: W - 72 }));
+    layer.add(new Button(this, W / 2, H - 92, { w: 100, h: 38, label: 'Đóng', color: C.grey, onTap: () => layer.destroy() }));
   }
 }

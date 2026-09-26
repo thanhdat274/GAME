@@ -1,0 +1,8 @@
+[
+  { "id": "weekly_sales", "text": "Bán 250 món hàng", "metric": "soldTotal", "target": 250, "money": 90000, "exp": 100 },
+  { "id": "weekly_customers", "text": "Phục vụ 70 khách", "metric": "served", "target": 70, "money": 85000, "exp": 90 },
+  { "id": "weekly_revenue", "text": "Đạt doanh thu 1.500.000đ", "metric": "revenue", "target": 1500000, "money": 100000, "exp": 110 },
+  { "id": "weekly_snacks", "text": "Bán 80 món ăn vặt", "metric": "soldCategory", "arg": "snack", "target": 80, "money": 85000, "exp": 90 },
+  { "id": "weekly_drinks", "text": "Bán 80 món đồ uống", "metric": "soldCategory", "arg": "drink", "target": 80, "money": 90000, "exp": 100 },
+  { "id": "weekly_household", "text": "Bán 50 món đồ dùng", "metric": "soldCategory", "arg": "household", "target": 50, "money": 90000, "exp": 100 }
+]

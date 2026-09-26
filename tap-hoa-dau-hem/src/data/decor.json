@@ -6,5 +6,10 @@
   { "id": "than_tai", "name": "Bàn thờ Thần Tài", "icon": "🏮", "slot": "wall", "cost": 150000, "attraction": 25, "unlockLevel": 8 },
   { "id": "may_quat", "name": "Quạt trần", "icon": "🌀", "slot": "wall", "cost": 90000, "attraction": 12, "unlockLevel": 9 },
   { "id": "tien_tai", "name": "Mèo thần tài vẫy tay", "icon": "🐈", "slot": "wall", "cost": 0, "attraction": 15, "unlockLevel": 1, "exclusive": true },
-  { "id": "meo_muop", "name": "Mèo mướp nằm quầy", "icon": "🐱", "slot": "counter", "cost": 0, "attraction": 5, "unlockLevel": 1, "exclusive": true, "cat": true }
+  { "id": "meo_muop", "name": "Mèo mướp nằm quầy", "icon": "🐱", "slot": "counter", "cost": 0, "attraction": 5, "unlockLevel": 1, "exclusive": true, "cat": true },
+  { "id": "mai_vang", "name": "Cây mai vàng", "icon": "🌼", "slot": "wall", "cost": 0, "attraction": 18, "unlockLevel": 21, "exclusive": true },
+  { "id": "den_mau_mua_he", "name": "Dây đèn mùa hè", "icon": "🎐", "slot": "wall", "cost": 0, "attraction": 12, "unlockLevel": 21, "exclusive": true },
+  { "id": "long_den_mua", "name": "Dây lồng đèn", "icon": "🏮", "slot": "wall", "cost": 0, "attraction": 16, "unlockLevel": 21, "exclusive": true },
+  { "id": "bang_khai_giang", "name": "Bảng khai giảng", "icon": "🎒", "slot": "wall", "cost": 0, "attraction": 10, "unlockLevel": 21, "exclusive": true },
+  { "id": "co_bong_da", "name": "Cờ mùa bóng đá", "icon": "⚽", "slot": "wall", "cost": 0, "attraction": 15, "unlockLevel": 22, "exclusive": true }
 ]

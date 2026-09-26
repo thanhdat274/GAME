@@ -1,0 +1,14 @@
+{
+  "daysPerMonth": 10,
+  "monthsPerYear": 12,
+  "seasons": [
+    { "id": "spring", "name": "Xuân", "months": [1, 2, 3, 4] },
+    { "id": "summer", "name": "Hè", "months": [5, 6, 7] },
+    { "id": "autumn", "name": "Thu", "months": [8, 9, 10] },
+    { "id": "winter", "name": "Đông", "months": [11, 12] }
+  ],
+  "seasonDemand": {
+    "summer": { "drink": 1.8, "frozen": 2 },
+    "winter": { "dry": 1.3 }
+  }
+}

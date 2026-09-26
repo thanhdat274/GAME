@@ -3,5 +3,17 @@
   { "id": "fridge", "name": "Tủ lạnh", "icon": "🧊", "kind": "fridge", "w": 1, "h": 2, "slots": 6, "cost": 120000, "unlockLevel": 5, "power": 5000 },
   { "id": "freezer", "name": "Tủ đông", "icon": "❄️", "kind": "freezer", "w": 2, "h": 1, "slots": 4, "cost": 180000, "unlockLevel": 9, "power": 8000 },
   { "id": "storage_rack", "name": "Kệ kho", "icon": "📦", "kind": "storage", "w": 1, "h": 1, "slots": 0, "cost": 50000, "unlockLevel": 8, "power": 0, "storageCells": 10 },
-  { "id": "counter", "name": "Quầy thu ngân", "icon": "🧾", "kind": "counter", "w": 2, "h": 1, "slots": 0, "cost": 0, "unlockLevel": 1, "power": 0, "fixed": true }
+  { "id": "shelf_double", "name": "Kệ đôi", "icon": "🗃️", "kind": "shelf", "w": 2, "h": 1, "slots": 6, "cost": 160000, "unlockLevel": 15, "power": 0, "capacityMul": 2, "requiresPlot": "D" },
+  { "id": "counter", "name": "Quầy thu ngân", "icon": "🧾", "kind": "counter", "w": 2, "h": 1, "slots": 0, "cost": 0, "unlockLevel": 1, "power": 0, "fixed": true },
+  { "id": "counter2", "name": "Quầy thu ngân 2", "icon": "🧾", "kind": "counter", "w": 2, "h": 1, "slots": 0, "cost": 300000, "unlockLevel": 15, "power": 2000, "limit": 1, "requiresPlot": "D" },
+  { "id": "food_grill", "name": "Bếp nướng", "icon": "🔥", "kind": "food", "w": 2, "h": 1, "slots": 0, "cost": 260000, "unlockLevel": 21, "power": 5000, "limit": 1, "requiresPlot": "E" },
+  { "id": "hot_kettle", "name": "Ấm nước nóng", "icon": "♨️", "kind": "food", "w": 1, "h": 1, "slots": 0, "cost": 90000, "unlockLevel": 21, "power": 3000, "limit": 1, "requiresPlot": "E" },
+  { "id": "bread_case", "name": "Tủ bánh mì", "icon": "🥖", "kind": "food", "w": 2, "h": 1, "slots": 0, "cost": 180000, "unlockLevel": 21, "power": 1000, "limit": 1, "requiresPlot": "E" },
+  { "id": "food_table_2", "name": "Bàn 2 chỗ", "icon": "🪑", "kind": "seating", "w": 1, "h": 1, "slots": 0, "cost": 50000, "unlockLevel": 23, "power": 0, "requiresPlot": "E" },
+  { "id": "food_table_4", "name": "Bàn 4 chỗ", "icon": "🪑", "kind": "seating", "w": 2, "h": 1, "slots": 0, "cost": 90000, "unlockLevel": 23, "power": 0, "requiresPlot": "E" },
+  { "id": "drink_counter", "name": "Quầy nước", "icon": "🥤", "kind": "drink", "w": 2, "h": 1, "slots": 0, "cost": 300000, "unlockLevel": 25, "power": 2000, "limit": 1, "requiresPlot": "F" },
+  { "id": "blender", "name": "Máy xay", "icon": "🌀", "kind": "drink", "w": 1, "h": 1, "slots": 0, "cost": 180000, "unlockLevel": 25, "power": 4000, "limit": 1, "requiresPlot": "F" },
+  { "id": "sugarcane_press", "name": "Máy ép mía", "icon": "🎋", "kind": "drink", "w": 2, "h": 1, "slots": 0, "cost": 240000, "unlockLevel": 25, "power": 5000, "limit": 1, "requiresPlot": "F" },
+  { "id": "drink_table_2", "name": "Bàn nước 2 chỗ", "icon": "🪑", "kind": "seating", "w": 1, "h": 1, "slots": 0, "cost": 50000, "unlockLevel": 25, "power": 0, "requiresPlot": "F" },
+  { "id": "generator", "name": "Máy phát điện", "icon": "⚡", "kind": "generator", "w": 2, "h": 1, "slots": 0, "cost": 360000, "unlockLevel": 21, "power": 0, "limit": 1 }
 ]

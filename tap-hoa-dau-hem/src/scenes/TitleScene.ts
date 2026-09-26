@@ -8,10 +8,13 @@ import { Button, dialog, toast, type DialogButton } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { currentAccount, deleteCurrentAccount, signInWithGoogle, signOutGoogle, type AccountUser } from '../services/auth';
 import { chromeIntentUrl, detectInAppBrowser } from '../services/inAppBrowser';
-import { cloudSaveEnabled, firebaseConfigured } from '../services/firebase';
+import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
 import { getPendingConflict, onSyncStatus, resolveConflict, startSync, syncNow, type SyncStatus } from '../services/sync';
 import { loadDiscarded, saveDiscarded } from '../services/cloudSave';
 import { joinLiveShop, liveShopEnabled } from '../services/liveShop';
+import { applyOfflineIncome, offlineElapsed, offlineUnlocked, type OfflineReport } from '../core/offline';
+import { formatMoney } from '../core/state';
+import { getServerNow } from '../services/serverTime';
 
 const INTRO = [
   { icon: '👵', text: 'Cháu ơi, bà già rồi, đứng tiệm không nổi nữa...' },
@@ -27,6 +30,7 @@ export class TitleScene extends Phaser.Scene {
   private syncDot?: Phaser.GameObjects.Graphics;
   private syncMessage: string | null = null;
   private conflictOpen = false;
+  private continuing = false;
 
   constructor() {
     super('Title');
@@ -35,11 +39,12 @@ export class TitleScene extends Phaser.Scene {
   create(data?: { login?: boolean }): void {
     setPlayClockRunning(false);
     this.conflictOpen = false;
+    this.continuing = false;
     this.account = null;
     setupCamera(this);
 
     // Vẽ toàn bộ phối cảnh tiệm tạp hóa hoài niệm (bầu trời, mây trôi, ánh nắng, tiệm cổ xưa, dây đèn vàng, mèo tam thể, vỉa hè)
-    drawStorefront(this, W / 2, 352);
+    drawStorefront(this, W / 2, 352, G.state.land.includes('D'));
 
     // Nút Âm thanh nhanh góc trên bên trái
     const soundBtnG = this.add.graphics();
@@ -102,8 +107,14 @@ export class TitleScene extends Phaser.Scene {
       });
 
       if (firebaseConfigured()) {
-        void startSync();
-        void this.refreshAccount();
+        // On redirect-capable browsers (notably iOS Safari), finish the OAuth
+        // callback before checking the persisted user. Running both in parallel
+        // can let currentAccount() observe the pre-redirect null state and leave
+        // the title pill showing “Đăng nhập” until the player taps it again.
+        void (async () => {
+          await startSync();
+          await this.refreshAccount();
+        })();
       }
 
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribeStatus);
@@ -518,14 +529,54 @@ export class TitleScene extends Phaser.Scene {
     ] });
   }
 
-  private continueGame(): void {
+  private async continueGame(): Promise<void> {
+    if (this.continuing) return;
     if (G.liveSnapshot) {
       void this.joinSharedShop();
       return;
     }
+    this.continuing = true;
+    let now = Date.now();
+    let serverElapsed: number | undefined;
+    if (hasAuthHint() && G.state.lastSeen > 0) {
+      try {
+        now = await getServerNow();
+        serverElapsed = now - G.state.lastSeen;
+      } catch {
+        // If offline, preserve local play by falling back to the saved device time.
+      }
+    }
+    const elapsed = offlineElapsed(G.state, now, serverElapsed);
+    const report = elapsed !== null && offlineUnlocked(G.state)
+      ? applyOfflineIncome(G.state, elapsed)
+      : null;
+    // Save processed earnings. When less than one offline day elapsed, keep the
+    // previous lastSeen so short absences accumulate instead of being discarded.
+    if (report) persist();
     setPlayClockRunning(true);
     if (G.state.settings.sound) startMusic();
+    if (report) {
+      this.showOfflineReport(report);
+      return;
+    }
     this.scene.start(sceneForPhase());
+  }
+
+  private showOfflineReport(report: OfflineReport): void {
+    const details = [
+      `Bạn vắng mặt ${report.hours.toFixed(1)} giờ · tiệm tự vận hành ${report.days} ngày.`,
+      `Doanh thu ${formatMoney(report.revenue)} · hàng nhập ${formatMoney(report.cogs)}.`,
+      `Lương ${formatMoney(report.wages)} · điện ${formatMoney(report.electricity)}.`,
+      `Lãi ròng ${formatMoney(report.profit)}.`,
+      ...(report.outOfStockDay !== null ? [`Tiệm gần hết hàng từ ngày ${report.outOfStockDay}.`] : []),
+      ...(Object.values(report.spoiled).some((qty) => qty > 0) ? [`Hàng hỏng: ${Object.values(report.spoiled).reduce((a, b) => a + b, 0)} món.`] : []),
+    ].join('\n');
+    dialog(this, {
+      icon: '🌙',
+      title: 'Trong lúc bạn vắng mặt…',
+      body: details,
+      buttons: [{ label: 'Vào tiệm', color: C.green, onTap: () => this.scene.start(sceneForPhase()) }],
+    });
   }
 
   private askNewGame(saved: boolean): void {

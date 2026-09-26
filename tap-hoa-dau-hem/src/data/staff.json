@@ -1,0 +1,37 @@
+{
+  "roles": [
+    { "id": "cashier", "name": "Thu ngân", "icon": "🧾", "unlockFeature": "staff", "mainStat": "accuracy" },
+    { "id": "refill", "name": "Bổ sung kệ", "icon": "🧺", "unlockFeature": "refill_staff", "mainStat": "speed" },
+    { "id": "stocker", "name": "Kho", "icon": "📦", "unlockFeature": "stocker", "mainStat": "stamina" },
+    { "id": "delivery", "name": "Giao hàng", "icon": "🛵", "unlockFeature": "delivery", "mainStat": "speed" },
+    { "id": "chef", "name": "Đầu bếp", "icon": "👩‍🍳", "unlockFeature": "chef", "mainStat": "speed" },
+    { "id": "barista", "name": "Pha chế", "icon": "🧋", "unlockFeature": "barista", "mainStat": "accuracy" },
+    { "id": "branch_manager", "name": "Quản lý chi nhánh", "icon": "🏪", "unlockFeature": "branch_manager", "mainStat": "stamina" }
+  ],
+  "personalities": [
+    { "id": "cham_chi", "name": "Chăm chỉ", "note": "Ít mệt lòng khi làm nhiều ngày", "overworkMul": 0.4, "scoldMul": 1, "gainMul": 1, "accuracyMod": 0, "dailyMood": 0 },
+    { "id": "coc_tinh", "name": "Cọc tính", "note": "Bị nhắc nhở là giận lâu", "overworkMul": 1, "scoldMul": 2, "gainMul": 1, "accuracyMod": 0, "dailyMood": 0 },
+    { "id": "hay_quen", "name": "Hay quên", "note": "Hay sai nhưng dễ vui", "overworkMul": 1, "scoldMul": 1, "gainMul": 1.5, "accuracyMod": -2, "dailyMood": 0 },
+    { "id": "vui_ve", "name": "Vui vẻ", "note": "Tâm trạng tự tốt lên mỗi ngày", "overworkMul": 1, "scoldMul": 1, "gainMul": 1, "accuracyMod": 0, "dailyMood": 3 },
+    { "id": "diem_tinh", "name": "Điềm tĩnh", "note": "Không có gì đặc biệt", "overworkMul": 1, "scoldMul": 1, "gainMul": 1, "accuracyMod": 0, "dailyMood": 0 }
+  ],
+  "fixedCandidate": {
+    "id": "be_lan", "name": "Bé Lan", "personality": "vui_ve", "role": "cashier",
+    "stats": { "speed": 5, "accuracy": 6, "friendly": 6, "stamina": 5 }, "wage": 25000,
+    "look": { "shirt": "#e57373", "pants": "#37474f", "hair": "#2b1b12", "skin": "#f2c9a0" }
+  },
+  "names": [
+    "Anh Tuấn", "Chị Hằng", "Bé Ngọc", "Anh Khoa", "Chị Thảo", "Anh Phúc", "Cô Mai", "Anh Dũng",
+    "Chị Vy", "Bé Hân", "Anh Long", "Chị Trang", "Anh Nam", "Chị Yến", "Anh Hiếu", "Chị My"
+  ],
+  "looks": [
+    { "shirt": "#4fc3f7", "pants": "#263238", "hair": "#111111", "skin": "#e8b98a" },
+    { "shirt": "#81c784", "pants": "#3e2723", "hair": "#4e342e", "skin": "#f5d0b0" },
+    { "shirt": "#ffb74d", "pants": "#1e3a8a", "hair": "#222222", "skin": "#c68e5c" },
+    { "shirt": "#ba68c8", "pants": "#37474f", "hair": "#3e2723", "skin": "#f2c9a0" },
+    { "shirt": "#f06292", "pants": "#263238", "hair": "#5d4037", "skin": "#d9a877" },
+    { "shirt": "#a1887f", "pants": "#1b1b1b", "hair": "#111111", "skin": "#e8b98a" },
+    { "shirt": "#fff176", "pants": "#4e342e", "hair": "#2b1b12", "skin": "#f5d0b0" }
+  ],
+  "statRange": { "min": 2, "max": 9 }
+}

@@ -1,7 +1,8 @@
 import { DATA, furniture, hasFeature, product, supplier, type Product } from './data';
 import { Rng, daySeed } from './rng';
+import { EffectStack } from './effects';
 import {
-  shelfKind, shelfUsable, slotEarliestExp, slotLots, sortLots, totalQty, unlockedProducts,
+  fixtureOfShelf, shelfKind, shelfUsable, slotEarliestExp, slotLots, sortLots, totalQty, unlockedProducts,
   usableShelves, warehouseTotals, type GameState, type Lot, type ShelfZone, type Slot, type SlotLot,
 } from './state';
 
@@ -114,7 +115,8 @@ export function unitCost(state: GameState | null, productId: string, supplierId 
   const base = product(productId).cost;
   if (!state || !hasFeature(state.level, 'anh_ba')) return base;
   const s = supplier(supplierId);
-  const raw = base * priceFactor(productId, day) * (1 - s.discount);
+  const effects = state ? EffectStack.forDay(state.day, state.calendarStartMonth, state.calendarStartYear, state.activeEvents) : null;
+  const raw = base * priceFactor(productId, day) * (1 - s.discount) * (effects?.multiply('wholesaleMul') ?? 1);
   return Math.max(100, Math.round(raw / 100) * 100);
 }
 
@@ -159,7 +161,7 @@ export function checkCart(state: GameState, cart: Cart, supplierId = 'co_tu'): B
   const total = cartTotal(cart, state, supplierId);
   const s = supplier(supplierId);
   const cells = warehouseCellsUsed(warehouseAfter(state, cart));
-  const unlocked = new Set(unlockedProducts(state.level).map((p) => p.id));
+  const unlocked = new Set(unlockedProducts(state.level, state).map((p) => p.id));
   const items = Object.entries(cart).filter(([, q]) => q > 0);
   if (items.length === 0) return { ok: false, reason: 'empty', total, cells, missing: 0 };
   if (!supplierUnlocked(state, supplierId) || items.some(([id]) => !unlocked.has(id))) return { ok: false, reason: 'locked', total, cells, missing: 0 };
@@ -272,6 +274,18 @@ export function expireLots(state: GameState, day: number): Record<string, number
       slot.clearance = undefined;
     }
   }
+  for (const slot of state.counter) {
+    if (!slot.productId) continue;
+    const lots = slotLots(slot);
+    const keep = lots.filter((l) => l.exp === null || l.exp > day);
+    const lost = slot.qty - keep.reduce((sum, l) => sum + l.qty, 0);
+    if (lost > 0) {
+      note(slot.productId, lost);
+      slot.lots = keep;
+      slot.qty -= lost;
+      if (slot.qty <= 0) { slot.productId = null; slot.lots = []; }
+    }
+  }
   return spoiled;
 }
 
@@ -295,7 +309,34 @@ export function setClearance(state: GameState, shelf: number, slot: number, pct:
 
 /** Tiền điện mỗi ngày của các thiết bị đang đặt. */
 export function electricityCost(state: GameState): number {
-  return state.fixtures.reduce((sum, f) => sum + furniture(f.type).power, 0);
+  const effects = EffectStack.forDay(state.day, state.calendarStartMonth, state.calendarStartYear, state.activeEvents);
+  if (effects.powerIsOut()) return state.fixtures.some((f) => f.type === 'generator') ? 10_000 : 0;
+  return Math.round(state.fixtures.reduce((sum, f) => sum + furniture(f.type).power, 0) * effects.multiply('electricityMul'));
+}
+
+/** Cúp điện quá ba giờ làm hỏng hàng đông lạnh, trừ khi máy phát đang hoạt động. */
+export function spoilFrozenStock(state: GameState): number {
+  if (state.fixtures.some((f) => f.type === 'generator')) return 0;
+  let spoiled = 0;
+  const remove = (id: string, qty: number) => {
+    if (product(id).requiresCold !== 'freezer' || qty <= 0) return;
+    spoiled += qty;
+    state.today.spoiled[id] = (state.today.spoiled[id] ?? 0) + qty;
+    state.today.spoiledCost += product(id).cost * qty;
+  };
+  state.warehouse = state.warehouse.filter((lot) => {
+    if (product(lot.productId).requiresCold !== 'freezer') return true;
+    remove(lot.productId, lot.qty);
+    return false;
+  });
+  for (const row of state.shelves) for (const slot of row) {
+    if (!slot.productId || product(slot.productId).requiresCold !== 'freezer') continue;
+    remove(slot.productId, slot.qty);
+    slot.productId = null;
+    slot.qty = 0;
+    slot.lots = [];
+  }
+  return spoiled;
 }
 
 // ---------- Ô kệ ----------
@@ -339,8 +380,10 @@ function slotAt(state: GameState, shelf: number, slot: number) {
   return s;
 }
 
-function slotCapacity(): number {
-  return DATA.balance.slotCapacity;
+/** Sức chứa mỗi ô của kệ (kệ đôi chứa gấp đôi). */
+export function shelfCapacity(state: GameState, shelf: number): number {
+  const f = fixtureOfShelf(state, shelf);
+  return DATA.balance.slotCapacity * (f ? furniture(f.type).capacityMul ?? 1 : 1);
 }
 
 /** Trả toàn bộ hàng của ô về kho (giữ hạn dùng). */
@@ -384,9 +427,13 @@ export function placeError(state: GameState, shelf: number, productId: string): 
 }
 
 export function zoneFill(state: GameState, zone: Exclude<ShelfZone, null>): { fill: number; alert: ZoneAlert; qty: number; capacity: number } {
-  const slots = usableShelves(state).flatMap((index) => zoneOf(state, index) === zone ? state.shelves[index] : []);
+  let capacity = 0;
+  const slots = usableShelves(state).flatMap((index) => {
+    if (zoneOf(state, index) !== zone) return [];
+    capacity += state.shelves[index].filter((s) => s.productId !== null).length * shelfCapacity(state, index);
+    return state.shelves[index];
+  });
   const active = slots.filter((s) => s.productId !== null);
-  const capacity = active.length * slotCapacity();
   const qty = active.reduce((sum, s) => sum + s.qty, 0);
   const fill = capacity ? qty / capacity : 1;
   const alert: ZoneAlert = fill < DATA.balance.zoneCriticalThreshold ? 'critical' : fill < DATA.balance.zoneLowThreshold ? 'low' : 'ok';
@@ -433,7 +480,7 @@ export function refillSlot(state: GameState, shelf: number, slot: number): numbe
   const s = slotAt(state, shelf, slot);
   if (!s.productId) return 0;
   let got = 0;
-  for (const lot of takeLots(state, s.productId, slotCapacity() - s.qty)) {
+  for (const lot of takeLots(state, s.productId, shelfCapacity(state, shelf) - s.qty)) {
     putIntoSlot(s, lot.qty, lot.exp);
     got += lot.qty;
   }
@@ -443,7 +490,7 @@ export function refillSlot(state: GameState, shelf: number, slot: number): numbe
 export function canRefill(state: GameState, shelf: number, slot: number): boolean {
   const s = state.shelves[shelf]?.[slot];
   if (!s || !s.productId || !shelfUsable(state, shelf)) return false;
-  return s.qty < slotCapacity() && state.warehouse.some((lot) => lot.productId === s.productId && lot.qty > 0);
+  return s.qty < shelfCapacity(state, shelf) && state.warehouse.some((lot) => lot.productId === s.productId && lot.qty > 0);
 }
 
 /**
@@ -605,7 +652,7 @@ export function suggestedTarget(state: GameState, p: Product): number {
  * tỉ lệ còn thiếu của từng món, để không món nào bị bỏ trống hoàn toàn. Bỏ qua món chưa có tủ phù hợp.
  */
 export function suggestCart(state: GameState, supplierId = 'co_tu'): Cart {
-  const items = unlockedProducts(state.level).filter((p) => !p.behindCounter && hasPlaceFor(state, p)).map((p) => {
+  const items = unlockedProducts(state.level, state).filter((p) => !p.behindCounter && hasPlaceFor(state, p)).map((p) => {
     const target = suggestedTarget(state, p);
     return { p, target, want: Math.max(0, target - totalQty(state, p.id)), blocked: false };
   });

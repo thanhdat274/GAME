@@ -56,3 +56,10 @@ export function ratingSpawnMultiplier(avg: number): number {
   if (avg >= 1.75) return 0.9;
   return 0.8;
 }
+
+/** Hệ số lượng khách theo level (tiệm nổi tiếng dần ở giai đoạn 3); mặc định 1. */
+export function trafficMultiplier(level: number): number {
+  let mul = 1;
+  for (const l of DATA.levels.levels) if (l.level <= level && l.traffic !== undefined) mul = l.traffic;
+  return mul;
+}

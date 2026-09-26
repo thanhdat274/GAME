@@ -43,7 +43,7 @@ export function keepChance(state: GameState, productId: string, type: CustomerTy
 
 /** Giá trung bình thấp hơn giá gợi ý thì khách tới nhiều hơn (tối đa +10%). */
 export function cheapSpawnMultiplier(state: GameState): number {
-  const items = unlockedProducts(state.level).filter((p) => !p.behindCounter);
+  const items = unlockedProducts(state.level, state).filter((p) => !p.behindCounter);
   if (!items.length) return 1;
   const avg = items.reduce((sum, p) => sum + priceRatio(state, p.id), 0) / items.length;
   if (avg >= 1) return 1;

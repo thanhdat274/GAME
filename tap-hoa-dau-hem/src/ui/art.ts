@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { CustomerType, Product } from '../core/data';
+import type { CustomerType, Look, Product } from '../core/data';
 import { FURNITURE_SPRITES, PALETTE, PRODUCT_SPRITES, type Sprite } from './pixelart';
 import { C, H, HEX, W, emoji, txt, ZOOM } from './theme';
 import { play } from './sound';
@@ -68,6 +68,18 @@ export function customerTexture(scene: Phaser.Scene, t: CustomerType, frame: 0 |
 export function customerSprite(scene: Phaser.Scene, x: number, y: number, t: CustomerType): Phaser.GameObjects.Image {
   customerTexture(scene, t, 1);
   return scene.add.image(x, y, customerTexture(scene, t)).setOrigin(0.5, 1).setScale(1 / ZOOM);
+}
+
+/** Loại "khách" ảo cho nhân viên để dùng lại bộ vẽ nhân vật pixel (mỗi người một ngoại hình). */
+export function staffType(p: { id: string; name: string; look: Look }): CustomerType {
+  return {
+    id: `staff_${p.id}`, name: p.name, prefs: {}, patience: 0, maxItems: 0, tipMul: 0, counterRequestChance: 0, weight: 0,
+    shirt: p.look.shirt, pants: p.look.pants, hair: p.look.hair, skin: p.look.skin,
+  };
+}
+
+export function staffSprite(scene: Phaser.Scene, x: number, y: number, p: { id: string; name: string; look: Look }): Phaser.GameObjects.Image {
+  return customerSprite(scene, x, y, staffType(p));
 }
 
 /** Đổi khung hình đi bộ của khách (gọi theo nhịp khi đang di chuyển). */
@@ -220,7 +232,7 @@ export function drawShopInterior(scene: Phaser.Scene, top: number, floorY: numbe
 }
 
 /** Mặt tiền tiệm cho màn tiêu đề: phong cách hoài niệm Sài Gòn/Việt Nam xưa. */
-export function drawStorefront(scene: Phaser.Scene, cx = W / 2, baseY = 352): void {
+export function drawStorefront(scene: Phaser.Scene, cx = W / 2, baseY = 352, miniMart = false): void {
   // 1. Bầu trời hoàng hôn & ánh nắng ấm áp
   const sky = scene.add.graphics();
   sky.fillGradientStyle(0xeb6434, 0xeb6434, 0xfcb758, 0xfce18b, 1).fillRect(0, 0, W, baseY);
@@ -480,16 +492,16 @@ export function drawStorefront(scene: Phaser.Scene, cx = W / 2, baseY = 352): vo
     origin: [0.5, 0.5],
   });
 
-  txt(scene, cx, signBoxY + 33, 'TẠP HÓA ĐẦU HẺM', {
-    size: 24,
+  txt(scene, cx, signBoxY + 33, miniMart ? 'MINI MART ĐẦU HẺM' : 'TẠP HÓA ĐẦU HẺM', {
+    size: miniMart ? 22 : 24,
     bold: true,
     color: '#fff4ba',
     stroke: '#480b06',
     origin: [0.5, 0.5],
   });
 
-  txt(scene, cx, signBoxY + 49, 'Nhập hàng · Bày kệ · Bán hàng · Thối tiền', {
-    size: 10,
+  txt(scene, cx, signBoxY + 49, miniMart ? 'Mua sắm tiện lợi · Giao hàng tận nhà' : 'Nhập hàng · Bày kệ · Bán hàng · Thối tiền', {
+    size: miniMart ? 9 : 10,
     color: '#ffebcc',
     origin: [0.5, 0.5],
   });

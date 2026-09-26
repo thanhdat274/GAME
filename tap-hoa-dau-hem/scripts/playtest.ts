@@ -8,7 +8,7 @@ import { makeChange } from '../src/core/change';
 import { DATA, product } from '../src/core/data';
 import { DaySession, endDay, openShop, startNextDay, type LeaveReason } from '../src/core/day';
 import { Rng } from '../src/core/rng';
-import { buyFixture, checkPaths, plotStatus, sellValue, unlockPlot } from '../src/core/layout';
+import { placeAnywhere, plotStatus, sellValue, unlockPlot } from '../src/core/layout';
 import { createNewGame, formatMoney, totalQty, unlockedProducts, usableShelves, type GameState, warehouseQty } from '../src/core/state';
 import { assignCounterSlot, autoArrange, buyStock, checkCart, nextWarehouseTier, stowHolding, suggestCart, upgradeWarehouse } from '../src/core/stock';
 
@@ -49,20 +49,7 @@ interface RunStats {
   netProfits: number[];
 }
 
-/** Đặt nội thất vào chỗ trống đầu tiên hợp lệ mà không chặn lối đi. */
-function placeSomewhere(s: GameState, type: string): boolean {
-  for (let y = 0; y < DATA.land.rows; y++) for (let x = 0; x < DATA.land.cols; x++) for (const rot of [0, 1] as const) {
-    const money = s.money;
-    if (buyFixture(s, type, x, y, rot) !== 'ok') continue;
-    if (checkPaths(s).ok) return true;
-    // Chặn lối đi: hoàn tác.
-    const f = s.fixtures.pop()!;
-    if (f.shelf !== undefined) s.shelves[f.shelf] = s.shelves[f.shelf].map(() => ({ productId: null, qty: 0 }));
-    s.nextUid--;
-    s.money = money;
-  }
-  return false;
-}
+const placeSomewhere = placeAnywhere;
 
 /** Chiến lược mở rộng hợp lý: mở đất khi dư vốn, mua tủ lạnh/tủ đông, thêm kệ, nâng kho. */
 function expand(s: GameState): void {
@@ -157,7 +144,7 @@ function playDay(s: GameState, bot: Bot, rng: Rng, stats: RunStats): void {
 function run(bot: Bot, days: number, seed: number): RunStats {
   const rng = new Rng(seed);
   const s = createNewGame();
-  const stats: RunStats = { levelDay: {}, profits: [], served: 0, left: { patience: 0, nothing: 0 }, grandma: 0, finalMoney: 0, tips: 0, freshSold: 0, freshSpoiled: 0, netProfits: [] };
+  const stats: RunStats = { levelDay: {}, profits: [], served: 0, left: { patience: 0, nothing: 0, thief: 0 }, grandma: 0, finalMoney: 0, tips: 0, freshSold: 0, freshSpoiled: 0, netProfits: [] };
   for (let i = 0; i < days; i++) {
     const before = s.money;
     stowHolding(s);

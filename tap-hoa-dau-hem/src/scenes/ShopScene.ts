@@ -1,16 +1,19 @@
 import Phaser from 'phaser';
 import type { Customer } from '../core/customers';
 import type { CustomerType } from '../core/data';
-import { DATA, product, type Category } from '../core/data';
-import { DaySession, endDay } from '../core/day';
+import { DATA, hasFeature, product, type Category } from '../core/data';
+import { DaySession, endDay, runDayHeadless } from '../core/day';
+import { orderShortfall, orderUnits, tripSeconds, type PhoneOrder } from '../core/delivery';
+import { roleDef, moodLabel } from '../core/staff';
 import { canGiveCredit } from '../core/ledger';
 import { claimQuest, questDef, questDone, questProgress, questsUnlocked } from '../core/quests';
 import { formatClock, formatMoney, warehouseQty } from '../core/state';
 import { orderTotal } from '../core/customers';
+import { calendarDate } from '../core/calendar';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand, startLivePulses, stopLivePulses, suspendLiveShop } from '../services/liveShop';
 import { cloudSaveEnabled } from '../services/firebase';
-import { bakeStatic, bill, customerSprite, drawShopInterior, productIcon, setWalkFrame } from '../ui/art';
+import { bakeStatic, bill, customerSprite, drawShopInterior, productIcon, setWalkFrame, staffSprite } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
 import { ShelfView } from '../ui/shelves';
 import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sound';
@@ -25,7 +28,7 @@ const PANEL_Y = 398;
 const QUEUE_X = [78, 150, 222, 294, 330];
 const DOOR_X = W + 16;
 const CUSTOMER_SCALE = 1.5;
-type SaleZone = Exclude<Category, 'counter'>;
+type SaleZone = Exclude<Category, 'counter' | 'food' | 'beverage'>;
 const ZONE_X: Record<SaleZone, number> = { dry: 60, snack: 175, household: 290, drink: 118, fresh: 232, frozen: 320 };
 const ZONE_BUTTON: Record<SaleZone, string> = { dry: 'Nạp đồ khô', snack: 'Nạp ăn vặt', household: 'Nạp đồ dùng', drink: 'Nạp đồ uống', fresh: 'Nạp đồ tươi', frozen: 'Nạp đông lạnh' };
 
@@ -68,6 +71,14 @@ export class ShopScene extends Phaser.Scene {
   private questsDoneSeen = new Set<string>();
   private renderAcc = 0;
   private ending = false;
+  /** Nhân viên đứng quầy và huy hiệu nhân viên khác trên mặt quầy. */
+  private staffLayer!: Phaser.GameObjects.Container;
+  private cashierX = new Map<string, number>();
+  private phoneBtn: Button | null = null;
+  private ordersBtn: Button | null = null;
+  private managerStatus: Phaser.GameObjects.Text | null = null;
+  private weatherFx: Phaser.GameObjects.Graphics | null = null;
+  private weatherFxAcc = 0;
 
   constructor() {
     super('Shop');
@@ -95,6 +106,7 @@ export class ShopScene extends Phaser.Scene {
 
     // Tường, sàn gạch và quầy là hình tĩnh: gộp vào RenderTexture để giảm chi phí vẽ mỗi khung hình.
     bakeStatic(this, [drawShopInterior(this, HUD_H, FLOOR_Y, PANEL_Y)], 0);
+    this.drawDayEffects(s);
     this.shelves = new ShelfView(this, SHELF_TOP, {
       onSlotTap: (r, c) => this.onSlotTap(r, c),
       onRefill: (r, c) => {
@@ -110,6 +122,12 @@ export class ShopScene extends Phaser.Scene {
     this.addZoneRefillButtons();
     this.hud = new Hud(this, s, { onPause: () => this.pause() });
     this.panelLayer = this.add.container(0, 0).setDepth(300);
+    this.staffLayer = this.add.container(0, 0).setDepth(205);
+    this.cashierX.clear();
+    this.phoneBtn = null;
+    this.ordersBtn = null;
+    this.managerStatus = null;
+    this.drawStaff();
 
     this.wireEvents();
     this.time.addEvent({
@@ -136,6 +154,43 @@ export class ShopScene extends Phaser.Scene {
     });
     if (s.settings.sound) startMusic();
     if (s.clock > DATA.balance.openMinute + 5) toast(this, `Tiếp tục bán lúc ${formatClock(s.clock)}`);
+  }
+
+  /** Event/season artwork is created only for the current day; no seasonal textures are loaded on ordinary days. */
+  private drawDayEffects(state: typeof G.state): void {
+    const events = state.activeEvents.filter((event) => event.day <= state.day && event.endsDay >= state.day);
+    if (events.some((event) => event.id === 'power_outage')) {
+      this.add.rectangle(W / 2, H / 2, W, H, 0x171521, 0.42).setDepth(190).setName('blackout-overlay');
+      this.add.text(W - 24, HUD_H + 18, '⚡ CÚP ĐIỆN', { fontFamily: 'sans-serif', fontSize: '10px', color: '#ffe0a3', backgroundColor: '#302833', padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(191);
+    }
+    if (events.some((event) => event.id === 'heavy_rain')) {
+      this.weatherFx = this.add.graphics().setDepth(189).setAlpha(0.65);
+    }
+    const date = calendarDate(state.day, { month: state.calendarStartMonth, year: state.calendarStartYear });
+    const seasonal = date.month === 1 ? { label: '✿', color: 0xffce58 }
+      : date.month === 5 || date.month === 6 || date.month === 7 ? { label: '☀', color: 0xffe082 }
+        : date.month === 8 ? { label: '☾', color: 0xffdc81 }
+          : date.month === 9 ? { label: '✎', color: 0xffe3a3 }
+            : null;
+    if (seasonal) {
+      const trim = this.add.graphics().setDepth(1);
+      trim.fillStyle(seasonal.color, 0.85).fillCircle(14, HUD_H + 22, 9);
+      this.add.text(14, HUD_H + 21, seasonal.label, { fontFamily: 'sans-serif', fontSize: '12px', color: '#593d29' }).setOrigin(0.5).setDepth(2);
+    }
+  }
+
+  private drawRain(): void {
+    if (!this.weatherFx) return;
+    const g = this.weatherFx;
+    g.clear();
+    g.lineStyle(1, 0xa9dcff, 0.56);
+    // Keep the animated overlay lightweight for mobile: 24 short strokes, updated at ~20 fps.
+    const frame = Math.floor(this.time.now / 70);
+    for (let i = 0; i < 24; i++) {
+      const x = (i * 47 + frame * 5) % W;
+      const y = HUD_H + ((i * 83 + frame * 9) % (H - HUD_H));
+      g.lineBetween(x, y, x - 4, y + 9);
+    }
   }
 
   private drawCounter(): void {
@@ -356,6 +411,213 @@ export class ShopScene extends Phaser.Scene {
       this.renderPanel(true);
     });
     e.on('dayEnded', () => this.finishDay());
+    // ---------- Giai đoạn 3 ----------
+    e.on('staffArrived', (st) => { this.drawStaff(); this.layoutQueue(); toast(this, `${roleDef(st.role).icon} ${st.name} vào ca`, 300, C.greenDark); });
+    e.on('staffLeft', () => { this.drawStaff(); this.layoutQueue(); });
+    e.on('lanesChanged', () => { this.drawStaff(); this.layoutQueue(); this.renderPanel(true); });
+    e.on('staffTired', (st) => floatText(this, this.cashierX.get(st.id) ?? 120, COUNTER_Y - 8, `💦 ${st.name} mệt`, '#1f5fa0', 12));
+    e.on('staffMistake', ({ staff, kind, amount }) => {
+      floatText(this, this.cashierX.get(staff.id) ?? W / 2, COUNTER_Y - 8, kind === 'over' ? `😅 Thối dư ${formatMoney(amount)}` : `😠 Khách: thối thiếu!`, HEX.red, 12);
+    });
+    e.on('staffLevelUp', (st) => { play('levelup'); toast(this, `⭐ ${st.name} lên cấp ${st.level}!`, 240, C.greenDark); this.drawStaff(); });
+    e.on('staffRefill', ({ shelf, slot, qty }) => {
+      const at = this.shelves.slotCenter(shelf, slot);
+      floatText(this, at.x, at.y, `🧺+${qty}`, HEX.green, 12);
+    });
+    e.on('staffServed', ({ customer }) => {
+      const v = this.views.get(customer.id);
+      if (v) floatText(this, v.sprite.x, 266, `+${formatMoney(customer.total)}`, HEX.green, 14);
+    });
+    e.on('thiefFleeing', (c) => this.thiefRuns(c));
+    e.on('thiefCaught', ({ by, fine }) => {
+      play(by === 'player' ? 'coin' : 'error');
+      vibrate(80);
+      const who = by === 'camera' ? '🚨 Camera báo động!' : by === 'staff' ? '👀 Nhân viên phát hiện trộm!' : '✋ Bắt quả tang!';
+      toast(this, `${who}\nTrả hàng + bồi thường ${formatMoney(fine)}`, 240, C.greenDark);
+    });
+    e.on('thiefEscaped', ({ cost }) => { play('wrong'); toast(this, `🏃 Kẻ trộm chạy mất! Mất ${formatMoney(cost)} tiền hàng`, 240, C.red); });
+    e.on('phoneRing', () => { play('door'); vibrate(40); this.updatePhone(); });
+    e.on('phoneOrderUpdate', () => this.updatePhone());
+    e.on('incident', (i) => {
+      if (i.kind === 'complaint' && !G.state.today.managerDay) toast(this, `😠 ${i.text}`, 300, C.redDark);
+      if (G.state.today.managerDay) this.renderPanel(true);
+    });
+  }
+
+  // ---------- Nhân viên ----------
+
+  /** Vị trí đứng của thu ngân theo quầy của họ (bên phải quầy chung). */
+  private laneX(index: number): number {
+    return 222 + index * 58;
+  }
+
+  private drawStaff(): void {
+    if (!this.staffLayer) return;
+    this.staffLayer.removeAll(true);
+    this.cashierX.clear();
+    this.session.lanes.forEach((lane, i) => {
+      const st = this.session.staffOf(lane.staffId);
+      if (!st) return;
+      const x = this.laneX(i);
+      this.cashierX.set(st.id, x);
+      const sprite = staffSprite(this, x, PANEL_Y + 2, st).setScale(0.75).setFlipX(true);
+      if (lane.closing) sprite.setAlpha(0.6);
+      const w = this.session.workerOf(st.id);
+      const face = w?.tired ? '💦' : moodLabel(st.mood).icon;
+      this.staffLayer.add([
+        sprite,
+        txt(this, x, COUNTER_Y + 50, st.name.split(' ').slice(-1)[0], { size: 9, bold: true, color: HEX.cream, origin: [0.5, 0.5] }),
+        txt(this, x + 14, COUNTER_Y + 4, face, { size: 11, emoji: true, origin: [0.5, 0.5] }),
+      ]);
+    });
+    // Nhân viên khác đang có mặt: huy hiệu nhỏ góc trái mặt quầy.
+    const others = this.session.presentStaff().filter((st) => st.role !== 'cashier' || !this.cashierX.has(st.id));
+    others.forEach((st, i) => {
+      const w = this.session.workerOf(st.id);
+      const label = `${roleDef(st.role).icon}${st.name.split(' ').slice(-1)[0]}${w?.tired ? '💦' : ''}`;
+      this.staffLayer.add(txt(this, 8 + i * 58, COUNTER_Y + 44, label, { size: 9, bold: true, color: HEX.cream }).setBackgroundColor('#5a3a22').setPadding(2, 1, 2, 1));
+    });
+  }
+
+  /** Kẻ trộm chạy ra cửa: chạm vào trong 3 giây để bắt. */
+  private thiefRuns(c: Customer): void {
+    const v = this.views.get(c.id);
+    if (!v) return;
+    play('error');
+    vibrate(120);
+    v.sprite.setTint(0xff9a8a).setY(FEET_Y - 20).setFlipX(true);
+    const mark = txt(this, v.sprite.x, v.sprite.y - 70, '🚨 Chạm để bắt!', { size: 12, bold: true, color: HEX.red, origin: [0.5, 0.5], stroke: '#ffffff' }).setDepth(900);
+    this.tweens.killTweensOf(v.sprite);
+    const walker = this.startWalking(v.sprite, lookOf(c));
+    const seconds = DATA.balance.security.catchWindowSeconds;
+    this.tweens.add({ targets: v.sprite, x: DOOR_X, duration: seconds * 1000, onUpdate: () => mark.setPosition(v.sprite.x, v.sprite.y - 70), onComplete: () => { this.stopWalking(walker); mark.destroy(); } });
+    v.sprite.setInteractive({ useHandCursor: true });
+    v.sprite.once('pointerdown', () => {
+      mark.destroy();
+      if (!this.session.catchThief(c.id)) return;
+    });
+    this.time.delayedCall(seconds * 1000 + 50, () => { if (mark.active) mark.destroy(); });
+  }
+
+  // ---------- Điện thoại bàn / giao hàng ----------
+
+  private updatePhone(): void {
+    const ringing = this.session.phoneOrders.find((o) => o.status === 'ringing');
+    if (ringing && !this.phoneBtn) {
+      this.phoneBtn = new Button(this, W - 26, 248, { w: 44, h: 34, label: '☎️', size: 18, color: C.red, onTap: () => this.answerPhone() }).setDepth(260);
+      this.tweens.add({ targets: this.phoneBtn, angle: { from: -12, to: 12 }, yoyo: true, repeat: -1, duration: 90 });
+    } else if (!ringing && this.phoneBtn) {
+      this.tweens.killTweensOf(this.phoneBtn);
+      this.phoneBtn.destroy();
+      this.phoneBtn = null;
+    }
+    const waiting = this.session.phoneOrders.filter((o) => o.status === 'accepted' && !o.courier);
+    const courier = G.state.staff.some((st) => st.role === 'delivery' && this.session.workerOf(st.id)?.present);
+    if (waiting.length && !courier && !this.ordersBtn) {
+      this.ordersBtn = new Button(this, W - 70, 212, { w: 124, h: 30, label: '', size: 11, color: C.blue, onTap: () => this.selfDeliver() }).setDepth(260);
+    }
+    if (this.ordersBtn && (!waiting.length || courier)) {
+      this.ordersBtn.destroy();
+      this.ordersBtn = null;
+    }
+    this.ordersBtn?.setText(`🛵 ${waiting.length} đơn chờ giao`);
+  }
+
+  private orderText(o: PhoneOrder): string {
+    const items = Object.entries(o.items).map(([id, q]) => `${q} ${product(id).name.toLowerCase()}`).join(', ');
+    return `${o.name} (${o.place}) đặt: ${items}.\nTiền hàng ${formatMoney(o.value)} + ship ${formatMoney(o.fee)} · giao trước ${formatClock(o.deadline)}`;
+  }
+
+  private answerPhone(): void {
+    const o = this.session.phoneOrders.find((x) => x.status === 'ringing');
+    if (!o) return;
+    if (!G.liveSnapshot) this.session.paused = true;
+    const resume = () => { if (!G.liveSnapshot && !this.pauseLayer) this.session.paused = false; this.updatePhone(); };
+    const short = orderShortfall(G.state, o.items);
+    const shortText = short.length ? `\n❌ Thiếu: ${short.map((x) => `${x.missing} ${product(x.productId).name.toLowerCase()}`).join(', ')}` : '';
+    const buttons = short.length
+      ? [{ label: 'Không đủ hàng · từ chối', color: C.grey, onTap: () => { this.session.declineOrder(o.id); resume(); } }]
+      : [
+        { label: `✓ Nhận (${orderUnits(o)} món)`, color: C.green, onTap: () => {
+          this.session.acceptOrder(o.id);
+          play('pick');
+          resume();
+          this.updatePhone();
+        } },
+        { label: 'Từ chối', color: C.grey, onTap: () => { this.session.declineOrder(o.id); resume(); } },
+      ];
+    dialog(this, { icon: '☎️', title: 'Đơn giao hàng', body: this.orderText(o) + shortText, buttons, width: 320 });
+  }
+
+  private selfDeliver(): void {
+    const o = this.session.phoneOrders.find((x) => x.status === 'accepted' && !x.courier);
+    if (!o) return;
+    const secs = Math.round(tripSeconds(o.distance));
+    dialog(this, {
+      icon: '🛵',
+      title: `Tự đi giao cho ${o.name}?`,
+      body: `Đi về mất khoảng ${secs} giây. Quầy của bạn bỏ trống trong lúc đó (khách mới sang quầy nhân viên hoặc phải chờ).\nHạn giao ${formatClock(o.deadline)}.`,
+      buttons: [
+        { label: 'Đi giao ngay', color: C.green, onTap: () => { if (this.session.selfDeliver(o.id)) { play('door'); this.renderPanel(true); } this.updatePhone(); } },
+        { label: 'Để sau', color: C.grey },
+      ],
+    });
+  }
+
+  // ---------- Chế độ quản lý ----------
+
+  private get managerView(): boolean {
+    return G.state.today.managerDay && !this.session.playerLaneOpen() && !this.session.front;
+  }
+
+  private renderManager(): void {
+    const L = this.panelLayer;
+    const s = G.state;
+    L.add(txt(this, 18, PANEL_Y + 12, '🧑‍💼 Nhân viên đang lo tiệm', { size: 15, bold: true }));
+    this.managerStatus = txt(this, 18, PANEL_Y + 34, '', { size: 11, color: HEX.muted, wrap: W - 36 });
+    L.add(this.managerStatus);
+    this.updateManagerStatus();
+    DATA.balance.manager.speeds.forEach((sp, i) => {
+      L.add(new Button(this, 42 + i * 62, PANEL_Y + 84, { w: 56, h: 32, label: `x${sp}`, size: 14, color: s.manager.speed === sp ? C.red : C.wood, onTap: () => {
+        s.manager.speed = sp;
+        this.renderPanel(true);
+      } }));
+    });
+    L.add(new Button(this, W - 76, PANEL_Y + 84, { w: 128, h: 34, label: '⏭ Bỏ qua ngày', size: 13, color: C.blue, onTap: () => this.skipDay() }));
+    const open = this.session.openIncidents().slice(-3);
+    open.forEach((inc, i) => {
+      const y = PANEL_Y + 130 + i * 34;
+      L.add(txt(this, 18, y, inc.text, { size: 10, wrap: W - 150, color: inc.kind === 'thief' || inc.kind === 'noCashier' ? HEX.red : HEX.ink }));
+      if (inc.kind === 'thief') L.add(new Button(this, W - 60, y + 8, { w: 96, h: 28, label: '🚨 Bắt!', size: 12, color: C.red, onTap: () => { this.session.resolveIncident(inc.id, 'catch'); this.renderPanel(true); } }));
+      else if (inc.kind === 'complaint') L.add(new Button(this, W - 60, y + 8, { w: 96, h: 28, label: `Xin lỗi + bù`, size: 11, color: C.green, onTap: () => { this.session.resolveIncident(inc.id, 'apologize'); this.renderPanel(true); } }));
+      else L.add(new Button(this, W - 60, y + 8, { w: 96, h: 28, label: 'Đã biết', size: 11, color: C.grey, onTap: () => { this.session.resolveIncident(inc.id, 'dismiss'); this.renderPanel(true); } }));
+    });
+    if (!open.length) L.add(txt(this, W / 2, PANEL_Y + 150, 'Không có sự cố. Sự cố (trộm, phàn nàn, hết hàng) sẽ hiện ở đây.', { size: 11, color: HEX.muted, origin: [0.5, 0.5], align: 'center', wrap: W - 60 }));
+    L.add(new Button(this, W / 2, PANEL_Y + 212, { w: 180, h: 36, label: '🙋 Xuống quầy tự bán', size: 13, color: C.wood, onTap: () => {
+      s.today.managerDay = false;
+      s.manager.speed = 1;
+      this.renderPanel(true);
+    } }));
+  }
+
+  private updateManagerStatus(): void {
+    if (!this.managerStatus?.active) return;
+    const lanes = this.session.lanes.map((l, i) => `Quầy ${i + 1}: ${this.session.staffOf(l.staffId)?.name ?? '?'} · ${l.queue.length} khách`).join('\n');
+    this.managerStatus.setText(`${lanes || 'Chưa có thu ngân trong ca này'}\nĐã phục vụ ${G.state.today.served} khách · doanh thu ${formatMoney(G.state.today.revenue)}`);
+  }
+
+  /** "Bỏ qua ngày": chạy hết ngày không hiển thị rồi sang tổng kết. */
+  private skipDay(): void {
+    dialog(this, { icon: '⏭', title: 'Bỏ qua ngày?', body: 'Nhân viên bán nốt ngày hôm nay, bạn xem ngay tổng kết.', buttons: [
+      { label: 'Thôi', color: C.grey },
+      { label: 'Bỏ qua', color: C.blue, onTap: () => {
+        this.session.events.clear();
+        runDayHeadless(this.session);
+        for (const v of this.views.values()) { this.tweens.killTweensOf(v.sprite); v.sprite.destroy(); v.bar.destroy(); }
+        this.views.clear();
+        this.finishDay();
+      } },
+    ] });
   }
 
   /** Xe giao hàng chạy ngang tới cửa. */
@@ -375,23 +637,36 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private layoutQueue(): void {
-    this.session.queue.forEach((c, i) => {
+    const lanes = this.session.lanes;
+    const place = (c: Customer, x: number, y: number) => {
       const v = this.views.get(c.id);
       if (!v) return;
-      const x = QUEUE_X[Math.min(i, QUEUE_X.length - 1)];
-      if (Math.abs(v.sprite.x - x) > 1) {
+      if (Math.abs(v.sprite.x - x) > 1 || Math.abs(v.sprite.y - y) > 1) {
         this.tweens.killTweensOf(v.sprite);
-        const dur = Math.abs(v.sprite.x - x) * 6;
-        v.sprite.setFlipX(x > v.sprite.x).setY(FEET_Y);
+        const dur = Math.max(120, Math.abs(v.sprite.x - x) * 6);
+        v.sprite.setFlipX(x > v.sprite.x).setY(y);
         const walker = this.startWalking(v.sprite, lookOf(c));
         this.tweens.add({ targets: v.sprite, x, duration: dur, ease: 'Linear', onComplete: () => this.stopWalking(walker) });
       }
+    };
+    // Không có quầy nhân viên: xếp hàng như giai đoạn 1–2. Có thì quầy người chơi dồn sang trái.
+    const playerX = lanes.length ? [60, 104, 148, 180] : QUEUE_X;
+    this.session.queue.forEach((c, i) => place(c, playerX[Math.min(i, playerX.length - 1)], FEET_Y));
+    lanes.forEach((lane, k) => {
+      lane.queue.forEach((c, i) => place(c, this.laneX(k) + Math.min(i, 3) * 14, FEET_Y - Math.min(i, 3) * 5));
     });
   }
 
   private removeCustomer(c: Customer, reason: string, stars: number): void {
     const v = this.views.get(c.id);
     this.views.delete(c.id);
+    if (v && reason === 'thief') {
+      v.bar.destroy();
+      this.tweens.killTweensOf(v.sprite);
+      this.tweens.add({ targets: v.sprite, x: DOOR_X + 20, alpha: 0, duration: 400, onComplete: () => v.sprite.destroy() });
+      this.layoutQueue();
+      return;
+    }
     if (v) {
       v.bar.destroy();
       const face = reason === 'served' ? (stars >= 4 ? '😊' : stars >= 3 ? '🙂' : '😐') : reason === 'patience' ? '😠' : '😞';
@@ -458,7 +733,9 @@ export class ShopScene extends Phaser.Scene {
 
   private renderPanel(force = false): void {
     const c = this.session.front;
-    const mode = !c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`;
+    const away = this.session.playerAway > 0;
+    const managerKey = this.managerView ? `manager-${G.state.manager.speed}-${this.session.openIncidents().map((i) => i.id).join(',')}` : '';
+    const mode = away && !c ? 'away' : managerKey || (!c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`);
     if (!force && mode === this.panelMode) return;
     const keepPay = mode === this.panelMode && mode.startsWith('pay');
     this.panelMode = mode;
@@ -474,9 +751,27 @@ export class ShopScene extends Phaser.Scene {
     this.counterTimerText = null;
     this.counterRequestBar = null;
     this.panelLayer.add(panel(this, 6, PANEL_Y + 4, W - 12, H - PANEL_Y - 10));
+    this.managerStatus = null;
+    if (mode === 'away') {
+      this.panelLayer.add(txt(this, W / 2, PANEL_Y + 100, '🛵 Bạn đang đi giao hàng...\nQuầy tạm bỏ trống, khách mới xếp sang quầy nhân viên.', { size: 14, origin: [0.5, 0.5], align: 'center', color: HEX.muted, wrap: W - 50 }));
+      return;
+    }
+    if (mode.startsWith('manager')) {
+      this.renderManager();
+      return;
+    }
     if (!c) {
-      const msg = this.session.closed ? '🌙 Đã đóng cửa. Đang dọn tiệm...' : '⏳ Đang chờ khách...\nTranh thủ nạp kệ bằng nút + xanh nhé!';
-      this.panelLayer.add(txt(this, W / 2, PANEL_Y + 110, msg, { size: 15, origin: [0.5, 0.5], align: 'center', color: HEX.muted }));
+      const staffed = this.session.lanes.length > 0;
+      const msg = this.session.closed
+        ? '🌙 Đã đóng cửa. Đang dọn tiệm...'
+        : staffed ? '⏳ Quầy bạn đang trống.\nThu ngân lo quầy bên phải, bạn tranh thủ nạp kệ nhé!' : '⏳ Đang chờ khách...\nTranh thủ nạp kệ bằng nút + xanh nhé!';
+      this.panelLayer.add(txt(this, W / 2, PANEL_Y + 100, msg, { size: 15, origin: [0.5, 0.5], align: 'center', color: HEX.muted, wrap: W - 40 }));
+      if (!this.session.closed && staffed && G.state.manager.enabled && hasFeature(G.state.level, 'manager') && !G.state.today.managerDay) {
+        this.panelLayer.add(new Button(this, W / 2, PANEL_Y + 184, { w: 200, h: 40, label: '🧑‍💼 Để nhân viên lo', size: 14, color: C.green, onTap: () => {
+          G.state.today.managerDay = true;
+          this.renderPanel(true);
+        } }));
+      }
       return;
     }
     if (c.status === 'paying') this.renderPaying(c);
@@ -680,10 +975,17 @@ export class ShopScene extends Phaser.Scene {
 
   update(_t: number, dtMs: number): void {
     if (this.ending) return;
-    if (!G.liveSnapshot) this.session.update(dtMs / 1000);
+    if (this.weatherFx) {
+      this.weatherFxAcc += dtMs;
+      if (this.weatherFxAcc >= 50) { this.weatherFxAcc = 0; this.drawRain(); }
+    }
+    // Chế độ quản lý: tăng tốc x2/x4 (nhiều bước core mỗi khung hình).
+    const speed = G.state.today.managerDay ? G.state.manager.speed : 1;
+    if (!G.liveSnapshot) for (let i = 0; i < speed && !this.ending; i++) this.session.update(dtMs / 1000);
     this.renderAcc += dtMs;
     if (this.renderAcc >= 100) {
       this.renderAcc = 0;
+      this.updateManagerStatus();
       this.hud.refresh();
       this.shelves.render(G.state, this.shelfOpts());
       this.renderPanel();

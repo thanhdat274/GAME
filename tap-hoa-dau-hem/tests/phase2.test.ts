@@ -57,11 +57,11 @@ function tickUntil(d: DaySession, predicate: () => boolean, max = 4000): void {
 
 describe('dữ liệu giai đoạn 2', () => {
   it('có 16 món mới với trường hạn dùng / lạnh hợp lệ', () => {
-    const fresh = DATA.products.filter((p) => ['drink', 'fresh', 'frozen'].includes(p.category));
+    const fresh = DATA.products.filter((p) => p.unlockLevel <= 20 && ['drink', 'fresh', 'frozen'].includes(p.category));
     expect(fresh).toHaveLength(16);
     expect(DATA.products.filter((p) => p.requiresCold === 'freezer').every((p) => p.unlockLevel === 9)).toBe(true);
-    expect(DATA.levels.maxLevel).toBe(9);
-    expect(DATA.levels.levels.map((l) => l.exp)).toEqual([0, 120, 350, 700, 1150, 1700, 2350, 3100, 4000]);
+    expect(DATA.levels.maxLevel).toBe(35);
+    expect(DATA.levels.levels.slice(0, 9).map((l) => l.exp)).toEqual([0, 120, 350, 700, 1150, 1700, 2350, 3100, 4000]);
   });
 
   it('báo lỗi shelfLifeDays <= 0 và requiresCold sai, chỉ rõ id', () => {
@@ -567,7 +567,7 @@ describe('bản lưu v3', () => {
   it('migrate v2: kho thành lô không hạn, 3 kệ đúng chỗ, giữ tiền/level/khu/hàng sau quầy/cài đặt', () => {
     const v2 = (saveV2 as { state: Record<string, unknown> }).state;
     const s = migrate({ version: 2, state: structuredClone(v2) });
-    expect(s.version).toBe(3);
+    expect(s.version).toBe(5);
     expect(s.warehouse).toEqual([{ productId: 'mi_goi', qty: 30, exp: null }, { productId: 'the_cao', qty: 4, exp: null }]);
     expect(s.money).toBe(432_100);
     expect(s.level).toBe(4);

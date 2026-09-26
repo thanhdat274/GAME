@@ -19,6 +19,8 @@ export const ZONE_NAMES: Record<Exclude<Category, 'counter'>, string> = {
   drink: 'ĐỒ UỐNG',
   fresh: 'ĐỒ TƯƠI',
   frozen: 'ĐÔNG LẠNH',
+  food: 'ĐỒ ĂN',
+  beverage: 'ĐỒ UỐNG PHA CHẾ',
 };
 
 export interface ShelfCallbacks {

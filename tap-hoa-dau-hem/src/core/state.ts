@@ -1,4 +1,6 @@
-import { DATA, furniture, product, refPrice, type Category, type LevelDef, type Product } from './data';
+import {
+  DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type StaffRole, type StaffStats,
+} from './data';
 
 export type Phase = 'morning' | 'open' | 'summary';
 
@@ -59,6 +61,83 @@ export interface Delivery {
   items: Record<string, number>;
 }
 
+/** Nhân viên đang làm cho tiệm. */
+export interface Staff {
+  id: string;
+  name: string;
+  personality: string;
+  look: Look;
+  role: StaffRole;
+  stats: StaffStats;
+  /** Lương cả ngày (2 ca). */
+  wage: number;
+  level: number;
+  exp: number;
+  /** Tâm trạng 0–100. */
+  mood: number;
+  hiredDay: number;
+  /** Số ngày làm liên tục. */
+  streak: number;
+  /** Số ngày liên tiếp tâm trạng dưới ngưỡng nghỉ việc. */
+  lowMoodDays: number;
+  /** Đã báo nghỉ, chờ người chơi quyết định sáng nay. */
+  quitting: boolean;
+  /** Ngày bị nhắc nhở gần nhất (chính xác + tạm thời trong ngày đó). */
+  scoldedDay: number | null;
+  lifetime: { served: number; mistakes: number; ratingSum: number; ratingCount: number; jobs: number };
+}
+
+export interface Candidate {
+  id: string;
+  name: string;
+  personality: string;
+  look: Look;
+  role: StaffRole;
+  stats: StaffStats;
+  wage: number;
+}
+
+export interface StaffBoard {
+  /** Ngày làm mới bảng gần nhất. */
+  day: number;
+  list: Candidate[];
+}
+
+/** Quy tắc "Khi tồn [món] dưới X thì nhập Y từ [mối]". */
+export interface RestockRule {
+  productId: string;
+  threshold: number;
+  qty: number;
+  supplierId: string;
+}
+
+export interface StaffDayPerf { name: string; served: number; mistakes: number; ratingSum: number; ratingCount: number; jobs: number }
+
+/** Số liệu một ngày trong lịch sử phân tích. */
+export interface DayRecord {
+  day: number;
+  revenue: number;
+  profit: number;
+  cogs: number;
+  wages: number;
+  electricity: number;
+  spoiled: number;
+  theft: number;
+  customers: number;
+  avgRating: number;
+  sold: Record<string, number>;
+  /** Khách theo giờ, 08:00 → 21:00. */
+  hourly: number[];
+  staff: Record<string, StaffDayPerf>;
+  manager: boolean;
+}
+
+export interface JournalEntry {
+  /** Phút trong ngày. */
+  m: number;
+  t: string;
+}
+
 export interface QuestState {
   id: string;
   claimed: boolean;
@@ -109,6 +188,28 @@ export interface DayStats {
   badDebt: number;
   bargainDiscount: number;
   questMoney: number;
+  wages: number;
+  bonuses: number;
+  /** Giá vốn hàng bị trộm mất. */
+  theftCost: number;
+  thefts: number;
+  thievesCaught: number;
+  /** Tiền bồi thường từ kẻ trộm bị bắt. */
+  fines: number;
+  deliveryFees: number;
+  deliveries: number;
+  lateDeliveries: number;
+  complaints: number;
+  /** EXP từ việc nhân viên làm (để giảm 50% trong chế độ quản lý). */
+  staffExp: number;
+  /** Khách vào tiệm theo giờ (08:00 → 21:00). */
+  hourly: number[];
+  staffPerf: Record<string, StaffDayPerf>;
+  journal: JournalEntry[];
+  /** Hôm nay có bật "Để nhân viên lo". */
+  managerDay: boolean;
+  /** Nhân viên lên cấp hôm nay. */
+  staffLevelUps: string[];
 }
 
 export interface DaySummary {
@@ -137,6 +238,23 @@ export interface DaySummary {
   badDebt?: number;
   netProfit?: number;
   achievements?: string[];
+  wages?: number;
+  wageDebt?: number;
+  bonuses?: number;
+  theftCost?: number;
+  fines?: number;
+  deliveryFees?: number;
+  /** Nhân viên lên cấp trong ngày (tên). */
+  staffLevelUps?: string[];
+  journal?: JournalEntry[];
+}
+
+/** Hiệu quả những ngày quản lý gần nhất (cho thu nhập offline). */
+export interface ManagerDay {
+  day: number;
+  revenue: number;
+  profit: number;
+  sold: Record<string, number>;
 }
 
 export interface Settings {
@@ -161,8 +279,49 @@ export interface SaveSummary {
   playSeconds: number;
 }
 
+export interface WeeklyQuestState { id: string; progress: number; claimed: boolean }
+export interface WeeklyQuests { week: number; list: WeeklyQuestState[]; giftClaimed: boolean }
+export interface PartyOrder {
+  id: string;
+  week: number;
+  customer: string;
+  items: Record<string, number>;
+  offerDay: number;
+  deadlineDay: number;
+  rewardMoney: number;
+  status: 'offered' | 'accepted' | 'fulfilled' | 'declined' | 'expired';
+}
+
+export interface StoreSnapshot {
+  id: string;
+  name: string;
+  kind: 'main' | 'market' | 'school' | 'industrial';
+  /** Per-store operational state. Shared money/level remain on GameState. */
+  data: Record<string, unknown>;
+  simDay?: number;
+}
+
+export interface BranchShipment {
+  id: string;
+  fromStoreId: string;
+  toStoreId: string;
+  productId: string;
+  lots: SlotLot[];
+  sentDay: number;
+  arriveDay: number;
+  fee: number;
+}
+
+export interface ActiveEvent {
+  id: string;
+  day: number;
+  endsDay: number;
+  unexpected?: boolean;
+  params?: Record<string, string | number>;
+}
+
 export interface GameState {
-  version: 3;
+  version: 5;
   day: number;
   phase: Phase;
   /** Phút trong ngày (480 = 08:00) khi đang mở cửa. */
@@ -192,6 +351,9 @@ export interface GameState {
   /** Số lần ghé của khách quen có tên. */
   regulars: Record<string, number>;
   quests: DailyQuests | null;
+  weeklyQuests: WeeklyQuests | null;
+  partyOrder: PartyOrder | null;
+  partyOrderWeek: number;
   achievements: string[];
   /** Đồ trang trí đang có (tường, biển, quầy). Đồ đặt sàn nằm trong fixtures. */
   decorOwned: string[];
@@ -215,6 +377,45 @@ export interface GameState {
   /** Metadata for optional cloud backup; localStorage remains the source used to play. */
   sync: SaveSync;
   summary: SaveSummary;
+  // ---------- Giai đoạn 3 ----------
+  staff: Staff[];
+  staffBoard: StaffBoard | null;
+  /** Ứng viên cố định đã từng được thuê (không hiện lại). */
+  fixedCandidateUsed: boolean;
+  /** Lịch 7 ngày × 2 ca theo id nhân viên: index = thứ·2 + ca. */
+  schedule: Record<string, boolean[]>;
+  /** Lịch đã được xếp lần đầu khi mở khóa xếp ca. */
+  scheduleReady: boolean;
+  rules: RestockRule[];
+  /** Sơ đồ kệ đã chốt: món của từng ô (null = để trống). */
+  planogram: (string | null)[][] | null;
+  analytics: DayRecord[];
+  managerStats: ManagerDay[];
+  manager: { enabled: boolean; speed: number };
+  /** Lương còn nợ nhân viên. */
+  wageDebt: number;
+  camera: boolean;
+  /** Thông báo buổi sáng (tự nhập hàng, nhân viên xin nghỉ...). */
+  morningNotes: string[];
+  /** Thời điểm lưu gần nhất (ms, giờ thực). */
+  lastSeen: number;
+  /** Version 5: cửa hàng đang mở và các snapshot cửa hàng trong chuỗi. */
+  stores: StoreSnapshot[];
+  activeStoreId: string;
+  /** Ngày 1 của bản lưu cũ được đặt vào tháng 3 để không rơi ngay vào Tết. */
+  calendarStartMonth: number;
+  calendarStartYear: number;
+  activeEvents: ActiveEvent[];
+  eventProgress: Record<string, number>;
+  eventHistory: string[];
+  eventRollDay: number;
+  eventRewards: string[];
+  /** Công thức đang bán; món chế biến được giữ ở quầy đến hết ngày. */
+  activeRecipes: string[];
+  branchLastSimDay: Record<string, number>;
+  branchShipments: BranchShipment[];
+  storyProgress: string[];
+  storyStarted: Record<string, number>;
 }
 
 /** Số kệ gốc của giai đoạn 1 (vẫn khóa theo level). */
@@ -226,6 +427,8 @@ export function emptyStats(): DayStats {
     expGained: 0, itemsScanned: 0, counterServed: 0, sold: {}, missed: {}, priceComplaints: {}, notCold: {},
     spoiled: {}, spoiledCost: 0, electricity: 0, debtCollected: 0, debtCollectedAmount: 0, debtGiven: 0,
     badDebt: 0, bargainDiscount: 0, questMoney: 0,
+    wages: 0, bonuses: 0, theftCost: 0, thefts: 0, thievesCaught: 0, fines: 0, deliveryFees: 0, deliveries: 0, lateDeliveries: 0,
+    complaints: 0, staffExp: 0, hourly: Array.from({ length: Math.ceil((DATA.balance.closeMinute - DATA.balance.openMinute) / 60) }, () => 0), staffPerf: {}, journal: [], managerDay: false, staffLevelUps: [],
   };
 }
 
@@ -241,8 +444,8 @@ export function defaultFixtures(): Fixture[] {
 export function createNewGame(): GameState {
   const b = DATA.balance;
   const fixtures = defaultFixtures();
-  return {
-    version: 3,
+  const state: GameState = {
+    version: 5,
     day: 1,
     phase: 'morning',
     clock: b.openMinute,
@@ -263,6 +466,9 @@ export function createNewGame(): GameState {
     ledger: [],
     regulars: {},
     quests: null,
+    weeklyQuests: null,
+    partyOrder: null,
+    partyOrderWeek: -1,
     achievements: [],
     decorOwned: [],
     lifetime: { sold: 0, served: 0, debtsCollected: 0, landsOpened: 0, loveStreak: 0 },
@@ -279,7 +485,82 @@ export function createNewGame(): GameState {
     loginPromptSeen: false,
     sync: { baseRevision: 0, dirty: true, lastSyncedAt: null, deviceId: createDeviceId() },
     summary: { level: 1, day: 1, money: b.startMoney, playSeconds: 0 },
+    staff: [],
+    staffBoard: null,
+    fixedCandidateUsed: false,
+    schedule: {},
+    scheduleReady: false,
+    rules: [],
+    planogram: null,
+    analytics: [],
+    managerStats: [],
+    manager: { enabled: false, speed: 1 },
+    wageDebt: 0,
+    camera: false,
+    morningNotes: [],
+    lastSeen: Date.now(),
+    stores: [],
+    activeStoreId: 'main',
+    calendarStartMonth: 1,
+    calendarStartYear: 1,
+    activeEvents: [],
+    eventProgress: {},
+    eventHistory: [],
+    eventRollDay: 0,
+    eventRewards: [],
+    activeRecipes: [],
+    branchLastSimDay: {},
+    branchShipments: [],
+    storyProgress: [],
+    storyStarted: {},
   };
+  state.stores = [{ id: 'main', name: 'Tiệm chính', kind: 'main', data: storeData(state) }];
+  return state;
+}
+
+const STORE_KEYS = [
+  'warehouse', 'holding', 'shelves', 'zones', 'counter', 'fixtures', 'nextUid', 'land', 'warehouseTier', 'prices',
+  'deliveries', 'ledger', 'regulars', 'quests', 'weeklyQuests', 'partyOrder', 'partyOrderWeek', 'decorOwned', 'lifetime', 'tutorialsSeen', 'ratings', 'yesterdaySold', 'yesterdayMissed',
+  'yesterdayComplaints', 'today', 'lastGrandmaDay', 'seenIntro', 'lastSummary', 'announcedLevel', 'staff', 'staffBoard',
+  'fixedCandidateUsed', 'schedule', 'scheduleReady', 'rules', 'planogram', 'analytics', 'managerStats', 'manager', 'wageDebt',
+  'camera', 'morningNotes', 'activeEvents', 'eventProgress', 'eventHistory', 'eventRollDay', 'eventRewards',
+  'activeRecipes',
+] as const;
+
+function storeData(state: GameState): Record<string, unknown> {
+  const data: Record<string, unknown> = {};
+  for (const key of STORE_KEYS) data[key] = structuredClone(state[key]);
+  return data;
+}
+
+/** Copy the live shop into its snapshot before serializing or switching stores. */
+export function syncActiveStore(state: GameState): void {
+  const i = state.stores.findIndex((store) => store.id === state.activeStoreId);
+  if (i < 0) return;
+  state.stores[i] = { ...state.stores[i], data: storeData(state) };
+}
+
+/** Add a new shop copied from the current one; shared money/level stay on GameState. */
+export function addStoreSnapshot(state: GameState, store: Omit<StoreSnapshot, 'data'>): boolean {
+  if (state.stores.some((item) => item.id === store.id)) return false;
+  syncActiveStore(state);
+  state.stores.push({ ...store, data: storeData(state) });
+  return true;
+}
+
+/** Switch the active operational state while keeping shared money, level and settings. */
+export function activateStore(state: GameState, id: string): boolean {
+  syncActiveStore(state);
+  const store = state.stores.find((item) => item.id === id);
+  if (!store) return false;
+  state.activeStoreId = store.id;
+  for (const key of STORE_KEYS) {
+    if (key in store.data) (state as unknown as Record<string, unknown>)[key] = structuredClone(store.data[key]);
+    else if (key === 'weeklyQuests') state.weeklyQuests = null;
+    else if (key === 'partyOrder') state.partyOrder = null;
+    else if (key === 'partyOrderWeek') state.partyOrderWeek = -1;
+  }
+  return true;
 }
 
 function createDeviceId(): string {
@@ -299,9 +580,18 @@ export function unlockedCategories(level: number): Category[] {
   return levelDef(level).categories;
 }
 
-export function unlockedProducts(level: number): Product[] {
+export function unlockedProducts(level: number, state?: GameState): Product[] {
   const cats = unlockedCategories(level);
-  return DATA.products.filter((p) => p.unlockLevel <= level && (p.behindCounter ? level >= 3 : cats.includes(p.category)));
+  return DATA.products.filter((p) => {
+    if (p.recipeOnly) return false;
+    if (p.unlockLevel > level || !(p.behindCounter ? level >= 3 : cats.includes(p.category))) return false;
+    if (!p.eventOnly) return true;
+    if (!state) return false;
+    const active = state.activeEvents.some((event) => event.id === p.eventOnly);
+    const stored = state.warehouse.some((lot) => lot.productId === p.id && lot.qty > 0)
+      || state.shelves.some((row) => row.some((slot) => slot.productId === p.id && slot.qty > 0));
+    return active || stored;
+  });
 }
 
 /** Số kệ gốc (giai đoạn 1) dùng được theo level. */
@@ -383,6 +673,11 @@ export function shelfQty(state: GameState, productId: string): number {
   let total = 0;
   for (const r of usableShelves(state)) for (const s of state.shelves[r]) if (s.productId === productId) total += s.qty;
   return total;
+}
+
+/** Tồn ở quầy (hàng sau quầy). */
+export function counterQty(state: GameState, productId: string): number {
+  return state.counter.reduce((sum, s) => sum + (s.productId === productId ? s.qty : 0), 0);
 }
 
 export function totalQty(state: GameState, productId: string): number {
