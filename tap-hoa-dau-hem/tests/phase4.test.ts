@@ -9,6 +9,8 @@ import eventData from '../src/data/events.json';
 import { DATA } from '../src/core/data';
 import { endDay } from '../src/core/day';
 import { validateRecipes, prepareRecipe, setRecipeActive } from '../src/core/recipes';
+import { cleanDiningTable, ensureDiningTables, seatDiner, serveExtraDiningOrder, tickDining } from '../src/core/dining';
+import { createMaxLevelSimulation } from '../src/core/simulation';
 
 describe('nền tảng phase 4a', () => {
   it('lịch 10 ngày/tháng, 12 tháng/năm; ngày cũ bắt đầu ở tháng 3', () => {
@@ -237,5 +239,43 @@ describe('nền tảng phase 4a', () => {
     });
     state.staff = [staff('chef', 'chef'), staff('barista', 'barista')];
     expect(payroll(state).total).toBe(20000);
+  });
+
+  it('pha chế nhận biến thể ít đường/nhiều đá và tính giá bán theo lựa chọn', () => {
+    const state = createNewGame();
+    state.level = 26;
+    state.fixtures.push({ uid: 90, type: 'blender', x: 6, y: 5, rot: 0 });
+    state.warehouse = lotsFrom({ tra_tac_base: 2, nuoc_da: 2 });
+    setRecipeActive(state, 'tra_tac', true);
+    expect(prepareRecipe(state, 'tra_tac', 1, 'extra_ice')).toMatchObject({ ok: true, output: 'tra_tac_tp' });
+    expect(state.prices.tra_tac_tp).toBe(23000);
+    expect(state.today.journal.at(-1)?.t).toContain('(Nhiều đá)');
+    expect(prepareRecipe(state, 'tra_tac', 1, 'khong-ton-tai')).toEqual({ ok: false, reason: 'menu' });
+    expect(validateRecipes()).toEqual([]);
+  });
+
+  it('khách dùng bàn, gọi thêm món ở quầy, rời bàn bẩn rồi dọn để đón lượt mới', () => {
+    const state = createNewGame();
+    state.level = 25;
+    state.fixtures.push({ uid: 91, type: 'food_table_2', x: 7, y: 0, rot: 0 });
+    state.counter[0] = { productId: 'tra_tac_tp', qty: 2, lots: [{ qty: 2, exp: state.day + 1 }] };
+    const table = seatDiner(state, 123, 'tra_tac_tp');
+    expect(table?.status).toBe('occupied');
+    expect(serveExtraDiningOrder(state, 91, 0)).toBe(true);
+    expect(state.today.revenue).toBe(DATA.products.find((item) => item.id === 'tra_tac_tp')!.price);
+    expect(state.counter[0].qty).toBe(1);
+    expect(tickDining(state, DATA.balance.dining.mealSeconds + DATA.balance.dining.extraOrderSeconds)[0]?.status).toBe('dirty');
+    expect(cleanDiningTable(state, 91)).toBe(true);
+    expect(ensureDiningTables(state)[0].status).toBe('clean');
+  });
+
+  it('hồ sơ mô phỏng max level mở đủ chi nhánh và bàn pha chế', () => {
+    const state = createMaxLevelSimulation();
+    expect(state.level).toBe(DATA.levels.maxLevel);
+    expect(state.stores).toHaveLength(4);
+    expect(state.activeStoreId).toBe('main');
+    expect(state.activeRecipes).toContain('tra_sua');
+    expect(ensureDiningTables(state).map((table) => table.status)).toEqual(['clean', 'clean']);
+    expect(state.money).toBeGreaterThan(0);
   });
 });

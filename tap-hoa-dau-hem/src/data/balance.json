@@ -342,5 +342,10 @@
   "restock": {
     "suggestThresholdDays": 1,
     "suggestQtyDays": 2
+  },
+  "dining": {
+    "mealSeconds": 36,
+    "extraOrderSeconds": 12,
+    "maxExtraOrders": 2
   }
 }

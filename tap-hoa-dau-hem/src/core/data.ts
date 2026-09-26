@@ -156,6 +156,7 @@ export interface Balance {
   cart: { chance: number; minItems: number; maxItems: number; patienceMul: number; types: string[] };
   analytics: { historyDays: number; topCount: number; slowDays: number };
   restock: { suggestThresholdDays: number; suggestQtyDays: number };
+  dining: { mealSeconds: number; extraOrderSeconds: number; maxExtraOrders: number };
 }
 
 export interface StaffBalance {
@@ -385,6 +386,14 @@ export interface RecipeDef {
   prepSeconds: number;
   shelfLifeDays: number;
   steps: string[];
+  variants?: RecipeVariant[];
+}
+
+export interface RecipeVariant {
+  id: string;
+  name: string;
+  priceDelta: number;
+  qualityDelta: number;
 }
 
 const CATEGORIES: Category[] = ['dry', 'snack', 'household', 'drink', 'fresh', 'frozen', 'counter'];

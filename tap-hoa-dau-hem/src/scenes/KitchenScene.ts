@@ -68,10 +68,14 @@ export class CookScene extends Phaser.Scene {
   private waiting = false;
   private finished = false;
   private mixOrder: string[] = [];
+  private variantId: string | undefined;
+  private variantButtons: Button[] = [];
   constructor() { super('Cook'); }
   create(data: { recipeId: string }): void {
     setupCamera(this);
     this.recipeId = data.recipeId;
+    this.variantId = undefined;
+    this.variantButtons = [];
     const recipe = DATA.recipes.find((r) => r.id === this.recipeId);
     if (!recipe) { this.scene.start('Kitchen'); return; }
     this.mode = recipe.id === 'xuc_xich_nuong' ? 'timing'
@@ -82,6 +86,7 @@ export class CookScene extends Phaser.Scene {
     this.mixOrder = Object.keys(recipe.ingredients);
     pageFrame(this, `👩‍🍳 ${recipe.name}`, () => this.scene.start('Kitchen'), this.mode === 'mix' ? 'Chạm nguyên liệu đúng thứ tự rồi hoàn tất' : 'Thao tác chế biến');
     this.prompt = txt(this, W / 2, H * 0.36, this.instruction(recipe), { size: 19, bold: true, origin: [0.5, 0.5], wrap: W - 40, align: 'center' });
+    if (recipe.variants?.length) this.renderVariantControls(recipe.variants);
     if (this.mode === 'timing') {
       this.drawMeter();
       this.target = this.add.rectangle(W / 2, H * 0.58, 48, 30, 0x74be70, 0.85);
@@ -132,6 +137,22 @@ export class CookScene extends Phaser.Scene {
   }
   private drawMeter(): void {
     this.add.rectangle(this.meterX + this.meterW / 2, H * 0.58, this.meterW, 24, 0x543c2e).setStrokeStyle(2, 0x2b1d14);
+  }
+  private renderVariantControls(variants: NonNullable<(typeof DATA.recipes)[number]['variants']>): void {
+    txt(this, W / 2, 91, 'TÙY CHỈNH LY', { size: 10, bold: true, color: HEX.muted, origin: [0.5, 0.5] });
+    const options = [{ id: undefined, label: 'Mặc định' }, ...variants.map((variant) => ({ id: variant.id, label: variant.name }))];
+    const width = Math.min(104, (W - 28) / options.length - 6);
+    options.forEach((option, index) => {
+      const selected = option.id === this.variantId;
+      const button = new Button(this, W / 2 + (index - (options.length - 1) / 2) * (width + 6), 116, {
+        w: width, h: 30, label: option.label, size: 10, color: selected ? C.green : C.wood,
+        onTap: () => {
+          this.variantId = option.id;
+          this.variantButtons.forEach((item, i) => item.setStyle(i === index ? C.green : C.wood));
+        },
+      });
+      this.variantButtons.push(button);
+    });
   }
   private addControl(x: number, y: number, w: number, h: number, label: string, onTap: () => void, color: number): Button {
     const button = new Button(this, x, y, { w, h, label, size: 14, color, onTap });
@@ -210,7 +231,7 @@ export class CookScene extends Phaser.Scene {
     if (this.finished) return;
     this.finished = true;
     this.clearControls();
-    const made = prepareRecipe(G.state, this.recipeId, quality);
+    const made = prepareRecipe(G.state, this.recipeId, quality, this.variantId);
     this.prompt.setText(made.ok ? `${product(made.output).icon} ${result}. Đã đưa vào quầy.` : made.reason === 'space' ? 'Quầy đã đầy.' : 'Thiếu nguyên liệu hoặc thiết bị.');
     persist();
     new Button(this, W / 2, H * 0.83, { w: 150, h: 42, label: 'Về sổ món', size: 13, color: C.blue, onTap: () => this.scene.start('Kitchen') });

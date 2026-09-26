@@ -1,6 +1,7 @@
 import { loadGame, migrate, saveGame } from '../core/save';
 import type { GameState } from '../core/state';
 import { G } from '../game';
+import { isMaxLevelSimulation } from '../core/simulationMode';
 import { finishRedirectSignIn } from './auth';
 import { decompressSave, pull, push, saveDiscarded, type CloudSnapshot } from './cloudSave';
 import { cloudSaveEnabled, getFirebase, hasAuthHint } from './firebase';
@@ -61,7 +62,7 @@ function failed(error: unknown): void {
 }
 
 export async function startSync(): Promise<void> {
-  if (started || !cloudSaveEnabled() || !hasAuthHint()) return;
+  if (isMaxLevelSimulation || started || !cloudSaveEnabled() || !hasAuthHint()) return;
   started = true;
   try {
     const { auth, authSdk } = await getFirebase();
@@ -114,7 +115,7 @@ async function reconcile(epoch: number): Promise<void> {
 }
 
 export async function syncNow(ignoreCooldown = true): Promise<void> {
-  if (G.liveSnapshot || !cloudSaveEnabled() || !hasAuthHint() || busy || hasConflict) return;
+  if (isMaxLevelSimulation || G.liveSnapshot || !cloudSaveEnabled() || !hasAuthHint() || busy || hasConflict) return;
   if (!ignoreCooldown && Date.now() - lastPushAt < MIN_AUTO_PUSH_MS) {
     scheduleAfterCooldown();
     return;

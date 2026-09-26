@@ -12,6 +12,7 @@ import { calendarDate } from './calendar';
 import { deliverBranchShipments, simulateBranches } from './branches';
 import { prestigeRevenueMultiplier } from './prestige';
 import { prepareRecipe } from './recipes';
+import { cleanDiningTable, seatDiner, serveExtraDiningOrder, tickDining } from './dining';
 import { counterFixture, counterFixtures, maxQueueFor, maxShoppersFor, walkTiles, walkableGrid } from './layout';
 import { canGiveCredit, collectDebt, markBadDebts, recordDebt, repaymentsToday } from './ledger';
 import { cheapSpawnMultiplier, keepChance } from './pricing';
@@ -27,6 +28,7 @@ import {
 import {
   emptyStats, fixtureOfShelf, formatMoney, shelfKind, unlockedProducts, usableShelves, warehouseQty, warehouseTotals,
   type DaySummary, type GameState, type JournalEntry, type Staff, type StaffDayPerf,
+  type DiningTableState,
 } from './state';
 import {
   assignSlot, canRefill, electricityCost, expireLots, putIntoSlot, receiveDeliveries, refillSlot, shelfCapacity, slotUnitPrice, stowHolding,
@@ -103,6 +105,7 @@ export interface DayEvents {
   delivery: DeliveryResult;
   catPetted: Customer;
   staffArrived: Staff;
+  diningChanged: DiningTableState[];
   staffLeft: Staff;
   staffTired: Staff;
   staffServed: { staff: Staff; customer: Customer; lane: number };
@@ -291,6 +294,8 @@ export class DaySession {
   tick(dt: number): void {
     const b = DATA.balance;
     this.elapsed += dt;
+    const diningChanged = tickDining(this.state, dt);
+    if (diningChanged.length) this.events.emit('diningChanged', diningChanged);
     const before = this.state.clock;
     if (!this.closed) {
       this.state.clock = Math.min(b.closeMinute, this.state.clock + dt * DaySession.minutesPerSecond());
@@ -897,6 +902,18 @@ export class DaySession {
     return true;
   }
 
+  cleanTable(fixtureUid: number): boolean {
+    if (!cleanDiningTable(this.state, fixtureUid)) return false;
+    this.events.emit('diningChanged', this.state.diningTables);
+    return true;
+  }
+
+  serveDiningOrder(fixtureUid: number, counterSlot: number): boolean {
+    if (!serveExtraDiningOrder(this.state, fixtureUid, counterSlot)) return false;
+    this.events.emit('diningChanged', this.state.diningTables);
+    return true;
+  }
+
   private tipFor(c: Customer, auto: boolean): number {
     const automatic = auto || c.autoScanned;
     const ordinary = computeTip({ elapsedSec: this.elapsed - c.changeStartedAt, undos: c.undos, shortAttempts: c.shortAttempts, tipMul: c.type.tipMul, auto: automatic }, this.rng);
@@ -942,7 +959,10 @@ export class DaySession {
     }
     this.state.exp += exp;
     t.expGained += exp;
+    const dineTable = c.order.find((line) => line.scanned > 0 && DATA.recipes.some((recipe) => recipe.output === line.productId));
+    const seated = dineTable ? seatDiner(this.state, c.id, dineTable.productId) : null;
     this.finish(c, 'served', stars);
+    if (seated) this.events.emit('diningChanged', [seated]);
     this.events.emit('sale', { customer: c, amount: c.total, tip });
     if (staff) this.events.emit('staffServed', { staff, customer: c, lane: c.lane ?? 0 });
   }

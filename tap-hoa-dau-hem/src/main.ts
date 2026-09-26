@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { registerSW } from 'virtual:pwa-register';
 import { G, persist, sceneForPhase } from './game';
+import { isMaxLevelSimulation } from './core/simulationMode';
 import { BootScene } from './scenes/BootScene';
 import { BuildScene } from './scenes/BuildScene';
 import { DecorScene } from './scenes/DecorScene';
@@ -22,12 +23,13 @@ import { CookScene, KitchenScene } from './scenes/KitchenScene';
 import { BranchesScene } from './scenes/BranchesScene';
 import { StoryScene } from './scenes/StoryScene';
 import { PrestigeScene } from './scenes/PrestigeScene';
+import { DiningScene } from './scenes/DiningScene';
 import { installRoundedRectFix } from './ui/roundrect';
 import { H, W, ZOOM } from './ui/theme';
 import { applyPendingCloud, configureCloudApplyGuard, enableOnlineRetry } from './services/sync';
 
 installRoundedRectFix();
-enableOnlineRetry();
+if (!isMaxLevelSimulation) enableOnlineRetry();
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -38,7 +40,7 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   render: { antialias: true, roundPixels: false },
   input: { activePointers: 2 },
-  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, PricesScene, LedgerScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene],
+  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, PricesScene, LedgerScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene],
 });
 
 // Chỉ bản dev: đo FPS khi kiểm thử hiệu năng trên trình duyệt.

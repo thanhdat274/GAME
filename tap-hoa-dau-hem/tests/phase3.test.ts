@@ -358,9 +358,10 @@ describe('xếp ca', () => {
     const d = new DaySession(s, 7);
     let arrivedAt = -1;
     d.events.on('staffArrived', () => { arrivedAt = s.clock; });
-    runTicks(d, 80);
+    // 14:00 is reached a little after 77 real seconds; stop just before the shift boundary.
+    runTicks(d, 77);
     expect(arrivedAt).toBe(-1);
-    runTicks(d, 20);
+    runTicks(d, 1);
     expect(arrivedAt).toBeGreaterThanOrEqual(840);
     expect(arrivedAt).toBeLessThan(850);
     runTicks(d, 200);

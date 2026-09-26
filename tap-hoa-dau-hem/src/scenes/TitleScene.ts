@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { deleteSave, hasSave } from '../core/save';
 import { createNewGame } from '../core/state';
 import { G, newGame, persist, sceneForPhase, setPlayClockRunning } from '../game';
+import { isMaxLevelSimulation } from '../core/simulationMode';
 import { drawStorefront } from '../ui/art';
 import { play, setSoundEnabled, startMusic, stopMusic } from '../ui/sound';
 import { Button, dialog, toast, type DialogButton } from '../ui/widgets';
@@ -45,6 +46,7 @@ export class TitleScene extends Phaser.Scene {
 
     // Vẽ toàn bộ phối cảnh tiệm tạp hóa hoài niệm (bầu trời, mây trôi, ánh nắng, tiệm cổ xưa, dây đèn vàng, mèo tam thể, vỉa hè)
     drawStorefront(this, W / 2, 352, G.state.land.includes('D'));
+    if (isMaxLevelSimulation) txt(this, W / 2, 58, 'MÔ PHỎNG MAX LEVEL · SAVE RIÊNG', { size: 9, bold: true, color: '#fff2c8', origin: [0.5, 0.5] });
 
     // Nút Âm thanh nhanh góc trên bên trái
     const soundBtnG = this.add.graphics();
@@ -65,7 +67,7 @@ export class TitleScene extends Phaser.Scene {
     });
 
     // Pill tài khoản Google góc trên bên phải
-    if (cloudSaveEnabled()) {
+    if (!isMaxLevelSimulation && cloudSaveEnabled()) {
       const pillW = 168;
       const pillH = 32;
       const pillR = 16;
@@ -310,7 +312,7 @@ export class TitleScene extends Phaser.Scene {
       toast(this, 'Bản lưu bị lỗi nên không đọc được.\nĐã giữ bản sao lưu, bạn có thể chơi mới.', H * 0.3, C.red);
       G.loadError = null;
     }
-    if (data?.login && cloudSaveEnabled()) this.time.delayedCall(150, () => { void this.openAccount(); });
+    if (data?.login && !isMaxLevelSimulation && cloudSaveEnabled()) this.time.delayedCall(150, () => { void this.openAccount(); });
   }
 
   private updateSyncDot(status: SyncStatus): void {

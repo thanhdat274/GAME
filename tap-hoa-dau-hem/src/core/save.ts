@@ -9,6 +9,14 @@ export const CURRENT_VERSION = 5;
 /** Bản lưu trước khi migrate lên version mới, giữ 14 ngày để khôi phục. */
 export const PRE_MIGRATE_KEY = 'thdh.save.premigrate';
 const PRE_MIGRATE_DAYS = 14;
+let activeKeys = { save: SAVE_KEY, backup: BACKUP_KEY, preMigrate: PRE_MIGRATE_KEY };
+
+/** Use an isolated save namespace for disposable in-browser simulations. */
+export function setSaveProfile(profile: 'default' | 'max-simulation'): void {
+  activeKeys = profile === 'default'
+    ? { save: SAVE_KEY, backup: BACKUP_KEY, preMigrate: PRE_MIGRATE_KEY }
+    : { save: 'thdh.simulation.max.save', backup: 'thdh.simulation.max.backup', preMigrate: 'thdh.simulation.max.premigrate' };
+}
 
 /** Giao diện tối thiểu của localStorage để test được. */
 export interface KeyValueStore {
@@ -163,6 +171,7 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
     zones: loaded.zones?.length ? loaded.zones : base.zones,
     counter: loaded.counter?.length ? loaded.counter : base.counter,
     fixtures: loaded.fixtures?.length ? loaded.fixtures : base.fixtures,
+    diningTables: Array.isArray(loaded.diningTables) ? loaded.diningTables : [],
     nextUid: Math.max(loaded.nextUid ?? 0, ...(loaded.fixtures ?? base.fixtures).map((f) => f.uid + 1)),
     lifetime: { ...base.lifetime, ...loaded.lifetime },
     today: { ...base.today, ...loaded.today },
@@ -213,7 +222,7 @@ export function saveGame(state: GameState, store: KeyValueStore | null = default
     state.summary.money = state.money;
     state.lastSeen = Date.now();
     const file: SaveFile = { version: CURRENT_VERSION, savedAt: Date.now(), state };
-    store.setItem(SAVE_KEY, JSON.stringify(file));
+    store.setItem(activeKeys.save, JSON.stringify(file));
     return true;
   } catch {
     return false;
@@ -224,7 +233,7 @@ export function loadGame(store: KeyValueStore | null = defaultStore()): LoadResu
   if (!store) return { status: 'none' };
   let raw: string | null;
   try {
-    raw = store.getItem(SAVE_KEY);
+    raw = store.getItem(activeKeys.save);
   } catch {
     return { status: 'none' };
   }
@@ -237,7 +246,7 @@ export function loadGame(store: KeyValueStore | null = defaultStore()): LoadResu
     return { status: 'ok', state };
   } catch (e) {
     try {
-      store.setItem(BACKUP_KEY, raw);
+      store.setItem(activeKeys.backup, raw);
     } catch {
       /* hết chỗ lưu: bỏ qua */
     }
@@ -251,7 +260,7 @@ export function hasSave(store: KeyValueStore | null = defaultStore()): boolean {
 
 export function deleteSave(store: KeyValueStore | null = defaultStore()): void {
   try {
-    store?.removeItem(SAVE_KEY);
+    store?.removeItem(activeKeys.save);
   } catch {
     /* bỏ qua */
   }
@@ -260,12 +269,12 @@ export function deleteSave(store: KeyValueStore | null = defaultStore()): void {
 /** Giữ bản lưu cũ trước khi migrate (không ghi đè bản dự phòng còn hạn). */
 function keepPreMigrate(store: KeyValueStore, raw: string, version: number): void {
   try {
-    const existing = store.getItem(PRE_MIGRATE_KEY);
+    const existing = store.getItem(activeKeys.preMigrate);
     if (existing) {
       const parsed = JSON.parse(existing) as { expiresAt: number };
       if (parsed.expiresAt > Date.now()) return;
     }
-    store.setItem(PRE_MIGRATE_KEY, JSON.stringify({ version, expiresAt: Date.now() + PRE_MIGRATE_DAYS * 86_400_000, raw }));
+    store.setItem(activeKeys.preMigrate, JSON.stringify({ version, expiresAt: Date.now() + PRE_MIGRATE_DAYS * 86_400_000, raw }));
   } catch {
     /* hết chỗ lưu: bỏ qua */
   }

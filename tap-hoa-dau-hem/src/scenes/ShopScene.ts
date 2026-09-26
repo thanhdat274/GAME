@@ -9,6 +9,7 @@ import { canGiveCredit } from '../core/ledger';
 import { claimQuest, questDef, questDone, questProgress, questsUnlocked } from '../core/quests';
 import { formatClock, formatMoney, warehouseQty } from '../core/state';
 import { orderTotal } from '../core/customers';
+import { ensureDiningTables } from '../core/dining';
 import { calendarDate } from '../core/calendar';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand, startLivePulses, stopLivePulses, suspendLiveShop } from '../services/liveShop';
@@ -1100,7 +1101,16 @@ export class ShopScene extends Phaser.Scene {
       },
     });
     L.add(sound);
-    if (cloudSaveEnabled()) L.add(new Button(this, W / 2, 430, {
+    const hasDining = !G.liveSnapshot && ensureDiningTables(G.state).length > 0;
+    if (hasDining) L.add(new Button(this, W / 2, 430, {
+      w: 220,
+      h: 44,
+      label: '🪑 Khu ăn tại chỗ',
+      color: C.wood,
+      onTap: () => this.openDining(),
+    }));
+    const cloudY = hasDining ? 484 : 430;
+    if (cloudSaveEnabled()) L.add(new Button(this, W / 2, cloudY, {
       w: 220,
       h: 44,
       label: '☁️ Tài khoản và đồng bộ',
@@ -1113,7 +1123,7 @@ export class ShopScene extends Phaser.Scene {
       },
     }));
     L.add(
-      new Button(this, W / 2, 484, {
+      new Button(this, W / 2, hasDining ? 538 : cloudSaveEnabled() ? 484 : 430, {
         w: 220,
         h: 44,
         label: '🏠 Về màn chính',
@@ -1127,7 +1137,7 @@ export class ShopScene extends Phaser.Scene {
       }),
     );
     L.add(
-      txt(this, W / 2, 528, 'Tắt tự thối để tự chọn tờ tiền và có cơ hội nhận tip.\nĐã lưu tiến trình.', {
+      txt(this, W / 2, hasDining ? 582 : cloudSaveEnabled() ? 528 : 474, 'Tắt tự thối để tự chọn tờ tiền và có cơ hội nhận tip.\nĐã lưu tiến trình.', {
         size: 12,
         color: HEX.muted,
         origin: [0.5, 0.5],
@@ -1136,6 +1146,19 @@ export class ShopScene extends Phaser.Scene {
       }),
     );
     this.pauseLayer = L;
+  }
+
+  private openDining(): void {
+    this.pauseLayer?.destroy();
+    this.pauseLayer = null;
+    this.scene.pause('Shop');
+    this.scene.launch('Dining');
+  }
+
+  resumeFromDining(): void {
+    this.session.paused = false;
+    setPlayClockRunning(true);
+    if (G.state.settings.sound) startMusic();
   }
 
   private resume(): void {

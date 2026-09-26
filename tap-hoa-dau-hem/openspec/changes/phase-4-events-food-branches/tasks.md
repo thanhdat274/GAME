@@ -32,7 +32,7 @@
 - [ ] 4.2 Core: công thức theo thứ tự, biến thể (ít đường, nhiều đá), đánh giá Ngon/Tạm được; test
 - [ ] 4.3 Mini-game pha chế + thao tác khuấy/lắc/xay; Sổ công thức
 - [x] 4.4 Vai trò Pha chế
-- [ ] 4.5 Core: bàn ghế, khách ngồi, gọi thêm, bàn bẩn, dọn bàn; test
+- [x] 4.5 Core: bàn ghế, khách ngồi, gọi thêm, bàn bẩn, dọn bàn; test (`tests/phase4.test.ts`)
 - [ ] 4.6 Cân bằng doanh thu góc đồ ăn và quầy nước so với tạp hóa; kiểm thử trên điện thoại; phát hành đợt 4b
 
 ## 5. Đợt 4c - Cốt truyện và nhiệm vụ

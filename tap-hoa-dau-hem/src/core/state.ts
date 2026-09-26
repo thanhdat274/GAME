@@ -38,6 +38,15 @@ export interface Fixture {
   shelf?: number;
 }
 
+export interface DiningTableState {
+  fixtureUid: number;
+  status: 'clean' | 'occupied' | 'dirty';
+  customerId: number | null;
+  productId: string | null;
+  secondsLeft: number;
+  extraOrders: number;
+}
+
 export type DebtFate = 'onTime' | 'late' | 'default';
 
 export interface Debt {
@@ -340,6 +349,7 @@ export interface GameState {
   /** Tồn kho hàng chỉ bán khi khách yêu cầu ở quầy. */
   counter: Slot[];
   fixtures: Fixture[];
+  diningTables: DiningTableState[];
   nextUid: number;
   /** Mảnh đất đã mở (id trong land.json). */
   land: string[];
@@ -458,6 +468,7 @@ export function createNewGame(): GameState {
     zones: Array.from({ length: MAX_SHELVES }, () => null),
     counter: emptySlots(DATA.balance.counterSlots),
     fixtures,
+    diningTables: [],
     nextUid: fixtures.length + 1,
     land: [],
     warehouseTier: 0,
@@ -519,7 +530,7 @@ export function createNewGame(): GameState {
 }
 
 const STORE_KEYS = [
-  'warehouse', 'holding', 'shelves', 'zones', 'counter', 'fixtures', 'nextUid', 'land', 'warehouseTier', 'prices',
+  'warehouse', 'holding', 'shelves', 'zones', 'counter', 'fixtures', 'diningTables', 'nextUid', 'land', 'warehouseTier', 'prices',
   'deliveries', 'ledger', 'regulars', 'quests', 'weeklyQuests', 'partyOrder', 'partyOrderWeek', 'decorOwned', 'lifetime', 'tutorialsSeen', 'ratings', 'yesterdaySold', 'yesterdayMissed',
   'yesterdayComplaints', 'today', 'lastGrandmaDay', 'seenIntro', 'lastSummary', 'announcedLevel', 'staff', 'staffBoard',
   'fixedCandidateUsed', 'schedule', 'scheduleReady', 'rules', 'planogram', 'analytics', 'managerStats', 'manager', 'wageDebt',

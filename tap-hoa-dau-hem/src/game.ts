@@ -1,8 +1,13 @@
-import { loadGame, saveGame, type LoadResult } from './core/save';
+import { deleteSave, loadGame, saveGame, setSaveProfile, type LoadResult } from './core/save';
 import { createNewGame, type GameState } from './core/state';
+import { createMaxLevelSimulation } from './core/simulation';
+import { isMaxLevelSimulation } from './core/simulationMode';
 import { setSoundEnabled } from './ui/sound';
 import { localSaveChanged } from './services/sync';
 import type { LiveShopSnapshot } from './services/liveShop';
+
+export { isMaxLevelSimulation };
+if (isMaxLevelSimulation) setSaveProfile('max-simulation');
 
 /** Trạng thái dùng chung giữa các scene. */
 export const G: { state: GameState; loadError: string | null; liveSnapshot: LiveShopSnapshot | null } = {
@@ -54,7 +59,7 @@ export function persist(): void {
   G.state.summary.day = G.state.day;
   G.state.summary.money = G.state.money;
   saveGame(G.state);
-  localSaveChanged(G.state);
+  if (!isMaxLevelSimulation) localSaveChanged(G.state);
 }
 
 /** Cache an authoritative live snapshot on this device without enqueueing solo cloud sync. */
@@ -67,6 +72,19 @@ export function persistLocal(): void {
 }
 
 export function tryLoad(): LoadResult {
+  if (isMaxLevelSimulation) {
+    if (new URLSearchParams(window.location.search).get('reset') === '1') deleteSave();
+    const saved = loadGame();
+    if (saved.status === 'ok') {
+      G.state = saved.state;
+      setSoundEnabled(G.state.settings.sound);
+      return saved;
+    }
+    G.state = createMaxLevelSimulation();
+    saveGame(G.state, undefined, false);
+    setSoundEnabled(G.state.settings.sound);
+    return { status: 'ok', state: G.state };
+  }
   const res = loadGame();
   if (res.status === 'ok') {
     G.state = res.state;

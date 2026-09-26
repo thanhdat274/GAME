@@ -20,6 +20,14 @@ export function validateRecipes(recipes: RecipeDef[] = DATA.recipes): string[] {
       if (!Number.isInteger(qty) || qty <= 0) errors.push(`${r.id}: lượng nguyên liệu ${id} phải là số nguyên dương`);
     }
     if (r.prepSeconds <= 0 || r.shelfLifeDays <= 0) errors.push(`${r.id}: thời gian chế biến và hạn dùng phải > 0`);
+    const variants = new Set<string>();
+    for (const variant of r.variants ?? []) {
+      if (!variant.id || !variant.name) errors.push(`${r.id}: biến thể thiếu id hoặc tên`);
+      if (variants.has(variant.id)) errors.push(`${r.id}: trùng biến thể ${variant.id}`);
+      variants.add(variant.id);
+      if (!Number.isFinite(variant.priceDelta) || !Number.isFinite(variant.qualityDelta)) errors.push(`${r.id}: biến thể ${variant.id} có điều chỉnh không hợp lệ`);
+      if (output && output.price + variant.priceDelta < output.cost) errors.push(`${r.id}: giá biến thể ${variant.id} thấp hơn giá vốn`);
+    }
   }
   return errors;
 }
@@ -49,11 +57,13 @@ function consumeWarehouse(state: GameState, requirements: Record<string, number>
 }
 
 /** Prepare one serving from real warehouse stock and place it in counter inventory. */
-export function prepareRecipe(state: GameState, id: string, quality = 1): CookResult {
+export function prepareRecipe(state: GameState, id: string, quality = 1, variantId?: string): CookResult {
   const recipe = DATA.recipes.find((r) => r.id === id);
   if (!recipe || recipe.unlockLevel > state.level) return { ok: false, reason: 'locked' };
   if (!hasStation(state, recipe.station)) return { ok: false, reason: 'station' };
   if (!state.activeRecipes.includes(id)) return { ok: false, reason: 'menu' };
+  const variant = variantId ? recipe.variants?.find((item) => item.id === variantId) : undefined;
+  if (variantId && !variant) return { ok: false, reason: 'menu' };
   const requirements = recipeIngredients(recipe);
   const slots = state.counter;
   let outputSlot = slots.find((s) => s.productId === recipe.output);
@@ -65,9 +75,10 @@ export function prepareRecipe(state: GameState, id: string, quality = 1): CookRe
   outputSlot.productId = output.id;
   outputSlot.qty++;
   outputSlot.lots = [{ qty: outputSlot.qty, exp: state.day + recipe.shelfLifeDays - 1 }];
-  const qualityFactor = Math.max(0.75, Math.min(1.25, quality));
-  state.prices[output.id] = Math.max(output.cost, Math.round(output.price * qualityFactor / 500) * 500);
-  state.today.journal.push({ m: state.clock, t: `Đã chế biến ${output.name}; nguyên liệu ${formatMoney(Object.entries(requirements).reduce((sum, [item, qty]) => sum + product(item).cost * qty, 0))}` });
+  const qualityFactor = Math.max(0.75, Math.min(1.25, quality + (variant?.qualityDelta ?? 0)));
+  state.prices[output.id] = Math.max(output.cost, Math.round((output.price * qualityFactor + (variant?.priceDelta ?? 0)) / 500) * 500);
+  const variantNote = variant ? ` (${variant.name})` : '';
+  state.today.journal.push({ m: state.clock, t: `Đã chế biến ${output.name}${variantNote}; nguyên liệu ${formatMoney(Object.entries(requirements).reduce((sum, [item, qty]) => sum + product(item).cost * qty, 0))}` });
   return { ok: true, cost: Object.entries(requirements).reduce((sum, [item, qty]) => sum + product(item).cost * qty, 0), output: output.id };
 }
 
