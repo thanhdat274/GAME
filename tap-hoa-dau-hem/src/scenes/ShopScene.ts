@@ -83,6 +83,7 @@ export class ShopScene extends Phaser.Scene {
   private mapBtn: Button | null = null;
   /** Che bảng tính tiền khi người chơi đang ở xa quầy (góc nhìn trên xuống). */
   private awayCover: Phaser.GameObjects.Container | null = null;
+  private awayText: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super('Shop');
@@ -140,6 +141,7 @@ export class ShopScene extends Phaser.Scene {
     this.managerStatus = null;
     this.drawStaff();
     this.applyViewMode();
+    if (this.topDown && !G.state.tutorialsSeen.includes('topdown')) this.topDownTutorial();
 
     this.wireEvents();
     this.time.addEvent({
@@ -1002,7 +1004,14 @@ export class ShopScene extends Phaser.Scene {
     if (this.playMap) {
       this.playMap.update(gameDt);
       this.session.playerAtCounter = this.playMap.playerAtCounter;
-      this.awayCover?.setVisible(!this.playMap.playerAtCounter && this.session.playerAway <= 0 && !this.managerView);
+      const away = !this.playMap.playerAtCounter && this.session.playerAway <= 0 && !this.managerView;
+      this.awayCover?.setVisible(away);
+      if (away) {
+        const staffed = this.session.lanes.some((l) => !l.closing);
+        this.awayText?.setText(staffed
+          ? 'Thu ngân đang lo quầy: khách mới tự sang quầy thu ngân,\nbạn cứ đi phụ nạp kệ, nấu món.'
+          : this.session.queue.length ? `Khách đầu hàng phải chờ bạn quay lại mới tính tiền được.\n(${this.session.queue.length} người đang chờ quầy bạn)` : 'Khách đầu hàng phải chờ bạn quay lại mới tính tiền được.');
+      }
     }
     this.renderAcc += dtMs;
     if (this.renderAcc >= 100) {
@@ -1015,9 +1024,13 @@ export class ShopScene extends Phaser.Scene {
       this.zoneRefillButtons.forEach(({ zone, button }) => button.setVisible(canShowZoneActions && !this.topDown && G.state.zones.some((item) => item === zone)));
       this.checkQuestProgress();
     }
+    const side = !this.topDown;
     this.session.customers.forEach((c) => {
       const v = this.views.get(c.id);
       if (!v) return;
+      v.sprite.setVisible(side);
+      v.bar.setVisible(side);
+      if (!side) return;
       const r = c.patience / c.patienceMax;
       v.bar.setPosition(v.sprite.x - 18, v.sprite.y - 70);
       v.bar.set(r, r > 0.5 ? C.green : r > 0.25 ? C.yellow : C.red);
@@ -1082,14 +1095,45 @@ export class ShopScene extends Phaser.Scene {
     G.state.settings.viewMode = mode;
     if (!G.liveSnapshot) persist();
     this.applyViewMode();
-    if (mode === 'topdown') toast(this, 'Chạm ô để đi · tới kệ mới nạp được\nđứng ở quầy mới tính tiền được', 300, C.greenDark);
+    if (mode === 'topdown') this.topDownTutorial();
+  }
+
+  /** Hướng dẫn một lần khi bật góc nhìn trên xuống (tạm dừng tiệm trong lúc đọc). */
+  private topDownTutorial(): void {
+    const s = G.state;
+    if (s.tutorialsSeen.includes('topdown')) {
+      toast(this, 'Chạm ô để đi · tới kệ mới nạp được\nđứng ở quầy mới tính tiền được', 300, C.greenDark);
+      return;
+    }
+    s.tutorialsSeen.push('topdown');
+    if (!G.liveSnapshot) persist();
+    this.session.paused = true;
+    const staffed = s.staff.some((st) => st.role === 'cashier');
+    dialog(this, {
+      icon: '🗺️',
+      title: 'Góc nhìn trên xuống',
+      body: [
+        '👆 Chạm ô trống để đi tới đó.',
+        '🗄️ Chạm kệ: đi tới sát kệ rồi bấm + để nạp, chạm ô trống để bày món, chạm ô "HẠN" để bán xả.',
+        '🍳 Chạm bếp / quầy nước để nấu, 📦 kệ kho để xem kho.',
+        '🧾 Chạm quầy để về tính tiền. Rời quầy thì khách đầu hàng phải chờ bạn.',
+        staffed ? '👥 Có thu ngân: bạn rời quầy thì khách tự sang quầy thu ngân, bạn đi phụ việc thoải mái.' : '👥 Thuê thu ngân thì bạn được đi lại tự do, khách sẽ sang quầy thu ngân.',
+        '🚨 Kẻ trộm bỏ chạy: chạy lại gần rồi chạm để bắt.',
+      ].join('\n'),
+      width: 330,
+      buttons: [{ label: 'Bắt đầu', color: C.green, onTap: () => { if (!this.pauseLayer) this.session.paused = false; } }],
+    });
   }
 
   private applyViewMode(): void {
     const top = !G.liveSnapshot && G.state.settings.viewMode === 'topdown';
     if (top) {
       if (!this.playMap) {
-        this.playMap = new LiveMap(this, this.session, { mode: 'play', top: HUD_H, bottom: PANEL_Y, depth: 262, onSwitchMode: () => this.setViewMode('side') });
+        this.playMap = new LiveMap(this, this.session, {
+          mode: 'play', top: HUD_H, bottom: PANEL_Y, depth: 262,
+          onSwitchMode: () => this.setViewMode('side'),
+          onCook: (recipeId) => this.openCook(recipeId),
+        });
         this.awayCover = this.buildAwayCover();
       }
       if (!this.playMap.visible) this.playMap.open();
@@ -1100,13 +1144,18 @@ export class ShopScene extends Phaser.Scene {
     }
     this.mapBtn?.setVisible(!top);
     this.counterBtn?.setVisible(!top && !this.shelves.atCounter);
+    // Phần nhìn ngang nằm dưới sơ đồ: ẩn đi cho đỡ tốn công vẽ.
+    this.shelves.setVisible(!top);
+    this.staffLayer.setVisible(!top);
+    for (const v of this.views.values()) { v.sprite.setVisible(!top); v.bar.setVisible(!top); }
   }
 
   private buildAwayCover(): Phaser.GameObjects.Container {
     const L = this.add.container(0, 0).setDepth(320).setVisible(false);
     L.add(this.add.rectangle(W / 2, (PANEL_Y + H) / 2, W, H - PANEL_Y, 0x2b1d14, 1).setInteractive());
     L.add(txt(this, W / 2, PANEL_Y + 70, '🚶 Bạn đang ở xa quầy', { size: 17, bold: true, color: HEX.cream, origin: [0.5, 0.5] }));
-    L.add(txt(this, W / 2, PANEL_Y + 104, 'Khách đầu hàng phải chờ bạn quay lại mới tính tiền được.', { size: 12, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: W - 60 }));
+    this.awayText = txt(this, W / 2, PANEL_Y + 108, '', { size: 12, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: W - 40 });
+    L.add(this.awayText);
     L.add(new Button(this, W / 2, PANEL_Y + 160, { w: 180, h: 44, label: '🏃 Về quầy', size: 15, color: C.green, onTap: () => this.playMap?.walkToCounter() }));
     return L;
   }
@@ -1260,6 +1309,15 @@ export class ShopScene extends Phaser.Scene {
     setPlayClockRunning(false);
     this.scene.pause('Shop');
     this.scene.launch('Restock');
+  }
+
+  /** Nấu kỹ (mini-game) từ góc nhìn trên xuống: màn Bếp phủ lên, tiệm đứng yên tới khi quay lại. */
+  private openCook(recipeId: string): void {
+    if (this.ending || G.liveSnapshot) return;
+    this.session.paused = true;
+    setPlayClockRunning(false);
+    this.scene.pause('Shop');
+    this.scene.launch('Cook', { recipeId, fromShop: true });
   }
 
   resumeFromRestock(): void {

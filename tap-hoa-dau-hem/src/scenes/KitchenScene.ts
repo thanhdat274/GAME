@@ -71,10 +71,13 @@ export class CookScene extends Phaser.Scene {
   private mixOrder: string[] = [];
   private variantId: string | undefined;
   private variantButtons: Button[] = [];
+  /** Mở từ góc nhìn trên xuống lúc đang bán: xong thì quay lại tiệm thay vì về sổ món. */
+  private fromShop = false;
   constructor() { super('Cook'); }
-  create(data: { recipeId: string }): void {
+  create(data: { recipeId: string; fromShop?: boolean }): void {
     setupCamera(this);
     this.recipeId = data.recipeId;
+    this.fromShop = !!data.fromShop;
     // Phaser tái dùng instance scene: reset trạng thái của lượt chế biến trước.
     this.step = 0;
     this.goodSteps = 0;
@@ -90,14 +93,14 @@ export class CookScene extends Phaser.Scene {
     this.variantId = undefined;
     this.variantButtons = [];
     const recipe = DATA.recipes.find((r) => r.id === this.recipeId);
-    if (!recipe) { this.scene.start('Kitchen'); return; }
+    if (!recipe) { this.leave(); return; }
     this.mode = recipe.id === 'xuc_xich_nuong' ? 'timing'
       : recipe.id === 'mi_ly' ? 'pour'
         : recipe.id === 'banh_mi_trung' ? 'sequence'
           : recipe.id === 'trung_luoc' ? 'boil'
             : 'mix';
     this.mixOrder = Object.keys(recipe.ingredients);
-    pageFrame(this, `👩‍🍳 ${recipe.name}`, () => this.scene.start('Kitchen'), this.mode === 'mix' ? 'Chạm nguyên liệu đúng thứ tự rồi hoàn tất' : 'Thao tác chế biến');
+    pageFrame(this, `👩‍🍳 ${recipe.name}`, () => this.leave(), this.mode === 'mix' ? 'Chạm nguyên liệu đúng thứ tự rồi hoàn tất' : 'Thao tác chế biến');
     this.prompt = txt(this, W / 2, H * 0.36, this.instruction(recipe), { size: 19, bold: true, origin: [0.5, 0.5], wrap: W - 40, align: 'center' });
     if (recipe.variants?.length) this.renderVariantControls(recipe.variants);
     if (this.mode === 'timing') {
@@ -247,6 +250,14 @@ export class CookScene extends Phaser.Scene {
     const made = prepareRecipe(G.state, this.recipeId, quality, this.variantId);
     this.prompt.setText(made.ok ? `${product(made.output).icon} ${result}. Đã đưa vào quầy.` : made.reason === 'space' ? 'Quầy đã đầy.' : 'Thiếu nguyên liệu hoặc thiết bị.');
     persist();
-    new Button(this, W / 2, H * 0.83, { w: 150, h: 42, label: 'Về sổ món', size: 13, color: C.blue, onTap: () => this.scene.start('Kitchen') });
+    new Button(this, W / 2, H * 0.83, { w: 150, h: 42, label: this.fromShop ? 'Về tiệm' : 'Về sổ món', size: 13, color: C.blue, onTap: () => this.leave() });
+  }
+
+  private leave(): void {
+    if (!this.fromShop) { this.scene.start('Kitchen'); return; }
+    const shop = this.scene.get('Shop') as Phaser.Scene & { resumeFromRestock?: () => void };
+    this.scene.stop('Cook');
+    this.scene.resume('Shop');
+    shop.resumeFromRestock?.();
   }
 }

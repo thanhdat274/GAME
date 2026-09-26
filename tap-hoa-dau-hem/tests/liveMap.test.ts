@@ -97,3 +97,55 @@ describe('người chơi rời quầy (góc nhìn trên xuống)', () => {
     expect(session.snapshot().playerAtCounter).toBe(true);
   });
 });
+
+describe('góc nhìn trên xuống: có thu ngân và kiên nhẫn khi vắng chủ', () => {
+  function withCashier() {
+    const s = stockedGame();
+    s.level = 20;
+    s.money = 10_000_000;
+    return s;
+  }
+
+  it('rời quầy khi có thu ngân: quầy người chơi đóng, khách sang quầy thu ngân', async () => {
+    const { ensureBoard, hire } = await import('../src/core/staff');
+    const s = withCashier();
+    const candidate = ensureBoard(s)[0];
+    expect(hire(s, candidate.id, 'cashier')).toBe('ok');
+    const staff = s.staff[0];
+    s.schedule[staff.id] = new Array(14).fill(true);
+    s.scheduleReady = true;
+    const session = new DaySession(s, 11);
+    const step = DATA.balance.tickMs / 1000;
+    for (let i = 0; i < 50 && !session.lanes.length; i++) session.tick(step);
+    expect(session.lanes.length).toBeGreaterThan(0);
+    expect(session.playerLaneOpen()).toBe(true);
+    session.playerAtCounter = false;
+    expect(session.playerLaneOpen()).toBe(false);
+    let sawStaffQueue = false;
+    for (let i = 0; i < 6000; i++) {
+      session.tick(step);
+      expect(session.queue.every((c) => c.status !== 'waiting' || c.order.some((l) => l.scanned > 0))).toBe(true);
+      if (session.lanes.some((l) => l.queue.length)) sawStaffQueue = true;
+    }
+    expect(sawStaffQueue).toBe(true);
+  });
+
+  it('khách ở quầy người chơi mất kiên nhẫn chậm hơn khi người chơi đang đi nạp kệ', () => {
+    const run = (atCounter: boolean) => {
+      const s = stockedGame();
+      s.settings.autoScan = false;
+      const session = new DaySession(s, 5);
+      session.playerAtCounter = atCounter;
+      const step = DATA.balance.tickMs / 1000;
+      for (let i = 0; i < 6000 && !session.front; i++) session.tick(step);
+      session.playerAtCounter = false;
+      const c = session.front!;
+      const start = c.patience;
+      for (let i = 0; i < 20; i++) session.tick(step);
+      return start - c.patience;
+    };
+    const lost = run(true);
+    expect(lost).toBeGreaterThan(0);
+    expect(lost).toBeCloseTo(2 * DATA.balance.topDown.awayPatienceRate, 1);
+  });
+});

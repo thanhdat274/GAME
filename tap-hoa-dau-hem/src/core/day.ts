@@ -352,7 +352,9 @@ export class DaySession {
     const waiting = [...this.queue, ...this.ready, ...inLanes].filter((c) => c.status === 'waiting' || c.status === 'scanning' || c.status === 'paying' || c.status === 'bargain' || c.status === 'credit');
     const cat = hasCat(this.state);
     for (const c of waiting) {
-      const rate = c === this.front || this.lanes.some((l) => l.queue[0] === c) ? 1 : b.queuePatienceRate;
+      let rate = c === this.front || this.lanes.some((l) => l.queue[0] === c) ? 1 : b.queuePatienceRate;
+      // Khách thấy chủ tiệm đang bận nạp kệ thì chờ thong thả hơn.
+      if (!this.playerAtCounter && !this.autoPlayer && c.lane === 0) rate *= b.topDown.awayPatienceRate;
       c.patience -= dt * rate;
       c.waited = (c.waited ?? 0) + dt;
       if (cat && !c.catChecked && c.waited >= b.cat.waitSeconds) {
@@ -590,6 +592,8 @@ export class DaySession {
     if (this.playerAway > 0 && !this.autoPlayer) return false;
     const staffed = this.lanes.some((l) => !l.closing);
     if (this.state.today.managerDay && staffed) return false;
+    // Góc nhìn trên xuống: người chơi rời quầy mà có thu ngân thì quầy người chơi tạm đóng, khách sang quầy thu ngân.
+    if (!this.playerAtCounter && !this.autoPlayer && staffed) return false;
     return true;
   }
 

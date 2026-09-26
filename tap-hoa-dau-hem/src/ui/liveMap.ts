@@ -6,8 +6,9 @@ import { findPath, fixtureCells, walkableGrid, type Cell } from '../core/layout'
 import { customerGoal, goalCells, goalKey, laneCounter, queueLine, staffGoal, type Goal } from '../core/liveMap';
 import { roleDef } from '../core/staff';
 import { formatClock, formatMoney, type Fixture } from '../core/state';
-import { canRefill, shelfCapacity, warehouseCapacity, warehouseCellsUsed } from '../core/stock';
-import { fixtureInfo, fixtureStockLevel, sellsGoods, storeView } from '../core/storeMap';
+import { prepareRecipe, recipeIngredients } from '../core/recipes';
+import { assignSlot, canRefill, placeError, setClearance, shelfCapacity, slotFreshness, warehouseCapacity, warehouseCellsUsed } from '../core/stock';
+import { fixtureInfo, fixtureStockLevel, sellsGoods, storeView, warehouseLines } from '../core/storeMap';
 import { customerLook, customerSprite, productIcon, setWalkFrame, staffType } from './art';
 import { cellAt, drawFixture, drawFloor, type FloorGeom } from './floorPlan';
 import { ZONE_NAMES } from './shelves';
@@ -16,10 +17,14 @@ import { Button, panel } from './widgets';
 import { C, H, HEX, W, txt } from './theme';
 
 /** Tốc độ đi trên sơ đồ (ô/giây, theo thời gian game). */
-const SPEED = { customer: 3.2, staff: 3.6, player: 4, flee: 6 } as const;
+const SPEED = { customer: 3.2, staff: 3.6, player: DATA.balance.topDown.playerTilesPerSecond, flee: 6 } as const;
 const PLAYER_LOOK = { shirt: '#d84a3a', pants: '#3b2a1f', hair: '#2b1b12', skin: '#f2c9a0' };
 /** Khoảng cách tối đa (ô) để bắt kẻ trộm khi tự đi lại. */
 const CATCH_TILES = 3;
+/** Vị trí dàn ra (theo ô) cho nhiều người đứng chung một ô. */
+const SPREAD = [{ x: -0.22, y: 0.05 }, { x: 0.22, y: 0.05 }, { x: 0, y: -0.18 }, { x: -0.22, y: -0.2 }, { x: 0.22, y: -0.2 }, { x: 0, y: 0.2 }];
+/** Chất lượng khi "Nấu nhanh" (không chơi mini-game): giá bán thấp hơn một chút. */
+const QUICK_COOK_QUALITY = 0.85;
 
 export type LiveMapMode = 'watch' | 'play';
 
@@ -32,6 +37,8 @@ export interface LiveMapOptions {
   depth?: number;
   /** Nút đổi góc nhìn (hiện trong cả hai chế độ nếu có). */
   onSwitchMode?: () => void;
+  /** Nấu kỹ bằng mini-game (màn Bếp phủ lên, tiệm tạm dừng). */
+  onCook?: (recipeId: string) => void;
 }
 
 interface Agent {
@@ -50,6 +57,10 @@ interface Agent {
   /** Khách đã rời phiên: đi ra cửa rồi xóa. */
   leaving: boolean;
   hidden: boolean;
+  /** Đang quay lưng (đi lên / đứng nhìn vào kệ phía trên). */
+  back: boolean;
+  /** Lệch thêm khi đứng chung ô với người khác (theo ô). */
+  spread: { x: number; y: number };
   customer?: Customer;
   staffId?: string;
 }
@@ -57,6 +68,8 @@ interface Agent {
 interface SlotView {
   slot: number;
   qty: Phaser.GameObjects.Text;
+  /** Nhãn hạn / bán xả. */
+  tag: Phaser.GameObjects.Text;
   plus: Button;
   bar: Phaser.GameObjects.Graphics;
   x: number;
@@ -101,7 +114,7 @@ export class LiveMap {
   private note = '';
   private noteLeft = 0;
 
-  constructor(private scene: Phaser.Scene, private session: DaySession, opts: LiveMapOptions) {
+  constructor(private scene: Phaser.Scene, private session: DaySession, private opts: LiveMapOptions) {
     const s = scene;
     this.mode = opts.mode;
     const top = opts.top ?? 50;
@@ -200,7 +213,7 @@ export class LiveMap {
     if (this.walkAcc >= 0.15) {
       this.walkAcc = 0;
       this.walkFrame = this.walkFrame ? 0 : 1;
-      for (const a of this.agents.values()) if (a.path.length) setWalkFrame(a.sprite, a.type, this.walkFrame);
+      for (const a of this.agents.values()) if (a.path.length) setWalkFrame(a.sprite, a.type, this.walkFrame, a.back);
     }
     if (this.noteLeft > 0) this.noteLeft -= gameDt;
     this.infoAcc += gameDt;
@@ -300,6 +313,8 @@ export class LiveMap {
       this.step(a, dt);
       if (a.leaving && !a.path.length) this.removeAgent(a);
     }
+    this.spreadIdle();
+    for (const a of this.agents.values()) this.place(a);
     this.people.sort('depth');
     if (this.mode === 'play') this.playerArrived(me);
   }
@@ -317,7 +332,7 @@ export class LiveMap {
       this.setGoal(me, this.playerGoal, false);
       return;
     }
-    if (f.shelf !== undefined && this.sheetFor !== f.uid && this.sheetDismissed !== f.uid) this.openSheet(f);
+    if (this.sheetFor !== f.uid && this.sheetDismissed !== f.uid) this.openSheet(f);
   }
 
   private addAgent(id: string, type: CustomerType, speed: number, start: Cell | null): Agent {
@@ -330,7 +345,7 @@ export class LiveMap {
       id, sprite, tag: null, type, speed,
       pos: start ? { x: start.x, y: start.y + 0.6 } : { x: door.x, y: door.y },
       path: [], goal: { kind: 'stay' }, goalKey: '', jitter: { x: ((hash % 7) - 3) * 2.2, y: (((hash >> 3) % 5) - 2) * 1.6 },
-      leaving: false, hidden: false,
+      leaving: false, hidden: false, back: false, spread: { x: 0, y: 0 },
     };
     // Người mới xuất hiện khi mở sơ đồ: chưa có chỗ đứng, sẽ được đặt thẳng vào đích ở setGoal.
     if (!start) a.goalKey = '__new';
@@ -398,28 +413,64 @@ export class LiveMap {
 
   private step(a: Agent, dt: number): void {
     let move = a.speed * dt;
+    const moving = a.path.length > 0;
     while (move > 0 && a.path.length) {
       const next = a.path[0];
       const dx = next.x - a.pos.x;
       const dy = next.y - a.pos.y;
       const d = Math.hypot(dx, dy);
+      if (d > 0.001) {
+        // Hướng nhìn: đi lên thấy lưng, đi xuống thấy mặt, đi ngang lật trái/phải.
+        if (Math.abs(dy) > Math.abs(dx)) a.back = dy < 0;
+        else { a.back = false; a.sprite.setFlipX(dx < 0); }
+      }
       if (d <= move) {
         a.pos = { x: next.x, y: next.y };
         a.path.shift();
         move -= d;
       } else {
         a.pos = { x: a.pos.x + (dx / d) * move, y: a.pos.y + (dy / d) * move };
-        if (Math.abs(dx) > 0.01) a.sprite.setFlipX(dx < 0);
         move = 0;
       }
     }
     if (!a.path.length) {
-      setWalkFrame(a.sprite, a.type, 0);
+      if (moving) a.back = this.facesUp(a);
+      setWalkFrame(a.sprite, a.type, 0, a.back);
       if (a.goal.kind === 'away') a.hidden = true;
     }
+  }
+
+  /** Đứng lại cạnh nội thất nằm phía trên (kệ, quầy) thì quay lưng nhìn vào đó. */
+  private facesUp(a: Agent): boolean {
+    if (a.goal.kind !== 'fixture') return false;
+    const uid = a.goal.uid;
+    const f = this.session.state.fixtures.find((item) => item.uid === uid);
+    if (!f) return false;
+    return fixtureCells(f).some((c) => c.y < a.pos.y - 0.5 && Math.abs(c.x - a.pos.x) < 0.6);
+  }
+
+  /** Người đứng yên chung một ô thì dàn ra quanh ô cho khỏi chồng lên nhau. */
+  private spreadIdle(): void {
+    const groups = new Map<string, Agent[]>();
+    for (const a of this.agents.values()) {
+      a.spread = { x: 0, y: 0 };
+      if (a.hidden || a.path.length || a.goal.kind === 'behind') continue;
+      const k = `${Math.round(a.pos.x)},${Math.round(a.pos.y)}`;
+      const list = groups.get(k) ?? [];
+      list.push(a);
+      groups.set(k, list);
+    }
+    for (const list of groups.values()) {
+      if (list.length < 2) continue;
+      list.sort((p, q) => (p.id < q.id ? -1 : 1));
+      list.forEach((a, i) => { a.spread = SPREAD[i % SPREAD.length]; });
+    }
+  }
+
+  private place(a: Agent): void {
     const { gx, gy, cell } = this.geom;
-    const x = gx + (a.pos.x + 0.5) * cell + a.jitter.x;
-    const y = gy + (a.pos.y + 0.5) * cell + cell * 0.35 + a.jitter.y;
+    const x = gx + (a.pos.x + 0.5 + a.spread.x) * cell + a.jitter.x;
+    const y = gy + (a.pos.y + 0.5 + a.spread.y) * cell + cell * 0.35 + a.jitter.y;
     a.sprite.setPosition(x, y).setVisible(!a.hidden).setDepth(y);
     a.tag?.setPosition(x, y - this.personH - 1).setVisible(!a.hidden).setDepth(y + 1);
     const sel = this.selected?.kind === 'agent' && this.selected.id === a.id;
@@ -548,10 +599,39 @@ export class LiveMap {
     this.renderInfo();
   }
 
-  // ---------- Bảng nạp kệ (chế độ chơi) ----------
+  // ---------- Bảng thao tác tại nội thất (chế độ chơi) ----------
 
+  /** Mở bảng thao tác phù hợp khi người chơi đứng cạnh nội thất. */
   private openSheet(f: Fixture): void {
+    const kind = furniture(f.type).kind;
+    if (f.shelf !== undefined) this.openShelfSheet(f);
+    else if (kind === 'storage') this.openWarehouseSheet(f);
+    else if (kind === 'food' || kind === 'drink') this.openStationSheet(f);
+  }
+
+  /** Khung bảng đặt cạnh nội thất (phía trên nếu còn chỗ, không thì phía dưới); trả về góc trên trái. */
+  private sheetFrame(f: Fixture, w: number, h: number, title: string): { x0: number; y0: number } {
     this.closeSheet();
+    const s = this.scene;
+    const { gx, gy, cell } = this.geom;
+    const x0 = Math.max(4, Math.min(W - 4 - w, gx + (f.x + 0.5) * cell - w / 2));
+    const mapBottom = gy + DATA.land.rows * cell;
+    const fy = gy + f.y * cell;
+    const y0 = fy - h - 4 >= gy ? fy - h - 4 : Math.max(gy, Math.min(mapBottom - h, fy + cell * 2));
+    this.sheet.add(s.add.rectangle(x0 + w / 2, y0 + h / 2, w, h, 0xffffff, 0.001).setInteractive());
+    this.sheet.add(panel(s, x0, y0, w, h));
+    this.sheet.add(txt(s, x0 + 10, y0 + 8, title, { size: 11, bold: true, wrap: w - 110 }));
+    this.sheet.add(new Button(s, x0 + w - 16, y0 + 14, { w: 22, h: 20, label: '×', size: 12, color: C.grey, onTap: () => { this.sheetDismissed = f.uid; this.closeSheet(); } }));
+    this.sheetFor = f.uid;
+    return { x0, y0 };
+  }
+
+  private fixtureName(f: Fixture): string {
+    const def = furniture(f.type);
+    return f.shelf !== undefined ? `${def.kind === 'shelf' ? 'Kệ' : def.name} ${f.shelf + 1}` : `${def.icon} ${def.name}`;
+  }
+
+  private openShelfSheet(f: Fixture): void {
     const r = f.shelf!;
     const s = this.scene;
     const state = this.session.state;
@@ -560,38 +640,135 @@ export class LiveMap {
     const sw = 46;
     const sh = 54;
     const rows = Math.ceil(slots.length / perRow);
-    const h = 30 + rows * (sh + 6) + 4;
-    const w = perRow * (sw + 4) + 12;
-    const { gx, gy, cell } = this.geom;
-    const x0 = Math.max(4, Math.min(W - 4 - w, gx + (f.x + 0.5) * cell - w / 2));
-    const mapBottom = gy + DATA.land.rows * cell;
-    const fy = gy + f.y * cell;
-    // Mở phía trên kệ nếu còn chỗ, không thì phía dưới.
-    const y0 = fy - h - 4 >= gy ? fy - h - 4 : Math.min(mapBottom - h, fy + cell * 2);
-    this.sheet.add(s.add.rectangle(x0 + w / 2, y0 + h / 2, w, h, 0xffffff, 0.001).setInteractive());
-    this.sheet.add(panel(s, x0, y0, w, h));
+    const h = 32 + rows * (sh + 6) + 4;
+    const w = Math.max(250, perRow * (sw + 4) + 12);
     const zone = state.zones[r];
-    const def = furniture(f.type);
-    this.sheet.add(txt(s, x0 + 10, y0 + 8, `${def.kind === 'shelf' ? 'Kệ' : def.name} ${r + 1}${zone ? ` · ${ZONE_NAMES[zone]}` : ''}`, { size: 11, bold: true }));
-    this.sheet.add(new Button(s, x0 + w - 16, y0 + 14, { w: 22, h: 20, label: '×', size: 12, color: C.grey, onTap: () => { this.sheetDismissed = f.uid; this.closeSheet(); } }));
+    const { x0, y0 } = this.sheetFrame(f, w, h, `${this.fixtureName(f)}${zone ? ` · ${ZONE_NAMES[zone]}` : ''}`);
+    if (zone) {
+      this.sheet.add(new Button(s, x0 + w - 70, y0 + 14, { w: 80, h: 20, label: '🧺 Nạp cả khu', size: 9, color: C.wood, onTap: () => {
+        if (this.session.refillZone(zone)) { play('step'); this.say(`🧺 Đang nạp cả khu ${ZONE_NAMES[zone]}`); } else this.say('Khu này chưa có ô cần nạp');
+      } }));
+    }
     slots.forEach((slot, i) => {
       const x = x0 + 6 + (i % perRow) * (sw + 4);
-      const y = y0 + 28 + Math.floor(i / perRow) * (sh + 6);
+      const y = y0 + 30 + Math.floor(i / perRow) * (sh + 6);
       const g = s.add.graphics();
       g.fillStyle(C.slot, 1).fillRoundedRect(x, y, sw, sh, 6).lineStyle(1.5, C.slotEdge, 1).strokeRoundedRect(x, y, sw, sh, 6);
-      this.sheet.add(g);
+      const hit = s.add.rectangle(x + sw / 2, y + sh / 2, sw, sh, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
+      hit.on('pointerup', (p: Phaser.Input.Pointer) => { if (p.getDistance() < 10) this.onSlotTap(f, i); });
+      this.sheet.add([g, hit]);
       if (slot.productId) this.sheet.add(productIcon(s, x + sw / 2, y + 20, product(slot.productId), 26));
-      else this.sheet.add(txt(s, x + sw / 2, y + 20, 'trống', { size: 9, color: HEX.muted, origin: [0.5, 0.5] }));
+      else this.sheet.add(txt(s, x + sw / 2, y + 20, '＋\nbày món', { size: 8, color: HEX.muted, origin: [0.5, 0.5], align: 'center' }));
       const qty = txt(s, x + sw / 2, y + sh - 8, '', { size: 9, bold: true, origin: [0.5, 0.5] });
+      const tag = txt(s, x + 2, y + 2, '', { size: 8, bold: true, color: HEX.white }).setPadding(2, 0, 2, 0);
       const bar = s.add.graphics();
       const plus = new Button(s, x + sw - 8, y + 8, { w: 20, h: 20, label: '+', size: 13, color: C.green, radius: 10, onTap: () => {
         if (this.session.startRefill(r, i)) { play('step'); this.refreshSheet(); } else this.say('Ô này chưa nạp được');
       } });
-      this.sheet.add([qty, bar, plus]);
-      this.slotViews.push({ slot: i, qty, plus, bar, x, y });
+      this.sheet.add([qty, tag, bar, plus]);
+      this.slotViews.push({ slot: i, qty, tag, plus, bar, x, y });
     });
-    this.sheetFor = f.uid;
     this.refreshSheet();
+  }
+
+  /** Chạm ô trên bảng kệ: ô trống thì chọn món để bày; hàng hết hạn hôm nay thì đổi mức bán xả. */
+  private onSlotTap(f: Fixture, i: number): void {
+    const r = f.shelf!;
+    const state = this.session.state;
+    const slot = state.shelves[r]?.[i];
+    if (!slot) return;
+    if (!slot.productId || (slot.qty === 0 && !state.warehouse.some((l) => l.productId === slot.productId && l.qty > 0))) {
+      this.openPicker(f, i);
+      return;
+    }
+    if (slotFreshness(slot, state.day) === 'today') {
+      const options = [null, ...DATA.balance.clearance.options];
+      const next = options[(options.indexOf(slot.clearance ?? null) + 1) % options.length];
+      if (setClearance(state, r, i, next)) this.say(next ? `🏷️ Bán xả -${next}%` : 'Bỏ bán xả');
+      this.refreshSheet();
+      return;
+    }
+    this.say(`${product(slot.productId).name}: còn ${slot.qty} trên kệ`);
+  }
+
+  /** Chọn món trong kho để bày vào ô trống. */
+  private openPicker(f: Fixture, i: number): void {
+    const r = f.shelf!;
+    const s = this.scene;
+    const state = this.session.state;
+    const lines = warehouseLines({ warehouse: state.warehouse, prices: state.prices })
+      .filter((l) => { const p = product(l.productId); return !p.behindCounter && !p.recipeOnly && placeError(state, r, l.productId) === null; })
+      .slice(0, 8);
+    const rows = Math.max(1, Math.ceil(lines.length / 2));
+    const w = 300;
+    const h = 36 + rows * 34 + 30;
+    const { x0, y0 } = this.sheetFrame(f, w, h, `Bày món vào ô ${i + 1} · ${this.fixtureName(f)}`);
+    if (!lines.length) this.sheet.add(txt(s, x0 + 12, y0 + 36, 'Kho không có món hợp với kệ này.', { size: 11, color: HEX.muted }));
+    lines.forEach((l, k) => {
+      const bx = x0 + 8 + (k % 2) * 144;
+      const by = y0 + 34 + Math.floor(k / 2) * 34;
+      this.sheet.add(new Button(s, bx + 70, by + 14, { w: 140, h: 30, label: `${l.name} (${l.qty})`, size: 10, color: C.wood, onTap: () => {
+        try {
+          const qty = assignSlot(state, r, i, l.productId);
+          play('step');
+          this.say(`📦 Bày ${l.name} x${qty}`);
+          this.redrawFixtures();
+        } catch { this.say('Không bày được ở đây'); }
+        this.openShelfSheet(f);
+      } }));
+    });
+    this.sheet.add(new Button(s, x0 + 50, y0 + h - 18, { w: 84, h: 24, label: '‹ Quay lại', size: 10, color: C.grey, onTap: () => this.openShelfSheet(f) }));
+  }
+
+  private openWarehouseSheet(f: Fixture): void {
+    const s = this.scene;
+    const state = this.session.state;
+    const lines = warehouseLines({ warehouse: state.warehouse, prices: state.prices });
+    const shown = lines.slice(0, 12);
+    const rows = Math.max(1, Math.ceil(shown.length / 2));
+    const w = 300;
+    const h = 34 + rows * 22 + (lines.length > shown.length ? 18 : 6);
+    const { x0, y0 } = this.sheetFrame(f, w, h, `📦 Kho · ${warehouseCellsUsed(state.warehouse)}/${warehouseCapacity(state)} ô`);
+    if (!shown.length) this.sheet.add(txt(s, x0 + 12, y0 + 34, 'Kho trống', { size: 11, color: HEX.muted }));
+    shown.forEach((l, k) => {
+      const x = x0 + 10 + (k % 2) * 144;
+      const y = y0 + 32 + Math.floor(k / 2) * 22;
+      this.sheet.add(productIcon(s, x + 8, y + 8, product(l.productId), 16));
+      this.sheet.add(txt(s, x + 20, y + 1, `${l.name} x${l.qty}`, { size: 10, wrap: 120 }));
+    });
+    if (lines.length > shown.length) this.sheet.add(txt(s, x0 + w - 12, y0 + h - 16, `+${lines.length - shown.length} món khác`, { size: 9, color: HEX.muted, origin: [1, 0] }));
+  }
+
+  /** Trạm bếp / quầy nước: nấu nhanh (chất lượng thường) hoặc nấu kỹ bằng mini-game. */
+  private openStationSheet(f: Fixture): void {
+    const s = this.scene;
+    const state = this.session.state;
+    const def = furniture(f.type);
+    const own = DATA.recipes.filter((r) => r.station === f.type);
+    const category = def.kind === 'food' ? 'food' : 'beverage';
+    const recipes = (own.length ? own : DATA.recipes.filter((r) => r.category === category && state.fixtures.some((x) => x.type === r.station)))
+      .filter((r) => r.unlockLevel <= state.level);
+    const w = 310;
+    const h = 34 + Math.max(1, recipes.length) * 38 + 4;
+    const { x0, y0 } = this.sheetFrame(f, w, h, `${def.icon} ${def.name}`);
+    if (!recipes.length) this.sheet.add(txt(s, x0 + 12, y0 + 36, 'Chưa có món nào cho trạm này.', { size: 11, color: HEX.muted }));
+    recipes.forEach((recipe, k) => {
+      const y = y0 + 32 + k * 38;
+      const out = product(recipe.output);
+      const ready = state.counter.filter((sl) => sl.productId === out.id).reduce((n, sl) => n + sl.qty, 0);
+      const active = state.activeRecipes.includes(recipe.id);
+      const missing = Object.entries(recipeIngredients(recipe)).some(([id, qty]) => state.warehouse.reduce((n, l) => n + (l.productId === id ? l.qty : 0), 0) < qty);
+      this.sheet.add(productIcon(s, x0 + 20, y + 14, out, 22));
+      this.sheet.add(txt(s, x0 + 36, y + 2, recipe.name, { size: 11, bold: true, wrap: 120 }));
+      this.sheet.add(txt(s, x0 + 36, y + 17, !active ? 'Chưa bật trong menu' : missing ? 'Thiếu nguyên liệu' : `Sẵn ${ready} ở quầy`, { size: 9, color: !active || missing ? HEX.red : HEX.muted }));
+      const quick = new Button(s, x0 + w - 104, y + 14, { w: 72, h: 28, label: 'Nấu nhanh', size: 10, color: C.green, onTap: () => {
+        const made = prepareRecipe(state, recipe.id, QUICK_COOK_QUALITY);
+        if (made.ok) { play('step'); this.say(`🍳 ${out.name} ra quầy`); this.openStationSheet(f); }
+        else this.say(made.reason === 'space' ? 'Quầy đã đầy' : made.reason === 'ingredients' ? 'Thiếu nguyên liệu' : 'Chưa nấu được món này');
+      } }).setEnabled(active && !missing);
+      const careful = new Button(s, x0 + w - 36, y + 14, { w: 56, h: 28, label: '🎮 Kỹ', size: 10, color: C.blue, onTap: () => this.opts.onCook?.(recipe.id) }).setEnabled(active && !missing && !!this.opts.onCook);
+      this.sheet.add([quick, careful]);
+    });
   }
 
   private refreshSheet(): void {
@@ -607,6 +784,10 @@ export class LiveMap {
       const prog = this.session.isRefilling(r, v.slot);
       v.qty.setText(slot.productId ? `${slot.qty}/${cap}` : '').setColor(slot.productId && slot.qty === 0 ? HEX.red : HEX.ink);
       v.plus.setVisible(prog === null && canRefill(state, r, v.slot));
+      const fresh = slot.productId && slot.qty > 0 ? slotFreshness(slot, state.day) : null;
+      if (slot.clearance && slot.qty > 0) v.tag.setText(`-${slot.clearance}%`).setBackgroundColor(HEX.red).setVisible(true);
+      else if (fresh === 'today') v.tag.setText('HẠN').setBackgroundColor(HEX.red).setVisible(true);
+      else v.tag.setVisible(false);
       v.bar.clear();
       if (prog !== null) {
         v.bar.fillStyle(0x000000, 0.3).fillRoundedRect(v.x + 4, v.y + 36, 38, 5, 2);
