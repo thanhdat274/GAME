@@ -33,7 +33,7 @@ export interface Product {
   behindCounter?: boolean;
   /** Giá gợi ý; mặc định bằng `price`. */
   refPrice?: number;
-  /** Số ngày dùng được kể từ ngày nhập; không có = hàng khô. */
+  /** Số ngày dùng được kể từ ngày nhập (HSD); không có = không hết hạn. */
   shelfLifeDays?: number;
   requiresCold?: ColdKind;
   /** Bán được ở kệ thường nhưng khách thích mua lạnh hơn. */
@@ -122,7 +122,7 @@ export interface Balance {
   /** Hệ số lượng khách những ngày đầu (tiệm mới mở): [ngày 1, ngày 2, ...]. */
   newShopRamp: number[];
   /** Gợi ý nhập hàng: hệ số dự phòng và ước tính cho món chưa có số liệu. */
-  suggest: { buffer: number; newCheap: number; newPricey: number; cheapPrice: number; freshFactor: number; newFresh: number };
+  suggest: { buffer: number; newCheap: number; newPricey: number; cheapPrice: number; freshFactor: number; newFresh: number; perishableMaxDays: number };
   /** Xác suất khách mua 1, 2, 3 món khác nhau. */
   orderLineWeights: number[];
   /** Số lượng tối đa mỗi món theo giá (món đắt hơn mọi mốc thì 1). */

@@ -10,7 +10,7 @@ import { DaySession, endDay, openShop, startNextDay, type LeaveReason } from '..
 import { Rng } from '../src/core/rng';
 import { placeAnywhere, plotStatus, sellValue, unlockPlot } from '../src/core/layout';
 import { createNewGame, formatMoney, totalQty, unlockedProducts, usableShelves, type GameState, warehouseQty } from '../src/core/state';
-import { assignCounterSlot, autoArrange, buyStock, checkCart, nextWarehouseTier, stowHolding, suggestCart, upgradeWarehouse } from '../src/core/stock';
+import { assignCounterSlot, autoArrange, buyStock, checkCart, isPerishable, nextWarehouseTier, stowHolding, suggestCart, upgradeWarehouse } from '../src/core/stock';
 
 interface Bot {
   name: string;
@@ -163,8 +163,8 @@ function run(bot: Bot, days: number, seed: number): RunStats {
     stats.tips += sum.tips;
     stats.profits.push(sum.grossProfit + sum.tips - sum.overpaid);
     stats.netProfits.push(sum.netProfit ?? 0);
-    for (const [id, qty] of Object.entries(s.yesterdaySold)) if (product(id).shelfLifeDays) stats.freshSold += qty;
-    for (const x of sum.spoiled ?? []) if (product(x.productId).shelfLifeDays) stats.freshSpoiled += x.qty;
+    for (const [id, qty] of Object.entries(s.yesterdaySold)) if (isPerishable(product(id))) stats.freshSold += qty;
+    for (const x of sum.spoiled ?? []) if (isPerishable(product(x.productId))) stats.freshSpoiled += x.qty;
     for (const lv of sum.levelUps) stats.levelDay[lv] ??= s.day;
     void before;
     const gift = startNextDay(s);

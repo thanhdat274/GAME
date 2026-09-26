@@ -49,6 +49,11 @@ export function upgradeWarehouse(state: GameState): UpgradeResult {
   return 'ok';
 }
 
+/** Hàng mau hỏng (HSD ngắn như đồ tươi); hàng khô đóng gói có HSD dài không tính. */
+export function isPerishable(p: Product): boolean {
+  return !!p.shelfLifeDays && p.shelfLifeDays <= DATA.balance.suggest.perishableMaxDays;
+}
+
 /** Hạn dùng cho hàng nhập vào ngày `day`. */
 export function expiryFor(productId: string, day: number): number | null {
   const life = product(productId).shelfLifeDays;
@@ -641,8 +646,8 @@ export function sellFixture(state: GameState, uid: number): SellFixtureResult {
 export function suggestedTarget(state: GameState, p: Product): number {
   const cfg = DATA.balance.suggest;
   const demand = (state.yesterdaySold[p.id] ?? 0) + (state.yesterdayMissed[p.id] ?? 0);
-  // Hàng tươi: nhập sát nhu cầu (không dự phòng), món mới thử ít để tránh hỏng.
-  if (p.shelfLifeDays) return demand > 0 ? Math.max(1, Math.ceil(demand * cfg.freshFactor)) : cfg.newFresh;
+  // Hàng mau hỏng: nhập sát nhu cầu (không dự phòng), món mới thử ít để tránh hỏng. Hàng HSD dài nhập như hàng khô.
+  if (isPerishable(p)) return demand > 0 ? Math.max(1, Math.ceil(demand * cfg.freshFactor)) : cfg.newFresh;
   const base = demand > 0 ? demand : p.price <= cfg.cheapPrice ? cfg.newCheap : cfg.newPricey;
   return Math.ceil(base * cfg.buffer) + 1;
 }
