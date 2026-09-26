@@ -7,6 +7,8 @@ export interface Slot {
   qty: number;
 }
 
+export type ShelfZone = Exclude<Category, 'counter'> | null;
+
 export interface DayStats {
   revenue: number;
   cogs: number;
@@ -18,6 +20,8 @@ export interface DayStats {
   ratingSum: number;
   ratingCount: number;
   expGained: number;
+  itemsScanned: number;
+  counterServed: number;
   sold: Record<string, number>;
   /** Số món khách hỏi mà kệ đã hết (nhu cầu bị bỏ lỡ). */
   missed: Record<string, number>;
@@ -46,6 +50,8 @@ export interface Settings {
   sound: boolean;
   /** Tự động thối tiền (mặc định bật). Tắt để tự thối và có cơ hội nhận tip. */
   autoChange: boolean;
+  /** Tự quét toàn bộ giỏ khi khách đến quầy. Mặc định tắt để người chơi làm quen. */
+  autoScan: boolean;
 }
 
 export interface SaveSync {
@@ -63,7 +69,7 @@ export interface SaveSummary {
 }
 
 export interface GameState {
-  version: 1;
+  version: 2;
   day: number;
   phase: Phase;
   /** Phút trong ngày (480 = 08:00) khi đang mở cửa. */
@@ -74,6 +80,10 @@ export interface GameState {
   warehouse: Record<string, number>;
   /** Luôn có 3 kệ; số kệ dùng được phụ thuộc level. */
   shelves: Slot[][];
+  /** Nhóm hàng của từng kệ; null nghĩa là chưa được gán khu. */
+  zones: ShelfZone[];
+  /** Tồn kho hàng chỉ bán khi khách yêu cầu ở quầy. */
+  counter: Slot[];
   ratings: number[];
   yesterdaySold: Record<string, number>;
   yesterdayMissed: Record<string, number>;
@@ -94,13 +104,13 @@ export interface GameState {
 export const MAX_SHELVES = 3;
 
 export function emptyStats(): DayStats {
-  return { revenue: 0, cogs: 0, tips: 0, overpaid: 0, served: 0, happy: 0, left: 0, ratingSum: 0, ratingCount: 0, expGained: 0, sold: {}, missed: {} };
+  return { revenue: 0, cogs: 0, tips: 0, overpaid: 0, served: 0, happy: 0, left: 0, ratingSum: 0, ratingCount: 0, expGained: 0, itemsScanned: 0, counterServed: 0, sold: {}, missed: {} };
 }
 
 export function createNewGame(): GameState {
   const b = DATA.balance;
   return {
-    version: 1,
+    version: 2,
     day: 1,
     phase: 'morning',
     clock: b.openMinute,
@@ -111,13 +121,15 @@ export function createNewGame(): GameState {
     shelves: Array.from({ length: MAX_SHELVES }, () =>
       Array.from({ length: b.slotsPerShelf }, () => ({ productId: null, qty: 0 })),
     ),
+    zones: Array.from({ length: MAX_SHELVES }, () => null),
+    counter: Array.from({ length: DATA.balance.counterSlots }, () => ({ productId: null, qty: 0 })),
     ratings: [],
     yesterdaySold: {},
     yesterdayMissed: {},
     today: emptyStats(),
     lastGrandmaDay: -99,
     seenIntro: false,
-    settings: { sound: true, autoChange: true },
+    settings: { sound: true, autoChange: true, autoScan: false },
     lastSummary: null,
     announcedLevel: 1,
     loginPromptSeen: false,
@@ -145,7 +157,7 @@ export function unlockedCategories(level: number): Category[] {
 
 export function unlockedProducts(level: number): Product[] {
   const cats = unlockedCategories(level);
-  return DATA.products.filter((p) => p.unlockLevel <= level && cats.includes(p.category));
+  return DATA.products.filter((p) => p.unlockLevel <= level && (p.behindCounter ? level >= 3 : cats.includes(p.category)));
 }
 
 export function shelfCount(level: number): number {

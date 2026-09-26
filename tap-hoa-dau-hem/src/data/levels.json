@@ -4,7 +4,7 @@
   "levels": [
     { "level": 1, "exp": 0, "categories": ["dry"], "shelves": 2, "label": "Đồ khô + 2 kệ" },
     { "level": 2, "exp": 120, "categories": ["dry", "snack"], "shelves": 2, "label": "Mở khóa ăn vặt" },
-    { "level": 3, "exp": 350, "categories": ["dry", "snack"], "shelves": 3, "label": "Mở thêm kệ thứ 3" },
+    { "level": 3, "exp": 350, "categories": ["dry", "snack"], "shelves": 3, "counterUnlock": true, "label": "Mở thêm kệ thứ 3 · Hàng sau quầy" },
     { "level": 4, "exp": 700, "categories": ["dry", "snack", "household"], "shelves": 3, "label": "Mở khóa đồ dùng" }
   ]
 }

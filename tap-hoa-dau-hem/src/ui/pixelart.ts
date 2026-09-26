@@ -292,3 +292,23 @@ export const PRODUCT_SPRITES: Record<string, Sprite> = {
     '................',
   ],
 };
+
+// Hàng sau quầy có sprite riêng để phân biệt rõ khi xếp ở quầy nhỏ.
+PRODUCT_SPRITES.the_cao = [
+  '................', '....kkkkkkkk....', '...kLLLLLLLLk...', '..kLwwwwwwwwLk..',
+  '.kLwwwwwwwwwwLk.', '.kLwwwwwwwwwwLk.', '.kLwwLLLLwwwwLk.', '.kLwwLLLLwwwwLk.',
+  '.kLwwwwwwwwwwLk.', '.kLwwwwwwwwwwLk.', '..kLwwwwwwwwLk..', '...kLLLLLLLLk...',
+  '....kkkkkkkk....', '................', '................', '................',
+];
+PRODUCT_SPRITES.gas_mini = [
+  '................', '.......kk.......', '......kYYk......', '......kYYk......',
+  '.....kkrrkk.....', '....krrrrrrk....', '...krrrrrrrrk...', '...krrwwrrrrk...',
+  '...krrrrrrrrk...', '...krrrrrrrrk...', '...krrrrrrrrk...', '...krrrrrrrrk...',
+  '....krrrrrrk....', '.....kkkkkk.....', '................', '................',
+];
+PRODUCT_SPRITES.bat_lua = [
+  '................', '..........kYY...', '.........kYyYk..', '..........kYY...',
+  '......kkkkkk....', '.....kYYYYYYk...', '.....kYwwwwwYk..', '.....kYwyywYk...',
+  '.....kYwwwwwYk..', '.....kYYYYYYk...', '.....kNNNNNNk...', '.....kNnnnnNk...',
+  '.....kNnnnnNk...', '......kkkkkk....', '................', '................',
+];

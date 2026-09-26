@@ -15,17 +15,27 @@ const PAGES = [
   },
   {
     icon: '🙋',
-    title: '3. Bán hàng',
-    body: 'Khách tới quầy và nói cần gì. Chạm đúng món trên kệ để bỏ vào túi. Lấy sai thì khách mất kiên nhẫn. Ô kệ vơi thì bấm nút + xanh để nạp thêm.',
+    title: '3. Khách tự chọn hàng',
+    body: 'Khách tự đi tới khu hàng và lấy món trên kệ. Ô kệ vơi thì bấm nút + xanh để nạp thêm; nút Nạp cả khu giúp nạp lần lượt các ô.',
+  },
+  {
+    icon: '🧾',
+    title: '4. Quét giỏ ở quầy',
+    body: 'Khi khách tới quầy, chạm từng món trong giỏ để quét hoặc bấm Quét hết. Quét nhanh từng món có cơ hội nhận tip combo. Có thể bật Tự quét giỏ trong menu tạm dừng hoặc màn chính.',
+  },
+  {
+    icon: '🏪',
+    title: '5. Hàng sau quầy',
+    body: 'Từ level 3, một số khách hỏi hàng sau quầy. Xếp hàng vào các ô Sau quầy buổi sáng rồi chạm đúng ô khi khách yêu cầu trước khi hết giờ.',
   },
   {
     icon: '💵',
-    title: '4. Thối tiền',
+    title: '6. Thối tiền',
     body: 'Mặc định game tự thối tiền cho bạn. Muốn kiếm tip? Tắt "Tự thối tiền" (màn chính hoặc nút ⏸), rồi tự chọn tờ và bấm "Đưa": thối đúng trong 4 giây được tip! Thối thiếu khách giận, thối dư mất tiền.',
   },
   {
     icon: '⭐',
-    title: '5. Lên level',
+    title: '7. Lên level',
     body: 'Bán hàng và làm khách vui để nhận EXP. Lên level mở khóa ăn vặt, kệ thứ 3 và đồ dùng gia đình.',
   },
 ];

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { registerSW } from 'virtual:pwa-register';
-import { G, persist } from './game';
+import { G, persist, sceneForPhase } from './game';
 import { BootScene } from './scenes/BootScene';
 import { HowToScene } from './scenes/HowToScene';
 import { MorningScene } from './scenes/MorningScene';
@@ -9,7 +9,7 @@ import { SummaryScene } from './scenes/SummaryScene';
 import { TitleScene } from './scenes/TitleScene';
 import { installRoundedRectFix } from './ui/roundrect';
 import { H, W, ZOOM } from './ui/theme';
-import { enableOnlineRetry } from './services/sync';
+import { applyPendingCloud, configureCloudApplyGuard, enableOnlineRetry } from './services/sync';
 
 installRoundedRectFix();
 enableOnlineRetry();
@@ -24,6 +24,21 @@ const game = new Phaser.Game({
   render: { antialias: true, roundPixels: false },
   input: { activePointers: 2 },
   scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene],
+});
+
+configureCloudApplyGuard(() => game.scene.isActive('Title') || game.scene.isActive('Morning'));
+let cloudScene = '';
+game.events.on('step', () => {
+  const active = game.scene.getScenes(true).map((scene) => scene.scene.key).join(',');
+  if (active !== cloudScene) {
+    cloudScene = active;
+    applyPendingCloud();
+  }
+});
+window.addEventListener('thdh-cloud-loaded', () => {
+  const active = game.scene.isActive('Title') ? 'Title' : 'Morning';
+  game.scene.stop(active);
+  game.scene.start(active === 'Title' ? 'Title' : sceneForPhase());
 });
 
 // Lưu khi rời tab / tắt ứng dụng (chỉ khi đã vào game để không ghi đè bằng trạng thái mặc định).

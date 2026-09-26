@@ -1,11 +1,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Kệ và ô kệ
-Tiệm SHALL có 2 kệ, mỗi kệ 6 ô; mỗi ô chứa một loại hàng, tối đa 5 đơn vị. Kệ thứ 3 mở ở level 3. Mỗi kệ SHALL là một khu hàng gắn với một nhóm hàng (đồ khô, ăn vặt, đồ dùng) hoặc chưa có khu.
+Tiệm SHALL có 2 kệ, mỗi kệ 6 ô; mỗi ô chứa một loại hàng, tối đa 10 đơn vị. Kệ thứ 3 mở ở level 3. Mỗi kệ SHALL là một khu hàng gắn với một nhóm hàng (đồ khô, ăn vặt, đồ dùng) hoặc chưa có khu.
 
 #### Scenario: Bày hàng
 - **WHEN** người chơi kéo gói mì từ khay kho vào một ô trống của kệ đồ khô hoặc kệ chưa có khu
-- **THEN** ô đó được gán cho mì gói và nạp tối đa 5 gói từ kho
+- **THEN** ô đó được gán cho mì gói và nạp tối đa 10 gói từ kho
 
 #### Scenario: Ô đã có loại khác
 - **WHEN** người chơi thả loại hàng khác (cùng nhóm với khu) vào ô đang chứa hàng
@@ -45,8 +45,8 @@ Nút "Tự bày" SHALL nạp đầy các ô đang có hàng, dọn ô đã hết
 Người chơi SHALL có thể chạm vào ô kệ đang vơi để nạp thêm từ kho trong pha bán hàng, mất 1 giây thao tác, và bấm "Nạp cả khu" để nạp lần lượt mọi ô đang vơi của một khu (mặc định 0.5 giây mỗi ô).
 
 #### Scenario: Kho còn hàng
-- **WHEN** ô mì gói còn 1 và kho còn 8
-- **THEN** sau khi chạm, ô có 5 và kho còn 4
+- **WHEN** ô mì gói còn 1 và kho còn 12
+- **THEN** sau khi chạm, ô có 10 và kho còn 3
 
 #### Scenario: Kho hết
 - **WHEN** kho không còn loại hàng của ô

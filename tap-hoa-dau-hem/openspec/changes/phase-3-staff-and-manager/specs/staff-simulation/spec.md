@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Vai trò và việc làm
-Nhân viên SHALL tự nhận việc từ hàng đợi việc của tiệm theo vai trò: Thu ngân (phục vụ khách ở quầy được giao), Bổ sung kệ (nạp ô kệ vơi dưới 40%), Kho (nhận hàng giao, bày kệ theo sơ đồ), Giao hàng (giao đơn tận nhà). Nhân viên MUST dùng cùng luật core như người chơi.
+Nhân viên SHALL tự nhận việc từ hàng đợi việc của tiệm theo vai trò: Thu ngân (phục vụ khách ở quầy được giao), Bổ sung kệ (nạp ô kệ vơi dưới 40%), Kho (nhận hàng giao, bày kệ theo sơ đồ), Giao hàng (giao đơn tận nhà). Nhân viên MUST dùng cùng luật core như người chơi. Thu ngân SHALL chỉ quét món khách đã tự lấy, tính tiền, thối tiền và phục vụ yêu cầu hàng sau quầy; thu ngân MUST NOT tự đi lấy hàng khỏi kệ thay khách.
 
 #### Scenario: Thu ngân phục vụ
 - **WHEN** có khách chờ ở quầy 2 và thu ngân đang rảnh

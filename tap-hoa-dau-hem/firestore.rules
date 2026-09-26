@@ -28,6 +28,12 @@ service cloud.firestore {
         && request.resource.data.ping is timestamp;
     }
 
+    // Live state is read-only to clients. Callable Functions use Admin SDK for writes.
+    match /users/{uid}/live/{sessionId} {
+      allow read: if owns(uid);
+      allow write: if false;
+    }
+
     match /users/{uid}/{document=**} {
       allow read, write, delete: if false;
     }

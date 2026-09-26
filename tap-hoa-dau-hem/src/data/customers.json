@@ -1,6 +1,6 @@
 [
-  { "id": "hoc_sinh", "name": "Học sinh", "prefs": { "dry": 1, "snack": 6, "household": 0.5 }, "patience": 18, "maxItems": 3, "tipMul": 0.5, "weight": 3, "shirt": "#ffffff", "pants": "#1e3a8a", "hair": "#222222", "skin": "#f2c9a0" },
-  { "id": "noi_tro", "name": "Bà nội trợ", "prefs": { "dry": 6, "snack": 1, "household": 2 }, "patience": 22, "maxItems": 3, "tipMul": 0.8, "weight": 3, "shirt": "#c2185b", "pants": "#4e342e", "hair": "#3e2723", "skin": "#e8b98a" },
-  { "id": "xe_om", "name": "Chú xe ôm", "prefs": { "dry": 3, "snack": 2, "household": 1 }, "patience": 14, "maxItems": 2, "tipMul": 1, "weight": 2, "shirt": "#2e7d32", "pants": "#37474f", "hair": "#111111", "skin": "#c68e5c" },
-  { "id": "van_phong", "name": "Cô văn phòng", "prefs": { "dry": 1, "snack": 2, "household": 5 }, "patience": 20, "maxItems": 3, "tipMul": 1.5, "weight": 2, "shirt": "#90caf9", "pants": "#263238", "hair": "#5d4037", "skin": "#f5d0b0" }
+  { "id": "hoc_sinh", "name": "Học sinh", "prefs": { "dry": 1, "snack": 6, "household": 0.5 }, "patience": 18, "maxItems": 3, "tipMul": 0.5, "counterRequestChance": 0.04, "weight": 3, "shirt": "#ffffff", "pants": "#1e3a8a", "hair": "#222222", "skin": "#f2c9a0" },
+  { "id": "noi_tro", "name": "Bà nội trợ", "prefs": { "dry": 6, "snack": 1, "household": 2 }, "patience": 22, "maxItems": 3, "tipMul": 0.8, "counterRequestChance": 0.08, "weight": 3, "shirt": "#c2185b", "pants": "#4e342e", "hair": "#3e2723", "skin": "#e8b98a" },
+  { "id": "xe_om", "name": "Chú xe ôm", "prefs": { "dry": 3, "snack": 2, "household": 1 }, "patience": 14, "maxItems": 2, "tipMul": 1, "counterRequestChance": 0.2, "weight": 2, "shirt": "#2e7d32", "pants": "#37474f", "hair": "#111111", "skin": "#c68e5c" },
+  { "id": "van_phong", "name": "Cô văn phòng", "prefs": { "dry": 1, "snack": 2, "household": 5 }, "patience": 20, "maxItems": 3, "tipMul": 1.5, "counterRequestChance": 0.12, "weight": 2, "shirt": "#90caf9", "pants": "#263238", "hair": "#5d4037", "skin": "#f5d0b0" }
 ]

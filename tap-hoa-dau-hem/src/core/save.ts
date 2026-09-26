@@ -2,7 +2,7 @@ import { createNewGame, type GameState } from './state';
 
 export const SAVE_KEY = 'thdh.save.v1';
 export const BACKUP_KEY = 'thdh.save.v1.bak';
-export const CURRENT_VERSION = 1;
+export const CURRENT_VERSION = 2;
 
 /** Giao diện tối thiểu của localStorage để test được. */
 export interface KeyValueStore {
@@ -25,7 +25,50 @@ export type LoadResult =
 type Migration = (state: Record<string, unknown>) => Record<string, unknown>;
 
 /** migrations[n] chuyển bản lưu version n lên n+1. Giai đoạn sau thêm vào đây. */
-const migrations: Record<number, Migration> = {};
+const migrations: Record<number, Migration> = {
+  1: (state) => {
+    const shelves = Array.isArray(state.shelves) ? (state.shelves as { productId: string | null; qty: number }[][]) : [];
+    const warehouse = (state.warehouse as Record<string, number> | undefined) ?? {};
+    const zones: (string | null)[] = shelves.map((row) => {
+      const counts = new Map<string, number>();
+      for (const slot of row) {
+        if (!slot.productId || slot.qty <= 0) continue;
+        const p = product(slot.productId);
+        if (p.behindCounter) {
+          warehouse[p.id] = (warehouse[p.id] ?? 0) + slot.qty;
+          slot.productId = null;
+          slot.qty = 0;
+          continue;
+        }
+        counts.set(p.category, (counts.get(p.category) ?? 0) + slot.qty);
+      }
+      return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    });
+    for (let r = 0; r < shelves.length; r++) {
+      for (const slot of shelves[r]) {
+        if (!slot.productId || !slot.qty) continue;
+        const p = product(slot.productId);
+        if (p.category !== zones[r]) {
+          warehouse[p.id] = (warehouse[p.id] ?? 0) + slot.qty;
+          slot.productId = null;
+          slot.qty = 0;
+        }
+      }
+    }
+    return {
+      ...state,
+      version: 2,
+      shelves,
+      zones,
+      counter: Array.from({ length: DATA.balance.counterSlots }, () => ({ productId: null, qty: 0 })),
+      warehouse,
+      settings: { ...(state.settings as object ?? {}), autoScan: false },
+    };
+  },
+};
+
+import { DATA } from './data';
+import { product } from './data';
 
 export function migrate(file: { version: number; state: Record<string, unknown> }): GameState {
   let { version, state } = file;
@@ -43,9 +86,16 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
     ...base,
     ...loaded,
     settings: { ...base.settings, ...loaded.settings },
+    zones: loaded.zones?.length ? loaded.zones : base.zones,
+    counter: loaded.counter?.length ? loaded.counter : base.counter,
     today: { ...base.today, ...loaded.today },
     sync: { ...base.sync, ...loaded.sync },
-    summary: { ...base.summary, ...loaded.summary },
+    summary: {
+      ...base.summary, ...loaded.summary,
+      level: loaded.level ?? base.level,
+      day: loaded.day ?? base.day,
+      money: loaded.money ?? base.money,
+    },
     version: CURRENT_VERSION,
   } as GameState;
 }

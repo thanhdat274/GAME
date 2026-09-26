@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { DATA, product } from '../core/data';
 import { MAX_SHELVES, shelfCount, type GameState } from '../core/state';
-import { canRefill } from '../core/stock';
+import { canRefill, zoneFill, zoneOf } from '../core/stock';
 import { productIcon } from './art';
 import { C, HEX, txt } from './theme';
 
@@ -45,6 +45,8 @@ export function slotCenter(top: number, shelf: number, slot: number): { x: numbe
 export class ShelfView extends Phaser.GameObjects.Container {
   private slots: SlotView[][] = [];
   private lockLabels: Phaser.GameObjects.Container[] = [];
+  private zoneLabels: Phaser.GameObjects.Text[] = [];
+  private zoneAlertTweens: (Phaser.Tweens.Tween | null)[] = [];
   private glowTween: Phaser.Tweens.Tween | null = null;
 
   constructor(scene: Phaser.Scene, readonly top: number, private cb: ShelfCallbacks) {
@@ -64,6 +66,11 @@ export class ShelfView extends Phaser.GameObjects.Container {
       ]);
       this.lockLabels.push(lock);
       this.add(lock);
+      const label = txt(scene, 12, y - 8, '', { size: 9, bold: true, color: HEX.ink });
+      label.setBackgroundColor('#f3dfbd').setPadding(3, 1, 3, 1);
+      this.zoneLabels.push(label);
+      this.zoneAlertTweens.push(null);
+      this.add(label);
     }
     scene.add.existing(this);
   }
@@ -127,6 +134,27 @@ export class ShelfView extends Phaser.GameObjects.Container {
     this.slots.forEach((row, r) => {
       const locked = r >= rows;
       this.lockLabels[r].setVisible(locked);
+      const zone = zoneOf(state, r);
+      const zoneLabel = this.zoneLabels[r];
+      zoneLabel.setVisible(!locked && !!zone);
+      if (!locked && zone) {
+        const fill = zoneFill(state, zone);
+        const name = zone === 'dry' ? 'ĐỒ KHÔ' : zone === 'snack' ? 'ĂN VẶT' : 'ĐỒ DÙNG';
+        zoneLabel.setText(`${name} · ${Math.round(fill.fill * 100)}%`);
+        zoneLabel.setColor(fill.alert === 'critical' ? HEX.red : fill.alert === 'low' ? '#9a6200' : HEX.ink);
+        const alerting = fill.alert !== 'ok';
+        if (alerting && !this.zoneAlertTweens[r]) {
+          this.zoneAlertTweens[r] = this.scene.tweens.add({ targets: zoneLabel, alpha: 0.35, yoyo: true, repeat: -1, duration: fill.alert === 'critical' ? 260 : 520 });
+        } else if (!alerting && this.zoneAlertTweens[r]) {
+          this.zoneAlertTweens[r]?.remove();
+          this.zoneAlertTweens[r] = null;
+          zoneLabel.setAlpha(1);
+        }
+      } else if (this.zoneAlertTweens[r]) {
+        this.zoneAlertTweens[r]?.remove();
+        this.zoneAlertTweens[r] = null;
+        zoneLabel.setAlpha(1);
+      }
       row.forEach((v, c) => {
         const slot = state.shelves[r][c];
         const empty = !slot.productId || slot.qty === 0;

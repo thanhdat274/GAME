@@ -113,3 +113,7 @@ Change `add-google-login-cloud-save` nói "thêm khối `sync` mà không tăng 
 - Số khách duyệt tối đa (`maxShoppers`) và thời gian đi/lấy nên bao nhiêu để có cảm giác đông nhưng dễ theo dõi? Mặc định đề xuất 3, đi 1.2s, lấy 0.6s; chốt sau khi chạy `playtest.ts`.
 - "Nạp cả khu" có cần trả phí/thời gian đáng kể để không làm mất ý nghĩa canh kệ? Mặc định 0.5s mỗi ô.
 - Hàng sau quầy bắt đầu từ level nào? Đề xuất level 3 (cùng lúc mở kệ thứ 3) để không quá tải người chơi mới.
+
+### Kết quả cân bằng sau triển khai
+
+Chạy `npm run playtest -- 7 10` (4 kiểu người chơi × 10 seed × 7 ngày). Cả 40 ván đều lên level 4 trong khoảng mục tiêu 5–7 ngày: bot mới 6,9 ngày; bình thường 5,8; săn tip 5,8; cao thủ 5,7. Lãi gộp trung bình ba ngày cuối nằm trong khoảng 153.133–268.783đ/ngày. Tỷ lệ khách được phục vụ 71–89%, bỏ vì hết hàng 11–29%, bỏ vì chờ 0–1%. Kết quả giữ `autoScan` mặc định tắt; nút quét hết và tùy chọn tự quét vẫn có cho người chơi muốn giảm thao tác.

@@ -11,6 +11,8 @@ export interface ButtonOpts {
   size?: number;
   radius?: number;
   sound?: boolean;
+  stroke?: number;
+  strokeAlpha?: number;
   onTap: () => void;
 }
 
@@ -20,10 +22,14 @@ export class Button extends Phaser.GameObjects.Container {
   readonly label: Phaser.GameObjects.Text;
   private enabled = true;
   private color: number;
+  private strokeColor?: number;
+  private strokeAlpha?: number;
 
   constructor(scene: Phaser.Scene, x: number, y: number, private o: ButtonOpts) {
     super(scene, x, y);
     this.color = o.color ?? C.green;
+    this.strokeColor = o.stroke;
+    this.strokeAlpha = o.strokeAlpha;
     this.bg = scene.add.graphics();
     this.label = txt(scene, 0, 0, o.label, {
       size: o.size ?? 15,
@@ -55,9 +61,14 @@ export class Button extends Phaser.GameObjects.Container {
     const g = this.bg;
     g.clear();
     const base = this.enabled ? this.color : C.grey;
-    g.fillStyle(0x000000, 0.25).fillRoundedRect(-w / 2, -h / 2 + 3, w, h, r);
+    g.fillStyle(0x000000, 0.28).fillRoundedRect(-w / 2, -h / 2 + 3.5, w, h, r);
     g.fillStyle(base, 1).fillRoundedRect(-w / 2, -h / 2, w, h, r);
-    g.fillStyle(0xffffff, 0.18).fillRoundedRect(-w / 2 + 3, -h / 2 + 2, w - 6, h / 2 - 2, { tl: r - 2, tr: r - 2, bl: 0, br: 0 });
+    g.fillStyle(0xffffff, 0.18).fillRoundedRect(-w / 2 + 2, -h / 2 + 2, w - 4, Math.floor(h / 2) - 2, { tl: r - 2, tr: r - 2, bl: 0, br: 0 });
+    if (this.strokeColor !== undefined) {
+      g.lineStyle(1.5, this.strokeColor, this.strokeAlpha ?? 0.6).strokeRoundedRect(-w / 2, -h / 2, w, h, r);
+    } else {
+      g.lineStyle(1, 0xffffff, 0.15).strokeRoundedRect(-w / 2, -h / 2, w, h, r);
+    }
   }
 
   setEnabled(on: boolean): this {
@@ -71,6 +82,14 @@ export class Button extends Phaser.GameObjects.Container {
 
   setColor(color: number): this {
     this.color = color;
+    this.draw();
+    return this;
+  }
+
+  setStyle(color: number, stroke?: number, strokeAlpha?: number): this {
+    this.color = color;
+    if (stroke !== undefined) this.strokeColor = stroke;
+    if (strokeAlpha !== undefined) this.strokeAlpha = strokeAlpha;
     this.draw();
     return this;
   }

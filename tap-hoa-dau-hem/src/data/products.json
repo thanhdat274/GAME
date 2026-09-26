@@ -12,5 +12,8 @@
   { "id": "xa_phong", "name": "Xà phòng", "category": "household", "icon": "🧼", "color": "#81d4fa", "cost": 12000, "price": 15000, "size": 1, "unlockLevel": 4 },
   { "id": "kem_danh_rang", "name": "Kem đánh răng", "category": "household", "icon": "🦷", "color": "#4fc3f7", "cost": 20000, "price": 25000, "size": 1, "unlockLevel": 4 },
   { "id": "giay_vs", "name": "Giấy vệ sinh", "category": "household", "icon": "🧻", "color": "#eceff1", "cost": 25000, "price": 32000, "size": 2, "unlockLevel": 4 },
-  { "id": "pin", "name": "Pin", "category": "household", "icon": "🔋", "color": "#66bb6a", "cost": 8000, "price": 10000, "size": 1, "unlockLevel": 4 }
+  { "id": "pin", "name": "Pin", "category": "household", "icon": "🔋", "color": "#66bb6a", "cost": 8000, "price": 10000, "size": 1, "unlockLevel": 4 },
+  { "id": "the_cao", "name": "Thẻ cào", "category": "counter", "icon": "📱", "color": "#4fc3f7", "cost": 10000, "price": 12000, "size": 1, "unlockLevel": 3, "behindCounter": true },
+  { "id": "gas_mini", "name": "Gas mini", "category": "counter", "icon": "🔥", "color": "#ff8a65", "cost": 18000, "price": 23000, "size": 1, "unlockLevel": 3, "behindCounter": true },
+  { "id": "bat_lua", "name": "Bật lửa", "category": "counter", "icon": "🧯", "color": "#ffd54f", "cost": 3000, "price": 5000, "size": 1, "unlockLevel": 3, "behindCounter": true }
 ]

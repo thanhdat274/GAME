@@ -1,7 +1,8 @@
 import { DATA, product, type Product } from './data';
-import { shelfCount, totalQty, unlockedProducts, type GameState } from './state';
+import { shelfCount, totalQty, unlockedProducts, type GameState, type ShelfZone } from './state';
 
 export type Cart = Record<string, number>;
+export type ZoneAlert = 'ok' | 'low' | 'critical';
 
 /** Số ô kho một món chiếm: size cho mỗi 10 đơn vị, làm tròn lên. */
 export function cellsFor(productId: string, qty: number): number {
@@ -66,7 +67,7 @@ export function suggestedTarget(state: GameState, p: Product): number {
  * tỉ lệ còn thiếu của từng món, để không món nào bị bỏ trống hoàn toàn.
  */
 export function suggestCart(state: GameState): Cart {
-  const items = unlockedProducts(state.level).map((p) => {
+  const items = unlockedProducts(state.level).filter((p) => !p.behindCounter).map((p) => {
     const target = suggestedTarget(state, p);
     return { p, target, want: Math.max(0, target - totalQty(state, p.id)), blocked: false };
   });
@@ -110,14 +111,67 @@ export function clearSlot(state: GameState, shelf: number, slot: number): void {
   if (s.productId && s.qty > 0) state.warehouse[s.productId] = (state.warehouse[s.productId] ?? 0) + s.qty;
   s.productId = null;
   s.qty = 0;
+  if (state.shelves[shelf].every((item) => !item.productId)) state.zones[shelf] = null;
+}
+
+export function zoneOf(state: GameState, shelf: number): ShelfZone {
+  return state.zones[shelf] ?? null;
+}
+
+export function zoneFill(state: GameState, zone: Exclude<ShelfZone, null>): { fill: number; alert: ZoneAlert; qty: number; capacity: number } {
+  const slots = state.shelves.slice(0, shelfCount(state.level)).flatMap((row, index) => zoneOf(state, index) === zone ? row : []);
+  const active = slots.filter((s) => s.productId !== null);
+  const capacity = active.length * DATA.balance.slotCapacity;
+  const qty = active.reduce((sum, s) => sum + s.qty, 0);
+  const fill = capacity ? qty / capacity : 1;
+  const alert: ZoneAlert = fill < DATA.balance.zoneCriticalThreshold ? 'critical' : fill < DATA.balance.zoneLowThreshold ? 'low' : 'ok';
+  return { fill, alert, qty, capacity };
 }
 
 /** Gán ô cho một món và nạp từ kho. Ô đang chứa món khác thì trả về kho trước. */
 export function assignSlot(state: GameState, shelf: number, slot: number, productId: string): number {
   const s = slotAt(state, shelf, slot);
+  const next = product(productId);
+  if (next.behindCounter || next.category === 'counter') throw new Error('counter-only');
+  const zone = zoneOf(state, shelf);
+  if (zone && zone !== next.category) throw new Error('wrong-zone');
   if (s.productId !== productId) clearSlot(state, shelf, slot);
+  if (!zoneOf(state, shelf)) state.zones[shelf] = next.category as ShelfZone;
   s.productId = productId;
   return refillSlot(state, shelf, slot);
+}
+
+export function assignCounterSlot(state: GameState, slot: number, productId: string): number {
+  const next = product(productId);
+  if (!next.behindCounter) throw new Error('counter-only');
+  const target = state.counter[slot];
+  if (!target) throw new Error('invalid-slot');
+  if (target.productId === productId) return refillCounterSlot(state, slot);
+  if (target.productId && target.productId !== productId && target.qty > 0) {
+    state.warehouse[target.productId] = (state.warehouse[target.productId] ?? 0) + target.qty;
+  }
+  target.productId = productId;
+  const have = state.warehouse[productId] ?? 0;
+  const got = Math.min(have, DATA.balance.counterCapacity);
+  target.qty = got;
+  if (got) {
+    const left = have - got;
+    if (left) state.warehouse[productId] = left;
+    else delete state.warehouse[productId];
+  }
+  return got;
+}
+
+export function refillCounterSlot(state: GameState, slot: number): number {
+  const target = state.counter[slot];
+  if (!target?.productId || !product(target.productId).behindCounter) return 0;
+  const have = state.warehouse[target.productId] ?? 0;
+  const got = Math.min(have, DATA.balance.counterCapacity - target.qty);
+  target.qty += got;
+  const left = have - got;
+  if (left) state.warehouse[target.productId] = left;
+  else delete state.warehouse[target.productId];
+  return got;
 }
 
 /** Nạp đầy ô từ kho; trả về số đơn vị đã nạp. */
@@ -147,6 +201,18 @@ export function autoArrange(state: GameState): void {
   const at = (p: { r: number; c: number }) => state.shelves[p.r][p.c];
   const demand = (id: string) => (state.yesterdaySold[id] ?? 0) + (state.yesterdayMissed[id] ?? 0);
 
+  // Save/test state created before zones existed: infer a zone from the category occupying most slots.
+  for (let r = 0; r < rows; r++) {
+    if (zoneOf(state, r)) continue;
+    const counts = new Map<string, number>();
+    for (const s of state.shelves[r]) if (s.productId && s.qty > 0 && !product(s.productId).behindCounter) {
+      const cat = product(s.productId).category;
+      counts.set(cat, (counts.get(cat) ?? 0) + s.qty);
+    }
+    const inferred = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] as ShelfZone | undefined;
+    if (inferred) state.zones[r] = inferred;
+  }
+
   // Ô đã hết hàng mà kho cũng hết thì dọn đi để dùng cho món khác.
   for (const p of slots) {
     const s = at(p);
@@ -157,13 +223,16 @@ export function autoArrange(state: GameState): void {
   const slotsOf = (id: string) => slots.filter((p) => at(p).productId === id);
   const inWarehouse = () =>
     Object.keys(state.warehouse)
-      .filter((id) => (state.warehouse[id] ?? 0) > 0)
+      .filter((id) => (state.warehouse[id] ?? 0) > 0 && !product(id).behindCounter)
       .sort((a, b) => demand(b) - demand(a));
 
-  // 1) Mỗi món có hàng đều phải có ít nhất một ô.
+  // 1) Mỗi món có hàng đều phải có ít nhất một ô trong khu đúng nhóm.
   for (const id of inWarehouse()) {
     if (slotsOf(id).length > 0) continue;
-    let target = slots.find((p) => !at(p).productId);
+    const p = product(id);
+    if (p.behindCounter || p.category === 'counter') continue;
+    const category = p.category;
+    let target = slots.find((p) => !at(p).productId && (zoneOf(state, p.r) === category || zoneOf(state, p.r) === null));
     if (!target) {
       // Lấy ô ít hàng nhất của món đang chiếm nhiều ô nhất.
       const counts = new Map<string, number>();
@@ -172,17 +241,37 @@ export function autoArrange(state: GameState): void {
         if (pid) counts.set(pid, (counts.get(pid) ?? 0) + 1);
       }
       target = slots
-        .filter((p) => (counts.get(at(p).productId!) ?? 0) >= 2)
+        .filter((p) => zoneOf(state, p.r) === category && (counts.get(at(p).productId!) ?? 0) >= 2)
         .sort((a, b) => (counts.get(at(b).productId!)! - counts.get(at(a).productId!)!) || at(a).qty - at(b).qty)[0];
     }
-    if (!target) break;
+    if (!target) {
+      // No shelf has this zone yet: reassign the least useful shelf and return its stock to warehouse.
+      const donor = Array.from({ length: rows }, (_, r) => r)
+        .filter((r) => zoneOf(state, r) !== category)
+        .sort((a, b) => {
+          const da = state.shelves[a].reduce((sum, s) => sum + (s.productId ? demand(s.productId) : 0), 0);
+          const db = state.shelves[b].reduce((sum, s) => sum + (s.productId ? demand(s.productId) : 0), 0);
+          if (da !== db) return da - db;
+          const countA = state.shelves[a].reduce((sum, s) => sum + (s.productId ? slotsOf(s.productId).length : 0), 0);
+          const countB = state.shelves[b].reduce((sum, s) => sum + (s.productId ? slotsOf(s.productId).length : 0), 0);
+          return countB - countA || b - a;
+        })[0];
+      if (donor !== undefined) {
+        for (let c = 0; c < state.shelves[donor].length; c++) clearSlot(state, donor, c);
+        state.zones[donor] = category as ShelfZone;
+        target = { r: donor, c: 0 };
+      }
+    }
+    if (!target) continue;
     assignSlot(state, target.r, target.c, id);
   }
 
   // 2) Ô trống còn lại: ưu tiên món còn nhiều trong kho và bán chạy.
   for (const p of slots) {
     if (at(p).productId) continue;
-    const next = inWarehouse().sort((a, b) => slotsOf(a).length - slotsOf(b).length || demand(b) - demand(a))[0];
+    const next = inWarehouse()
+      .filter((id) => zoneOf(state, p.r) === null || zoneOf(state, p.r) === product(id).category)
+      .sort((a, b) => slotsOf(a).length - slotsOf(b).length || demand(b) - demand(a))[0];
     if (!next) return;
     assignSlot(state, p.r, p.c, next);
   }

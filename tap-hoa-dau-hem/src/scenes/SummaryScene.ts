@@ -3,6 +3,7 @@ import { DATA, product } from '../core/data';
 import { startNextDay } from '../core/day';
 import { formatMoney } from '../core/state';
 import { G, persist } from '../game';
+import { dispatchLiveCommand } from '../services/liveShop';
 import { play } from '../ui/sound';
 import { Button, panel } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
@@ -57,6 +58,13 @@ export class SummaryScene extends Phaser.Scene {
         .slice(0, 3)
         .map((m) => `${product(m.productId).name} (${m.qty})`)
         .join(', ');
+      const byZone = new Map<string, number>();
+      for (const m of missed) {
+        const category = product(m.productId).category;
+        const zone = category === 'dry' ? 'Đồ khô' : category === 'snack' ? 'Ăn vặt' : category === 'household' ? 'Đồ dùng' : 'Sau quầy';
+        byZone.set(zone, (byZone.get(zone) ?? 0) + m.qty);
+      }
+      const busiestZone = [...byZone.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
       const t = txt(this, W / 2, y + 6, `📦 Khách hỏi mà hết hàng: ${list}\nNhập thêm những món này nhé!`, {
         size: 13,
         bold: true,
@@ -66,6 +74,10 @@ export class SummaryScene extends Phaser.Scene {
         wrap: 290,
       });
       y += t.height + 10;
+      if (busiestZone) {
+        const zoneTip = txt(this, W / 2, y, `Khu hay hết nhất: ${busiestZone}`, { size: 12, bold: true, color: HEX.red, origin: [0.5, 0] });
+        y += zoneTip.height + 8;
+      }
     } else if (sum.left > sum.served && sum.served + sum.left > 0) {
       const tip = txt(this, W / 2, y + 6, 'Mẹo: khách bỏ về nhiều? Nhập đủ các món và nạp kệ thường xuyên.', { size: 12, color: HEX.muted, origin: [0.5, 0], align: 'center', wrap: 280 });
       y += tip.height + 10;
@@ -98,6 +110,12 @@ export class SummaryScene extends Phaser.Scene {
       color: C.red,
       size: 18,
       onTap: () => {
+        if (G.liveSnapshot) {
+          void dispatchLiveCommand({ type: 'nextDay' }).then(() => this.scene.start('Morning')).catch((error) => {
+            this.add.text(W / 2, H - 92, error instanceof Error ? error.message : 'Không mở được ngày mới.', { color: '#b42318', fontSize: '12px', wordWrap: { width: W - 40 } }).setOrigin(0.5);
+          });
+          return;
+        }
         const gift = startNextDay(G.state);
         persist();
         this.scene.start('Morning', { gift });

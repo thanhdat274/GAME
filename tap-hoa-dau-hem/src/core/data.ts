@@ -3,7 +3,7 @@ import levelsJson from '../data/levels.json';
 import customersJson from '../data/customers.json';
 import balanceJson from '../data/balance.json';
 
-export type Category = 'dry' | 'snack' | 'household';
+export type Category = 'dry' | 'snack' | 'household' | 'counter';
 
 export interface Product {
   id: string;
@@ -16,6 +16,8 @@ export interface Product {
   /** Số ô kho cho mỗi 10 đơn vị. */
   size: number;
   unlockLevel: number;
+  /** Hàng chỉ bán khi khách gọi ở quầy, không bày trên kệ. */
+  behindCounter?: boolean;
 }
 
 export interface LevelDef {
@@ -24,6 +26,7 @@ export interface LevelDef {
   categories: Category[];
   shelves: number;
   label: string;
+  counterUnlock?: boolean;
 }
 
 export interface LevelTable {
@@ -35,10 +38,11 @@ export interface LevelTable {
 export interface CustomerType {
   id: string;
   name: string;
-  prefs: Record<Category, number>;
+  prefs: Partial<Record<Category, number>>;
   patience: number;
   maxItems: number;
   tipMul: number;
+  counterRequestChance: number;
   weight: number;
   shirt: string;
   pants: string;
@@ -56,9 +60,21 @@ export interface Balance {
   closeMinute: number;
   tickMs: number;
   maxQueue: number;
+  maxShoppers: number;
   baseSpawnSeconds: number;
   queuePatienceRate: number;
-  wrongPickPenalty: number;
+  zoneWalkSeconds: number;
+  pickSeconds: number;
+  shopBudgetFactor: number;
+  zoneLowThreshold: number;
+  zoneCriticalThreshold: number;
+  zoneRefillSecondsPerSlot: number;
+  scanComboSeconds: number;
+  scanTipBonus: number;
+  counterSlots: number;
+  counterCapacity: number;
+  counterRequestSeconds: number;
+  counterWrongPenalty: number;
   refillSeconds: number;
   fastChangeSeconds: number;
   tipMin: number;
@@ -88,7 +104,7 @@ export interface GameData {
   balance: Balance;
 }
 
-const CATEGORIES: Category[] = ['dry', 'snack', 'household'];
+const CATEGORIES: Category[] = ['dry', 'snack', 'household', 'counter'];
 
 /** Kiểm tra dữ liệu mặt hàng; trả về danh sách lỗi (rỗng = hợp lệ). */
 export function validateProducts(list: unknown[]): string[] {
@@ -107,6 +123,9 @@ export function validateProducts(list: unknown[]): string[] {
     }
     if (typeof p.cost === 'number' && p.cost <= 0) errors.push(`${id}: giá nhập phải > 0`);
     if (typeof p.size === 'number' && p.size <= 0) errors.push(`${id}: size phải > 0`);
+    if (p.category === 'counter' && p.behindCounter !== true) errors.push(`${id}: hàng sau quầy phải bật behindCounter`);
+    if (p.behindCounter === true && p.category !== 'counter') errors.push(`${id}: hàng sau quầy phải thuộc nhóm counter`);
+    if (p.behindCounter === true && typeof p.price === 'number' && typeof p.cost === 'number' && p.price < p.cost) errors.push(`${id}: giá bán hàng sau quầy phải >= giá nhập`);
     if (seen.has(id)) errors.push(`${id}: trùng id`);
     seen.add(id);
   });

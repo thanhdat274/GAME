@@ -1,0 +1,21 @@
+{
+  "name": "tap-hoa-dau-hem-functions",
+  "private": true,
+  "main": "lib/functions/src/index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0",
+    "lz-string": "^1.5.0",
+    "tap-hoa-dau-hem": "file:.."
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.3"
+  }
+}

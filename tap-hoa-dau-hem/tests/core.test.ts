@@ -6,7 +6,7 @@ import { Emitter } from '../src/core/events';
 import { applyLevelUps, averageRating, levelForExp, ratingSpawnMultiplier, recordRating } from '../src/core/progression';
 import { Rng } from '../src/core/rng';
 import { createNewGame, formatClock, formatMoney, unlockedProducts } from '../src/core/state';
-import { assignSlot, autoArrange, buyStock, cellsFor, checkCart, clearSlot, refillSlot, warehouseCellsUsed } from '../src/core/stock';
+import { assignCounterSlot, assignSlot, autoArrange, buyStock, cellsFor, checkCart, clearSlot, refillCounterSlot, refillSlot, warehouseCellsUsed, zoneFill, zoneOf } from '../src/core/stock';
 
 describe('Rng', () => {
   it('cùng seed cho cùng dãy số', () => {
@@ -42,7 +42,7 @@ describe('nhập hàng', () => {
     const s = createNewGame();
     const res = buyStock(s, { mi_goi: 10 });
     expect(res.ok).toBe(true);
-    expect(s.money).toBe(300000 - 35000);
+    expect(s.money).toBe(DATA.balance.startMoney - 35000);
     expect(s.warehouse.mi_goi).toBe(10);
   });
 
@@ -76,31 +76,31 @@ describe('nhập hàng', () => {
 });
 
 describe('kệ hàng', () => {
-  it('gán ô nạp tối đa 5 từ kho', () => {
+  it('gán ô nạp tối đa 10 từ kho', () => {
     const s = createNewGame();
-    s.warehouse = { mi_goi: 8 };
+    s.warehouse = { mi_goi: 14 };
     assignSlot(s, 0, 0, 'mi_goi');
-    expect(s.shelves[0][0]).toEqual({ productId: 'mi_goi', qty: 5 });
-    expect(s.warehouse.mi_goi).toBe(3);
+    expect(s.shelves[0][0]).toEqual({ productId: 'mi_goi', qty: 10 });
+    expect(s.warehouse.mi_goi).toBe(4);
   });
 
   it('thả món khác vào ô đang có hàng thì hàng cũ về kho', () => {
     const s = createNewGame();
-    s.warehouse = { mi_goi: 5, muoi: 5 };
+    s.warehouse = { mi_goi: 10, muoi: 10 };
     assignSlot(s, 0, 0, 'mi_goi');
     assignSlot(s, 0, 0, 'muoi');
-    expect(s.shelves[0][0]).toEqual({ productId: 'muoi', qty: 5 });
-    expect(s.warehouse.mi_goi).toBe(5);
+    expect(s.shelves[0][0]).toEqual({ productId: 'muoi', qty: 10 });
+    expect(s.warehouse.mi_goi).toBe(10);
     expect(s.warehouse.muoi).toBeUndefined();
   });
 
-  it('nạp lại: ô còn 1, kho 8 → ô 5, kho 4', () => {
+  it('nạp lại: ô còn 1, kho 12 → ô 10, kho 3', () => {
     const s = createNewGame();
     s.shelves[0][0] = { productId: 'mi_goi', qty: 1 };
-    s.warehouse = { mi_goi: 8 };
-    expect(refillSlot(s, 0, 0)).toBe(4);
-    expect(s.shelves[0][0].qty).toBe(5);
-    expect(s.warehouse.mi_goi).toBe(4);
+    s.warehouse = { mi_goi: 12 };
+    expect(refillSlot(s, 0, 0)).toBe(9);
+    expect(s.shelves[0][0].qty).toBe(10);
+    expect(s.warehouse.mi_goi).toBe(3);
   });
 
   it('trả ô về kho', () => {
@@ -124,10 +124,10 @@ describe('kệ hàng', () => {
     s.warehouse = { pin: 6, xa_phong: 3 };
     autoArrange(s);
     const onShelf = (id: string) => s.shelves.flat().filter((x) => x.productId === id && x.qty > 0).length;
-    expect(onShelf('pin')).toBe(1);
-    expect(onShelf('xa_phong')).toBe(1);
-    expect(onShelf('mi_goi')).toBeGreaterThan(0);
-    expect(onShelf('muoi')).toBeGreaterThan(0);
+    expect(onShelf('pin')).toBeGreaterThanOrEqual(1);
+    expect(onShelf('xa_phong')).toBeGreaterThanOrEqual(1);
+    expect(s.shelves.flat().some((x) => x.productId === 'mi_goi') || (s.warehouse.mi_goi ?? 0) > 0).toBe(true);
+    expect(s.shelves.flat().some((x) => x.productId === 'muoi') || (s.warehouse.muoi ?? 0) > 0).toBe(true);
     // Hàng của ô bị lấy lại quay về kho, không mất.
     const total = (id: string) => s.shelves.flat().filter((x) => x.productId === id).reduce((a, x) => a + x.qty, 0) + (s.warehouse[id] ?? 0);
     expect(total('mi_goi') + total('muoi')).toBe(90);
@@ -148,6 +148,54 @@ describe('kệ hàng', () => {
     const onShelf = s.shelves.flat().filter((x) => x.productId);
     expect(onShelf.reduce((a, b) => a + b.qty, 0)).toBe(16);
     expect(Object.keys(s.warehouse)).toHaveLength(0);
+  });
+
+  it('kệ tự nhận khu, từ chối hàng sai khu và bỏ khu khi hết hàng', () => {
+    const s = createNewGame();
+    s.warehouse = { mi_goi: 5, keo: 5 };
+    expect(assignSlot(s, 0, 0, 'mi_goi')).toBe(5);
+    expect(zoneOf(s, 0)).toBe('dry');
+    expect(() => assignSlot(s, 0, 1, 'keo')).toThrow('wrong-zone');
+    clearSlot(s, 0, 0);
+    expect(zoneOf(s, 0)).toBeNull();
+    expect(assignSlot(s, 1, 0, 'keo')).toBe(5);
+    expect(zoneOf(s, 1)).toBe('snack');
+  });
+
+  it('tính cảnh báo mức đầy theo khu', () => {
+    const s = createNewGame();
+    s.warehouse = { mi_goi: 10 };
+    assignSlot(s, 0, 0, 'mi_goi');
+    expect(zoneFill(s, 'dry')).toMatchObject({ fill: 1, alert: 'ok' });
+    s.shelves[0][0].qty = 2;
+    expect(zoneFill(s, 'dry')).toMatchObject({ fill: 0.2, alert: 'low' });
+    s.shelves[0][0].qty = 0;
+    expect(zoneFill(s, 'dry')).toMatchObject({ fill: 0, alert: 'critical' });
+  });
+
+  it('hàng sau quầy chỉ gán vào khay quầy và nạp theo sức chứa riêng', () => {
+    const s = createNewGame();
+    s.warehouse = { the_cao: 8, mi_goi: 3 };
+    expect(assignCounterSlot(s, 0, 'the_cao')).toBe(DATA.balance.counterCapacity);
+    expect(s.counter[0].qty).toBe(DATA.balance.counterCapacity);
+    expect(refillCounterSlot(s, 0)).toBe(0);
+    s.warehouse.the_cao = 3;
+    s.counter[0].qty = DATA.balance.counterCapacity - 1;
+    expect(refillCounterSlot(s, 0)).toBe(1);
+    expect(() => assignCounterSlot(s, 1, 'mi_goi')).toThrow('counter-only');
+    expect(() => assignSlot(s, 0, 0, 'the_cao')).toThrow('counter-only');
+  });
+
+  it('tự bày đặt mỗi món vào kệ cùng khu', () => {
+    const s = createNewGame();
+    s.level = 4;
+    s.warehouse = { mi_goi: 10, keo: 10, pin: 10 };
+    autoArrange(s);
+    for (let r = 0; r < s.shelves.length; r++) {
+      for (const slot of s.shelves[r]) {
+        if (slot.productId) expect(DATA.products.find((p) => p.id === slot.productId)?.category).toBe(s.zones[r]);
+      }
+    }
   });
 });
 

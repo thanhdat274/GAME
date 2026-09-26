@@ -9,7 +9,7 @@ import { DATA } from '../src/core/data';
 import { DaySession, endDay, openShop, startNextDay, type LeaveReason } from '../src/core/day';
 import { Rng } from '../src/core/rng';
 import { createNewGame, formatMoney, shelfCount, totalQty, unlockedProducts, type GameState } from '../src/core/state';
-import { autoArrange, buyStock, checkCart, findSlotWith, suggestCart } from '../src/core/stock';
+import { assignCounterSlot, autoArrange, buyStock, checkCart, suggestCart } from '../src/core/stock';
 
 interface Bot {
   name: string;
@@ -92,12 +92,15 @@ function playDay(s: GameState, bot: Bot, rng: Rng, stats: RunStats): void {
     }
     const c = d.front;
     if (!c) continue;
-    if (c.status === 'picking') {
-      const line = c.order.find((l) => l.picked < l.qty && findSlotWith(s, l.productId));
-      if (line) {
-        const pos = findSlotWith(s, line.productId)!;
-        d.pick(pos.shelf, pos.slot);
-      } else d.checkout();
+    if (c.status === 'scanning') {
+      if (!c.counterRequestResolved) {
+        const line = c.order.find((item) => item.counterLine && item.missing === 0);
+        const slot = line ? s.counter.findIndex((item) => item.productId === line.productId && item.qty > 0) : -1;
+        if (slot >= 0) d.serveCounterRequest(slot);
+      } else {
+        const line = c.order.find((item) => item.picked > item.scanned);
+        if (line) d.scanItem(line.productId);
+      }
       cooldown = bot.react;
       wait = 0;
     } else if (c.status === 'paying') {
@@ -120,6 +123,10 @@ function run(bot: Bot, days: number, seed: number): RunStats {
     const before = s.money;
     restock(s, bot);
     autoArrange(s);
+    if (s.level >= 3) {
+      const counterProduct = unlockedProducts(s.level).find((p) => p.behindCounter && (s.warehouse[p.id] ?? 0) > 0);
+      if (counterProduct) assignCounterSlot(s, 0, counterProduct.id);
+    }
     playDay(s, bot, rng, stats);
     const sum = endDay(s);
     stats.tips += sum.tips;
