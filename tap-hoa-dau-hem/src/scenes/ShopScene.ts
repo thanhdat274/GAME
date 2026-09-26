@@ -1118,11 +1118,20 @@ export class ShopScene extends Phaser.Scene {
     if (!G.liveSnapshot) persist();
     const L = this.add.container(0, 0).setDepth(3000);
     L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
-    L.add(panel(this, 50, 120, W - 100, 430));
-    L.add(txt(this, W / 2, 152, '⏸ Tạm dừng', { size: 22, bold: true, origin: [0.5, 0.5] }));
-    L.add(new Button(this, W / 2, 208, { w: 220, h: 50, label: '▶ Tiếp tục', onTap: () => this.resume() }));
+    const hasDining = !G.liveSnapshot && ensureDiningTables(G.state).length > 0;
+    const hasCloud = cloudSaveEnabled();
+    const panelH = 446 + (hasDining ? 54 : 0) + (hasCloud ? 54 : 0);
+    const panelTop = Math.round((H - panelH) / 2);
+    L.add(panel(this, 50, panelTop, W - 100, panelH));
+    let y = panelTop + 32;
+    L.add(txt(this, W / 2, y, '⏸ Tạm dừng', { size: 22, bold: true, origin: [0.5, 0.5] }));
+    y += 56;
+    L.add(new Button(this, W / 2, y, { w: 220, h: 50, label: '▶ Tiếp tục', onTap: () => this.resume() }));
+    y += 58;
+    L.add(new Button(this, W / 2, y, { w: 220, h: 44, label: '📦 Nhập thêm hàng', color: C.green, onTap: () => this.openRestock() }));
+    y += 54;
     const autoLabel = () => (G.state.settings.autoChange ? '🧮 Tự thối tiền: Bật' : '✋ Tự thối tiền: Tắt');
-    const autoBtn = new Button(this, W / 2, 268, {
+    const autoBtn = new Button(this, W / 2, y, {
       w: 220,
       h: 44,
       label: autoLabel(),
@@ -1139,8 +1148,9 @@ export class ShopScene extends Phaser.Scene {
       },
     });
     L.add(autoBtn);
+    y += 54;
     const scanLabel = () => (G.state.settings.autoScan ? '📦 Tự quét giỏ: Bật' : '🧺 Tự quét giỏ: Tắt');
-    const scanBtn = new Button(this, W / 2, 322, {
+    const scanBtn = new Button(this, W / 2, y, {
       w: 220,
       h: 44,
       label: scanLabel(),
@@ -1153,8 +1163,9 @@ export class ShopScene extends Phaser.Scene {
       },
     });
     L.add(scanBtn);
+    y += 54;
     const viewLabel = () => (this.topDown ? '🗺️ Góc: Trên xuống' : '👀 Góc: Nhìn ngang');
-    const viewBtn = new Button(this, W / 2 + 56, 376, {
+    const viewBtn = new Button(this, W / 2 + 56, y, {
       w: 108,
       h: 44,
       size: 11,
@@ -1167,7 +1178,7 @@ export class ShopScene extends Phaser.Scene {
     });
     if (G.liveSnapshot) viewBtn.setEnabled(false);
     L.add(viewBtn);
-    const sound = new Button(this, W / 2 - 56, 376, {
+    const sound = new Button(this, W / 2 - 56, y, {
       w: 108,
       h: 44,
       size: 11,
@@ -1181,29 +1192,34 @@ export class ShopScene extends Phaser.Scene {
       },
     });
     L.add(sound);
-    const hasDining = !G.liveSnapshot && ensureDiningTables(G.state).length > 0;
-    if (hasDining) L.add(new Button(this, W / 2, 430, {
-      w: 220,
-      h: 44,
-      label: '🪑 Khu ăn tại chỗ',
-      color: C.wood,
-      onTap: () => this.openDining(),
-    }));
-    const cloudY = hasDining ? 484 : 430;
-    if (cloudSaveEnabled()) L.add(new Button(this, W / 2, cloudY, {
-      w: 220,
-      h: 44,
-      label: '☁️ Tài khoản và đồng bộ',
-      color: C.blue,
-      onTap: () => {
-        if (!G.liveSnapshot) persist();
-        else suspendLiveShop();
-        stopMusic();
-        this.scene.start('Title', { login: false });
-      },
-    }));
+    if (hasDining) {
+      y += 54;
+      L.add(new Button(this, W / 2, y, {
+        w: 220,
+        h: 44,
+        label: '🪑 Khu ăn tại chỗ',
+        color: C.wood,
+        onTap: () => this.openDining(),
+      }));
+    }
+    if (hasCloud) {
+      y += 54;
+      L.add(new Button(this, W / 2, y, {
+        w: 220,
+        h: 44,
+        label: '☁️ Tài khoản và đồng bộ',
+        color: C.blue,
+        onTap: () => {
+          if (!G.liveSnapshot) persist();
+          else suspendLiveShop();
+          stopMusic();
+          this.scene.start('Title', { login: false });
+        },
+      }));
+    }
+    y += 54;
     L.add(
-      new Button(this, W / 2, hasDining ? 538 : cloudSaveEnabled() ? 484 : 430, {
+      new Button(this, W / 2, y, {
         w: 220,
         h: 44,
         label: '🏠 Về màn chính',
@@ -1217,7 +1233,7 @@ export class ShopScene extends Phaser.Scene {
       }),
     );
     L.add(
-      txt(this, W / 2, hasDining ? 582 : cloudSaveEnabled() ? 528 : 474, 'Tắt tự thối để tự chọn tờ tiền và có cơ hội nhận tip.\nĐã lưu tiến trình.', {
+      txt(this, W / 2, y + 44, 'Tắt tự thối để tự chọn tờ tiền và có cơ hội nhận tip.\nĐã lưu tiến trình.', {
         size: 12,
         color: HEX.muted,
         origin: [0.5, 0.5],
@@ -1233,6 +1249,28 @@ export class ShopScene extends Phaser.Scene {
     this.pauseLayer = null;
     this.scene.pause('Shop');
     this.scene.launch('Dining');
+  }
+
+  /** Tạm dừng bán để nhập thêm hàng: màn Nhập hàng phủ lên, tiệm đứng yên tới khi quay lại. */
+  private openRestock(): void {
+    if (this.ending) return;
+    this.pauseLayer?.destroy();
+    this.pauseLayer = null;
+    if (!G.liveSnapshot) this.session.paused = true;
+    setPlayClockRunning(false);
+    this.scene.pause('Shop');
+    this.scene.launch('Restock');
+  }
+
+  resumeFromRestock(): void {
+    this.shelves.render(G.state, this.shelfOpts());
+    this.hud.refresh();
+    this.renderPanel(true);
+    // Trong lúc nhập hàng mà app bị ẩn thì bảng tạm dừng đã mở: giữ nguyên trạng thái dừng.
+    if (this.pauseLayer) return;
+    if (!G.liveSnapshot) this.session.paused = false;
+    setPlayClockRunning(true);
+    if (G.state.settings.sound) startMusic();
   }
 
   resumeFromDining(): void {
