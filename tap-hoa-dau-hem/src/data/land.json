@@ -1,0 +1,93 @@
+{
+  "cols": 6,
+  "rows": 8,
+  "door": {
+    "x": 0,
+    "y": 7
+  },
+  "initial": [
+    {
+      "x": 0,
+      "y": 5,
+      "w": 4,
+      "h": 3
+    }
+  ],
+  "plots": [
+    {
+      "id": "A",
+      "name": "Đất A",
+      "level": 5,
+      "cost": 150000,
+      "queueBonus": 1,
+      "rects": [
+        {
+          "x": 0,
+          "y": 3,
+          "w": 4,
+          "h": 2
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Đất B",
+      "level": 8,
+      "cost": 400000,
+      "queueBonus": 1,
+      "rects": [
+        {
+          "x": 4,
+          "y": 3,
+          "w": 2,
+          "h": 4
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "name": "Sân sau",
+      "level": 9,
+      "cost": 600000,
+      "queueBonus": 0,
+      "storageOnly": true,
+      "rects": [
+        {
+          "x": 4,
+          "y": 0,
+          "w": 2,
+          "h": 3
+        }
+      ]
+    }
+  ],
+  "defaultLayout": [
+    {
+      "type": "shelf",
+      "x": 0,
+      "y": 5,
+      "rot": 1,
+      "shelf": 0
+    },
+    {
+      "type": "shelf",
+      "x": 2,
+      "y": 5,
+      "rot": 0,
+      "shelf": 1
+    },
+    {
+      "type": "shelf",
+      "x": 2,
+      "y": 6,
+      "rot": 0,
+      "shelf": 2
+    },
+    {
+      "type": "counter",
+      "x": 2,
+      "y": 7,
+      "rot": 0
+    }
+  ]
+}

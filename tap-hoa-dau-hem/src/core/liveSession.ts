@@ -13,9 +13,10 @@ import {
   clearSlot,
   refillCounterSlot,
   refillSlot,
+  setClearance,
   type Cart,
 } from './stock';
-import { DATA, product } from './data';
+import { DATA, product, supplier, type Category } from './data';
 import type { GameState } from './state';
 
 /** Authoritative shared state stored by the live-session backend. */
@@ -28,7 +29,7 @@ export interface LiveShopAggregate {
 
 /** Commands sent by either device. They are applied in server transaction order. */
 export type LiveShopCommand =
-  | { type: 'buyStock'; cart: Cart }
+  | { type: 'buyStock'; cart: Cart; supplierId?: string }
   | { type: 'assignShelf'; shelf: number; slot: number; productId: string }
   | { type: 'clearShelf'; shelf: number; slot: number }
   | { type: 'refillShelf'; shelf: number; slot: number }
@@ -37,7 +38,10 @@ export type LiveShopCommand =
   | { type: 'autoArrange' }
   | { type: 'openShop' }
   | { type: 'startRefill'; shelf: number; slot: number }
-  | { type: 'refillZone'; zone: 'dry' | 'snack' | 'household' }
+  | { type: 'refillZone'; zone: Exclude<Category, 'counter'> }
+  | { type: 'setClearance'; shelf: number; slot: number; pct: number | null }
+  | { type: 'resolveBargain'; accept: boolean }
+  | { type: 'resolveCredit'; grant: boolean }
   | { type: 'scanItem'; productId: string }
   | { type: 'scanAll' }
   | { type: 'serveCounter'; slot: number }
@@ -74,7 +78,7 @@ export function applyLiveShopCommand(
   switch (command.type) {
     case 'buyStock':
       requirePhase(state, 'morning');
-      result = buyStock(state, command.cart);
+      result = buyStock(state, command.cart, command.supplierId ?? 'co_tu');
       break;
     case 'assignShelf':
       requirePhase(state, 'morning');
@@ -97,6 +101,9 @@ export function applyLiveShopCommand(
       requirePhase(state, 'morning');
       result = refillCounterSlot(state, command.slot);
       break;
+    case 'setClearance':
+      result = setClearance(state, command.shelf, command.slot, command.pct);
+      break;
     case 'autoArrange':
       requirePhase(state, 'morning');
       autoArrange(state);
@@ -116,6 +123,8 @@ export function applyLiveShopCommand(
     case 'addBill':
     case 'undoBill':
     case 'autoChange':
+    case 'resolveBargain':
+    case 'resolveCredit':
     case 'giveChange': {
       const runtime = requireDayRuntime(aggregate);
       const session = DaySession.restore(state, runtime);
@@ -129,6 +138,8 @@ export function applyLiveShopCommand(
         case 'undoBill': session.undoBill(); result = true; break;
         case 'autoChange': result = session.autoChange(); break;
         case 'giveChange': result = session.giveChange(); break;
+        case 'resolveBargain': result = session.resolveBargain(command.accept); break;
+        case 'resolveCredit': result = session.resolveCredit(command.grant); break;
       }
       aggregate.dayRuntime = session.snapshot();
       break;
@@ -167,6 +178,18 @@ function validateLiveShopCommand(command: LiveShopCommand): void {
   switch (command.type) {
     case 'buyStock':
       if (!isRecord(command.cart) || Object.entries(command.cart).some(([id, qty]) => !isProduct(id) || !isQuantity(qty))) throw new Error('Giỏ nhập hàng không hợp lệ.');
+      if (command.supplierId !== undefined) {
+        try { supplier(String(command.supplierId)); } catch { throw new Error('Mối sỉ không hợp lệ.'); }
+      }
+      return;
+    case 'setClearance':
+      if (!isIndex(command.shelf) || !isIndex(command.slot) || !(command.pct === null || DATA.balance.clearance.options.includes(Number(command.pct)))) throw new Error('Bán xả không hợp lệ.');
+      return;
+    case 'resolveBargain':
+      if (typeof command.accept !== 'boolean') throw new Error('Trả lời mặc cả không hợp lệ.');
+      return;
+    case 'resolveCredit':
+      if (typeof command.grant !== 'boolean') throw new Error('Trả lời ghi sổ không hợp lệ.');
       return;
     case 'assignShelf':
       if (!isIndex(command.shelf) || !isIndex(command.slot) || !isProduct(command.productId)) throw new Error('Ô kệ không hợp lệ.');
@@ -184,7 +207,7 @@ function validateLiveShopCommand(command: LiveShopCommand): void {
       if (!isIndex(command.slot)) throw new Error('Ô quầy không hợp lệ.');
       return;
     case 'refillZone':
-      if (!['dry', 'snack', 'household'].includes(String(command.zone))) throw new Error('Khu hàng không hợp lệ.');
+      if (!['dry', 'snack', 'household', 'drink', 'fresh', 'frozen'].includes(String(command.zone))) throw new Error('Khu hàng không hợp lệ.');
       return;
     case 'scanItem':
       if (!isProduct(command.productId)) throw new Error('Mặt hàng không hợp lệ.');

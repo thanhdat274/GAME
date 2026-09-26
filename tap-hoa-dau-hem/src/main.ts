@@ -2,6 +2,12 @@ import Phaser from 'phaser';
 import { registerSW } from 'virtual:pwa-register';
 import { G, persist, sceneForPhase } from './game';
 import { BootScene } from './scenes/BootScene';
+import { BuildScene } from './scenes/BuildScene';
+import { DecorScene } from './scenes/DecorScene';
+import { LedgerScene } from './scenes/LedgerScene';
+import { PricesScene } from './scenes/PricesScene';
+import { QuestsScene } from './scenes/QuestsScene';
+import { WarehouseScene } from './scenes/WarehouseScene';
 import { HowToScene } from './scenes/HowToScene';
 import { MorningScene } from './scenes/MorningScene';
 import { ShopScene } from './scenes/ShopScene';
@@ -23,7 +29,7 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   render: { antialias: true, roundPixels: false },
   input: { activePointers: 2 },
-  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene],
+  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, PricesScene, LedgerScene, QuestsScene, DecorScene],
 });
 
 configureCloudApplyGuard(() => game.scene.isActive('Title') || game.scene.isActive('Morning'));
@@ -42,7 +48,7 @@ window.addEventListener('thdh-cloud-loaded', () => {
 });
 
 // Lưu khi rời tab / tắt ứng dụng (chỉ khi đã vào game để không ghi đè bằng trạng thái mặc định).
-const inGame = () => ['Morning', 'Shop', 'Summary'].some((k) => game.scene.isActive(k));
+const inGame = () => ['Morning', 'Shop', 'Summary', 'Warehouse', 'Prices', 'Ledger', 'Quests', 'Decor'].some((k) => game.scene.isActive(k));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && inGame()) persist();
 });

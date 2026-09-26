@@ -1,18 +1,29 @@
 import { computeTip, customerPayment, judgeChange, type ChangeResult } from './change';
 import { createCustomer, meanSpawnSeconds, orderTotal, ratingFor, type Customer, type OrderLine } from './customers';
 import { DATA, product, type Category } from './data';
+import { attractionMultiplier, hasCat } from './decor';
 import { Emitter } from './events';
+import { counterFixture, maxQueueFor, walkTiles, walkableGrid } from './layout';
+import { canGiveCredit, collectDebt, markBadDebts, recordDebt, repaymentsToday } from './ledger';
+import { cheapSpawnMultiplier, keepChance } from './pricing';
 import { applyLevelUps, averageRating, isAtCap, ratingSpawnMultiplier, recordRating } from './progression';
+import { checkAchievements, claimAllDone, ensureDailyQuests } from './quests';
 import { Rng, daySeed } from './rng';
-import { emptyStats, shelfCount, unlockedProducts, type DaySummary, type GameState } from './state';
-import { canRefill, refillSlot, zoneOf } from './stock';
+import {
+  emptyStats, fixtureOfShelf, shelfKind, unlockedProducts, usableShelves, warehouseTotals,
+  type DaySummary, type GameState,
+} from './state';
+import {
+  canRefill, electricityCost, expireLots, putIntoSlot, receiveDeliveries, refillSlot, slotUnitPrice, takeOneFromSlot, zoneOf,
+  type DeliveryResult,
+} from './stock';
 
 export type LeaveReason = 'served' | 'patience' | 'nothing';
 export type CounterResult = 'ok' | 'wrong' | 'empty' | 'none';
 
 export interface DayEvents {
   customerArrived: Customer;
-  customerBrowse: { customer: Customer; zone: Category };
+  customerBrowse: { customer: Customer; zone: Category; shelf: number | null; tiles: number };
   customerFront: Customer;
   customerLeft: { customer: Customer; reason: LeaveReason; stars: number };
   itemTaken: { customer: Customer; productId: string; shelf: number; slot: number };
@@ -30,6 +41,15 @@ export interface DayEvents {
   refillStarted: { shelf: number; slot: number };
   refillDone: { shelf: number; slot: number; qty: number };
   zoneRefillDone: { zone: Exclude<Category, 'counter'>; count: number };
+  priceComplaint: { customer: Customer; productId: string };
+  notCold: { customer: Customer; productId: string };
+  bargainRequested: { customer: Customer; pct: number };
+  bargainResolved: { customer: Customer; accepted: boolean; left: boolean };
+  creditRequested: { customer: Customer; amount: number; allowed: boolean };
+  creditResolved: { customer: Customer; granted: boolean; amount: number };
+  debtRepaid: { debtId: number; name: string; amount: number };
+  delivery: DeliveryResult;
+  catPetted: Customer;
   closing: void;
   dayEnded: void;
 }
@@ -157,9 +177,10 @@ export class DaySession {
     if (!this.closed) {
       this.nextSpawnIn -= dt;
       if (this.nextSpawnIn <= 0) {
-        if (this.shoppers.length + this.entrants.length + this.ready.length + this.queue.length < b.maxShoppers + b.maxQueue) {
+        if (this.shoppers.length + this.entrants.length + this.ready.length + this.queue.length < b.maxShoppers + this.maxQueue()) {
           this.spawn();
-          const mean = meanSpawnSeconds(this.state.clock, ratingSpawnMultiplier(averageRating(this.state)), this.state.day);
+          const mul = ratingSpawnMultiplier(averageRating(this.state)) * attractionMultiplier(this.state) * cheapSpawnMultiplier(this.state);
+          const mean = meanSpawnSeconds(this.state.clock, mul, this.state.day);
           this.nextSpawnIn = Math.max(1, this.rng.exponential(mean));
         } else this.nextSpawnIn = 0.5;
       }
@@ -174,15 +195,26 @@ export class DaySession {
       }
     }
     this.tickZoneRefills(dt);
+    this.tickDeliveries();
+    this.tickDebtVisits();
     this.admitShoppers();
     for (const c of [...this.shoppers]) this.tickBrowse(c, dt);
     this.admitShoppers();
     this.admitReady();
 
-    const waiting = [...this.queue, ...this.ready].filter((c) => c.status === 'waiting' || c.status === 'scanning' || c.status === 'paying');
+    const waiting = [...this.queue, ...this.ready].filter((c) => c.status === 'waiting' || c.status === 'scanning' || c.status === 'paying' || c.status === 'bargain' || c.status === 'credit');
+    const cat = hasCat(this.state);
     for (const c of waiting) {
       const rate = c === this.front ? 1 : b.queuePatienceRate;
       c.patience -= dt * rate;
+      c.waited = (c.waited ?? 0) + dt;
+      if (cat && !c.catChecked && c.waited >= b.cat.waitSeconds) {
+        c.catChecked = true;
+        if (this.rng.next() < b.cat.chance) {
+          c.patience = Math.min(c.patienceMax, c.patience + b.cat.bonusSeconds);
+          this.events.emit('catPetted', c);
+        }
+      }
       if (c.patience <= 0) {
         c.patience = 0;
         this.leave(c, 'patience');
@@ -198,8 +230,13 @@ export class DaySession {
     }
   }
 
+  private maxQueue(): number {
+    return maxQueueFor(this.state);
+  }
+
   private spawn(): void {
-    const c = createCustomer(this.nextId++, this.state.level, this.rng);
+    const c = createCustomer(this.nextId++, this.state.level, this.rng, this.state);
+    if (c.name) this.state.regulars[c.name] = (this.state.regulars[c.name] ?? 0) + 1;
     this.entrants.push(c);
     this.events.emit('customerArrived', c);
     this.admitShoppers();
@@ -211,10 +248,10 @@ export class DaySession {
       if (c.status === 'done') continue;
       c.status = 'browsing';
       c.browseIndex = 0;
-      c.browseTimer = DATA.balance.zoneWalkSeconds;
       c.browsePicking = false;
+      c.at = null;
       const first = c.order.find((line) => !line.counterLine);
-      if (first) this.events.emit('customerBrowse', { customer: c, zone: product(first.productId).category });
+      c.browseTimer = first ? this.walkTo(c, first) : DATA.balance.zoneWalkSeconds;
       this.shoppers.push(c);
     }
   }
@@ -245,22 +282,56 @@ export class DaySession {
     }
     c.browseIndex++;
     const next = lines[c.browseIndex];
-    if (next) {
-      c.browseTimer = DATA.balance.zoneWalkSeconds;
-      this.events.emit('customerBrowse', { customer: c, zone: product(next.productId).category });
-    } else this.finishBrowsing(c);
+    if (next) c.browseTimer = this.walkTo(c, next);
+    else this.finishBrowsing(c);
+  }
+
+  /** Kệ khách sẽ tới để lấy món: kệ đúng khu đang có món (ưu tiên tủ lạnh cho đồ uống lạnh). */
+  private targetShelf(productId: string): number | null {
+    const p = product(productId);
+    const shelves = usableShelves(this.state).filter((r) => zoneOf(this.state, r) === p.category);
+    const withItem = shelves.filter((r) => this.state.shelves[r].some((s) => s.productId === p.id && s.qty > 0));
+    const cold = withItem.filter((r) => shelfKind(this.state, r) !== 'shelf');
+    return (p.prefersCold ? cold[0] : undefined) ?? withItem[0] ?? shelves[0] ?? null;
+  }
+
+  /** Thời gian đi tới kệ của món tiếp theo: tiệm nhỏ giữ nhịp cũ, tiệm lớn đi xa hơn. */
+  private walkTo(c: Customer, line: OrderLine): number {
+    const b = DATA.balance;
+    const shelf = this.targetShelf(line.productId);
+    const to = shelf === null ? null : fixtureOfShelf(this.state, shelf) ?? null;
+    const from = c.at === null || c.at === undefined ? null : this.state.fixtures.find((f) => f.uid === c.at) ?? null;
+    let tiles = 0;
+    try {
+      tiles = to ? walkTiles(this.state, from, to, this.grid()) : 0;
+    } catch {
+      tiles = 0;
+    }
+    c.at = to?.uid ?? c.at ?? null;
+    this.events.emit('customerBrowse', { customer: c, zone: product(line.productId).category, shelf, tiles });
+    return b.zoneWalkSeconds + Math.max(0, tiles - 3) * b.walkSecondsPerTile;
+  }
+
+  private gridCache: { key: string; grid: boolean[] } | null = null;
+  private grid(): boolean[] {
+    const key = JSON.stringify(this.state.fixtures) + this.state.land.join();
+    if (this.gridCache?.key !== key) this.gridCache = { key, grid: walkableGrid(this.state) };
+    return this.gridCache.grid;
   }
 
   private takeFromShelf(c: Customer, line: OrderLine): void {
     const p = product(line.productId);
     const zone = p.category;
     let source: { shelf: number; slot: number } | null = null;
-    for (let r = 0; r < shelfCount(this.state.level) && !source; r++) {
-      if (zoneOf(this.state, r) !== zone) continue;
+    const shelves = usableShelves(this.state).filter((r) => zoneOf(this.state, r) === zone);
+    // Đồ uống thích lạnh: lấy ở tủ lạnh trước.
+    if (p.prefersCold) shelves.sort((a, b) => (shelfKind(this.state, a) === 'shelf' ? 1 : 0) - (shelfKind(this.state, b) === 'shelf' ? 1 : 0));
+    for (const r of shelves) {
       const row = this.state.shelves[r];
       const col = row.findIndex((slot) => slot.productId === p.id && slot.qty > 0);
-      if (col >= 0) source = { shelf: r, slot: col };
+      if (col >= 0) { source = { shelf: r, slot: col }; break; }
     }
+    if (source && line.picked === 0 && !line.declined && this.declines(c, line, source.shelf)) return;
     if (!source) {
       line.missing++;
       c.basketMissing++;
@@ -270,13 +341,38 @@ export class DaySession {
       return;
     }
     const slot = this.state.shelves[source.shelf][source.slot];
-    slot.qty--;
+    const unit = slotUnitPrice(this.state, slot);
+    const exp = takeOneFromSlot(slot) ?? null;
     line.picked++;
+    line.value = (line.value ?? 0) + unit;
     line.pickedFrom ??= [];
     const recorded = line.pickedFrom.find((item) => item.shelf === source!.shelf && item.slot === source!.slot);
-    if (recorded) recorded.qty++;
-    else line.pickedFrom.push({ ...source, qty: 1 });
+    if (recorded) {
+      recorded.qty++;
+      (recorded.exps ??= []).push(exp);
+    } else line.pickedFrom.push({ ...source, qty: 1, exps: [exp] });
     this.events.emit('itemTaken', { customer: c, productId: p.id, ...source });
+  }
+
+  /** Khách xét giá và độ lạnh trước khi lấy món; từ chối thì bỏ cả dòng (không tính là hết hàng). */
+  private declines(c: Customer, line: OrderLine, shelf: number): boolean {
+    const p = product(line.productId);
+    const t = this.state.today;
+    let reason: 'price' | 'cold' | null = null;
+    const keep = keepChance(this.state, p.id, c.type);
+    if (keep < 1 && this.rng.next() >= keep) reason = 'price';
+    else if (p.prefersCold && shelfKind(this.state, shelf) === 'shelf' && this.rng.next() >= DATA.balance.notColdBuyChance) reason = 'cold';
+    if (!reason) return false;
+    line.declined = reason;
+    line.missing = line.qty - line.picked;
+    if (reason === 'price') {
+      t.priceComplaints[p.id] = (t.priceComplaints[p.id] ?? 0) + 1;
+      this.events.emit('priceComplaint', { customer: c, productId: p.id });
+    } else {
+      t.notCold[p.id] = (t.notCold[p.id] ?? 0) + 1;
+      this.events.emit('notCold', { customer: c, productId: p.id });
+    }
+    return true;
   }
 
   private finishBrowsing(c: Customer): void {
@@ -297,15 +393,16 @@ export class DaySession {
       this.leave(c, 'nothing');
       return;
     }
-    if (this.queue.length >= DATA.balance.maxQueue) return;
+    if (this.queue.length >= this.maxQueue()) return;
     this.removeFrom(this.shoppers, c);
+    c.at = counterFixture(this.state)?.uid ?? null;
     c.status = 'waiting';
     this.queue.push(c);
     this.events.emit('basketReady', c);
   }
 
   private admitReady(): void {
-    while (this.queue.length < DATA.balance.maxQueue && this.ready.length) {
+    while (this.queue.length < this.maxQueue() && this.ready.length) {
       const c = this.ready.shift()!;
       if (c.status === 'done') continue;
       this.queue.push(c);
@@ -366,6 +463,25 @@ export class DaySession {
     }
   }
 
+  /** Xe giao hàng của mối sỉ tới đúng giờ. */
+  private tickDeliveries(): void {
+    if (!this.state.deliveries.length) return;
+    for (const d of receiveDeliveries(this.state, this.state.day, this.state.clock)) this.events.emit('delivery', d);
+  }
+
+  /** Khách nợ ghé trả tiền rải rác trong ngày. */
+  private tickDebtVisits(): void {
+    const due = repaymentsToday(this.state);
+    if (!due.length) return;
+    const span = DATA.balance.daySeconds;
+    for (const debt of due) {
+      const frac = ((debt.id * 0.618034) % 1);
+      if (this.elapsed < span * (0.15 + 0.6 * frac) && !this.closed) continue;
+      const amount = collectDebt(this.state, debt.id);
+      if (amount) this.events.emit('debtRepaid', { debtId: debt.id, name: debt.name, amount });
+    }
+  }
+
   isRefilling(shelf: number, slot: number): number | null {
     const r = this.refills.find((x) => x.shelf === shelf && x.slot === slot);
     return r ? 1 - r.left / DATA.balance.refillSeconds : null;
@@ -381,10 +497,10 @@ export class DaySession {
   refillZone(zone: Exclude<Category, 'counter'>): boolean {
     if (this.zoneRefills.some((r) => r.zone === zone)) return false;
     const slots: { shelf: number; slot: number }[] = [];
-    for (let shelf = 0; shelf < shelfCount(this.state.level); shelf++) {
+    for (const shelf of usableShelves(this.state)) {
       if (zoneOf(this.state, shelf) !== zone) continue;
-      this.state.shelves[shelf].forEach((slot, index) => {
-        if (slot.productId && slot.qty < DATA.balance.slotCapacity && (this.state.warehouse[slot.productId] ?? 0) > 0) slots.push({ shelf, slot: index });
+      this.state.shelves[shelf].forEach((_, index) => {
+        if (canRefill(this.state, shelf, index)) slots.push({ shelf, slot: index });
       });
     }
     if (!slots.length) return false;
@@ -440,11 +556,26 @@ export class DaySession {
     if (c !== this.front || c.status !== 'scanning') return;
     if (!c.counterRequestResolved) return;
     if (c.order.some((line) => line.picked > line.scanned)) return;
-    const total = orderTotal(c);
+    const total = orderTotal(c, this.state);
     if (total <= 0) {
       this.leave(c, 'nothing');
       return;
     }
+    if (c.wantsCredit && !c.creditResolved) {
+      c.status = 'credit';
+      this.events.emit('creditRequested', { customer: c, amount: total, allowed: canGiveCredit(this.state, total) });
+      return;
+    }
+    if (c.bargainPct && !c.bargainResolved) {
+      c.status = 'bargain';
+      this.events.emit('bargainRequested', { customer: c, pct: c.bargainPct });
+      return;
+    }
+    this.startPayment(c);
+  }
+
+  private startPayment(c: Customer): void {
+    const total = orderTotal(c, this.state);
     c.comboTipEligible = c.scanStartedAt !== null && this.elapsed - c.scanStartedAt <= DATA.balance.scanComboSeconds;
     c.total = total;
     c.bill = customerPayment(total, this.rng);
@@ -455,6 +586,57 @@ export class DaySession {
     this.events.emit('paymentStarted', c);
     if (c.changeDue === 0) this.completeSale(c, this.tipFor(c, false), 0);
     else if (this.state.settings.autoChange) this.autoChange();
+  }
+
+  /** Người chơi trả lời khách mặc cả: bớt thì giảm tiền, không bớt thì khách có thể bỏ về. */
+  resolveBargain(accept: boolean): boolean {
+    const c = this.front;
+    if (!c || c.status !== 'bargain') return false;
+    const cfg = DATA.balance.bargain;
+    c.bargainResolved = true;
+    c.status = 'scanning';
+    if (accept) {
+      const before = orderTotal(c, this.state);
+      c.discountPct = c.bargainPct;
+      this.state.today.bargainDiscount += before - orderTotal(c, this.state);
+      this.events.emit('bargainResolved', { customer: c, accepted: true, left: false });
+      this.startPayment(c);
+      return true;
+    }
+    if (this.rng.next() < cfg.declineLeave) {
+      this.events.emit('bargainResolved', { customer: c, accepted: false, left: true });
+      this.leave(c, 'nothing');
+      return true;
+    }
+    c.maxStars = cfg.declineMaxStars;
+    this.events.emit('bargainResolved', { customer: c, accepted: false, left: false });
+    this.startPayment(c);
+    return true;
+  }
+
+  /** Người chơi cho hoặc không cho khách ghi sổ. */
+  resolveCredit(grant: boolean): boolean {
+    const c = this.front;
+    if (!c || c.status !== 'credit') return false;
+    const amount = orderTotal(c, this.state);
+    c.creditResolved = true;
+    if (grant) {
+      if (!canGiveCredit(this.state, amount)) {
+        c.status = 'credit';
+        c.creditResolved = false;
+        return false;
+      }
+      recordDebt(this.state, c.name ?? c.type.name, amount, this.rng);
+      this.events.emit('creditResolved', { customer: c, granted: true, amount });
+      c.total = amount;
+      this.completeSale(c, 0, 0, true);
+      return true;
+    }
+    this.events.emit('creditResolved', { customer: c, granted: false, amount });
+    for (const line of c.order) this.returnLine(line);
+    this.state.today.left++;
+    this.finish(c, 'nothing', DATA.balance.debt.refuseStars);
+    return true;
   }
 
   /** Kept as a convenience for the "Quét hết" action; partial checkout is no longer supported. */
@@ -534,7 +716,7 @@ export class DaySession {
     return ordinary + (c.comboTipEligible && !automatic && c.shortAttempts === 0 && c.undos === 0 ? DATA.balance.scanTipBonus : 0);
   }
 
-  private completeSale(c: Customer, tip: number, lost: number): void {
+  private completeSale(c: Customer, tip: number, lost: number, credit = false): void {
     const b = DATA.balance;
     const t = this.state.today;
     let items = 0;
@@ -544,8 +726,13 @@ export class DaySession {
       t.cogs += product(line.productId).cost * line.scanned;
       t.sold[line.productId] = (t.sold[line.productId] ?? 0) + line.scanned;
     }
-    this.state.money += c.total + tip - lost;
-    t.revenue += c.total;
+    this.state.lifetime.sold += items;
+    this.state.lifetime.served++;
+    // Ghi sổ: chưa thu tiền, doanh thu tính khi khách trả nợ.
+    if (!credit) {
+      this.state.money += c.total + tip - lost;
+      t.revenue += c.total;
+    }
     t.tips += tip;
     t.overpaid += lost;
     t.served++;
@@ -568,29 +755,46 @@ export class DaySession {
         remaining -= returned;
       }
     } else {
+      const exps: (number | null)[] = [];
+      for (const origin of line.pickedFrom ?? []) exps.push(...(origin.exps ?? []));
+      const nextExp = () => (exps.length ? exps.shift()! : null);
       for (const origin of line.pickedFrom ?? []) {
         const slot = this.state.shelves[origin.shelf]?.[origin.slot];
         if (!slot || slot.productId !== line.productId) continue;
         const returned = Math.min(origin.qty, remaining, DATA.balance.slotCapacity - slot.qty);
-        slot.qty += returned;
+        for (let i = 0; i < returned; i++) putIntoSlot(slot, 1, nextExp());
         remaining -= returned;
         if (!remaining) break;
       }
       if (remaining > 0) {
         const p = product(line.productId);
-        for (let shelf = 0; shelf < shelfCount(this.state.level) && remaining > 0; shelf++) {
+        for (const shelf of usableShelves(this.state)) {
+          if (remaining <= 0) break;
           if (zoneOf(this.state, shelf) !== p.category) continue;
           const slot = this.state.shelves[shelf].find((item) => item.productId === p.id && item.qty < DATA.balance.slotCapacity);
           if (!slot) continue;
           const returned = Math.min(remaining, DATA.balance.slotCapacity - slot.qty);
-          slot.qty += returned;
+          for (let i = 0; i < returned; i++) putIntoSlot(slot, 1, nextExp());
           remaining -= returned;
         }
       }
+      while (remaining > 0) {
+        const exp = nextExp();
+        const lot = this.state.warehouse.find((l) => l.productId === line.productId && l.exp === exp);
+        if (lot) lot.qty++;
+        else this.state.warehouse.push({ productId: line.productId, qty: 1, exp });
+        remaining--;
+      }
     }
-    if (remaining > 0) this.state.warehouse[line.productId] = (this.state.warehouse[line.productId] ?? 0) + remaining;
+    if (remaining > 0) {
+      const lot = this.state.warehouse.find((l) => l.productId === line.productId && l.exp === null);
+      if (lot) lot.qty += remaining;
+      else this.state.warehouse.push({ productId: line.productId, qty: remaining, exp: null });
+    }
     line.picked = 0;
     line.scanned = 0;
+    line.value = 0;
+    line.pickedFrom = [];
   }
 
   private leave(c: Customer, reason: Exclude<LeaveReason, 'served'>): void {
@@ -627,6 +831,16 @@ export function endDay(state: GameState): DaySummary {
   const t = state.today;
   let best: DaySummary['bestSeller'] = null;
   for (const [productId, qty] of Object.entries(t.sold)) if (!best || qty > best.qty) best = { productId, qty };
+  // Hàng về muộn (đơn giao trong ngày) vẫn nhận trước khi đóng sổ.
+  receiveDeliveries(state, state.day, DATA.balance.closeMinute);
+  expireLots(state, state.day);
+  const power = electricityCost(state);
+  state.money -= power;
+  t.electricity += power;
+  markBadDebts(state);
+  const avg = t.ratingCount ? t.ratingSum / t.ratingCount : 0;
+  state.lifetime.loveStreak = t.ratingCount && avg >= DATA.balance.loveStreakRating ? state.lifetime.loveStreak + 1 : 0;
+  const achievements = checkAchievements(state).map((a) => a.id);
   const levelUps = applyLevelUps(state).map((l) => l.level);
   const summary: DaySummary = {
     day: state.day,
@@ -646,9 +860,19 @@ export function endDay(state: GameState): DaySummary {
       .sort((a, b) => b.qty - a.qty),
     levelUps,
     capReached: isAtCap(state) && state.exp >= nextCapExp(),
+    spoiled: Object.entries(t.spoiled).map(([productId, qty]) => ({ productId, qty })).sort((a, b) => b.qty - a.qty),
+    spoiledCost: t.spoiledCost,
+    electricity: t.electricity,
+    priceComplaints: Object.entries(t.priceComplaints).map(([productId, qty]) => ({ productId, qty })).sort((a, b) => b.qty - a.qty),
+    debtCollectedAmount: t.debtCollectedAmount,
+    debtGiven: t.debtGiven,
+    badDebt: t.badDebt,
+    netProfit: t.revenue - t.cogs + t.tips - t.overpaid + t.debtCollectedAmount - t.spoiledCost - t.electricity + t.questMoney,
+    achievements,
   };
   state.yesterdaySold = { ...t.sold };
   state.yesterdayMissed = { ...t.missed };
+  state.yesterdayComplaints = { ...t.priceComplaints };
   state.phase = 'summary';
   state.lastSummary = summary;
   return summary;
@@ -664,18 +888,20 @@ function nextCapExp(): number {
 
 /** Sang ngày mới; trả về số tiền "Bà gửi" nếu người chơi bị kẹt vốn. */
 export function startNextDay(state: GameState): number {
+  claimAllDone(state);
   state.day++;
   state.phase = 'morning';
   state.clock = DATA.balance.openMinute;
   state.today = emptyStats();
   state.lastSummary = null;
+  ensureDailyQuests(state);
   return grandmaHelp(state);
 }
 
 export function isBroke(state: GameState): boolean {
   const cheapest = Math.min(...unlockedProducts(state.level).map((p) => p.cost));
   const hasStock =
-    Object.values(state.warehouse).some((q) => q > 0) || state.shelves.some((row) => row.some((s) => s.qty > 0));
+    Object.values(warehouseTotals(state)).some((q) => q > 0) || state.shelves.some((row) => row.some((s) => s.qty > 0)) || state.deliveries.length > 0;
   return state.money < cheapest && !hasStock;
 }
 
@@ -689,7 +915,12 @@ export function grandmaHelp(state: GameState): number {
 }
 
 export function openShop(state: GameState): void {
+  // Giữ tổn thất đã ghi buổi sáng (bỏ lô hàng) khi bắt đầu ngày bán.
+  const morning = state.today;
   state.phase = 'open';
   state.clock = DATA.balance.openMinute;
   state.today = emptyStats();
+  state.today.spoiled = morning.spoiled ?? {};
+  state.today.spoiledCost = morning.spoiledCost ?? 0;
+  ensureDailyQuests(state);
 }

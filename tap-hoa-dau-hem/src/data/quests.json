@@ -1,0 +1,26 @@
+{
+  "quests": [
+    {"id": "sell_drink_20", "text": "Bán 20 chai nước", "metric": "soldCategory", "arg": "drink", "target": 20, "minLevel": 5, "money": 20000, "exp": 15},
+    {"id": "sell_items_60", "text": "Bán 60 món hàng", "metric": "soldTotal", "target": 60, "minLevel": 5, "money": 25000, "exp": 20},
+    {"id": "serve_25", "text": "Phục vụ 25 khách", "metric": "served", "target": 25, "minLevel": 5, "money": 20000, "exp": 15},
+    {"id": "happy_15", "text": "15 khách hài lòng", "metric": "happy", "target": 15, "minLevel": 5, "money": 20000, "exp": 20},
+    {"id": "revenue_400k", "text": "Doanh thu 400.000đ", "metric": "revenue", "target": 400000, "minLevel": 5, "money": 30000, "exp": 20},
+    {"id": "scan_80", "text": "Quét 80 món ở quầy", "metric": "itemsScanned", "target": 80, "minLevel": 5, "money": 15000, "exp": 15},
+    {"id": "sell_noodle_15", "text": "Bán 15 gói mì", "metric": "soldProduct", "arg": "mi_goi", "target": 15, "minLevel": 5, "money": 15000, "exp": 10},
+    {"id": "sell_snack_20", "text": "Bán 20 món ăn vặt", "metric": "soldCategory", "arg": "snack", "target": 20, "minLevel": 5, "money": 20000, "exp": 15},
+    {"id": "counter_4", "text": "Bán 4 món sau quầy", "metric": "counterServed", "target": 4, "minLevel": 5, "money": 15000, "exp": 10},
+    {"id": "no_left_1", "text": "Không để quá 1 khách bỏ về", "metric": "leftAtMost", "target": 1, "minLevel": 5, "money": 25000, "exp": 20},
+    {"id": "sell_household_15", "text": "Bán 15 món đồ dùng", "metric": "soldCategory", "arg": "household", "target": 15, "minLevel": 6, "money": 25000, "exp": 20},
+    {"id": "sell_fresh_15", "text": "Bán 15 món đồ tươi", "metric": "soldCategory", "arg": "fresh", "target": 15, "minLevel": 7, "money": 25000, "exp": 20},
+    {"id": "no_spoil", "text": "Không để hàng hết hạn", "metric": "noSpoil", "target": 1, "minLevel": 7, "money": 30000, "exp": 25},
+    {"id": "collect_debt_2", "text": "Thu 2 khoản nợ", "metric": "debtCollected", "target": 2, "minLevel": 7, "money": 20000, "exp": 20},
+    {"id": "sell_frozen_12", "text": "Bán 12 món đông lạnh", "metric": "soldCategory", "arg": "frozen", "target": 12, "minLevel": 9, "money": 30000, "exp": 25}
+  ],
+  "achievements": [
+    {"id": "sold_1000", "name": "Nghìn món", "text": "Bán tổng cộng 1.000 món", "metric": "sold", "target": 1000, "money": 100000},
+    {"id": "served_500", "name": "Tiệm quen của hẻm", "text": "Phục vụ 500 khách", "metric": "served", "target": 500, "money": 80000},
+    {"id": "all_land", "name": "Tiệm lớn dần", "text": "Mở hết đất giai đoạn 2", "metric": "landsOpened", "target": 3, "money": 150000},
+    {"id": "debts_10", "name": "Sổ nợ sòng phẳng", "text": "Thu đủ 10 khoản nợ", "metric": "debtsCollected", "target": 10, "decor": "tien_tai"},
+    {"id": "loved_7", "name": "Tiệm được yêu thích", "text": "7 ngày liền sao trung bình ≥ 4.8", "metric": "loveStreak", "target": 7, "decor": "meo_muop"}
+  ]
+}

@@ -1,20 +1,40 @@
 import Phaser from 'phaser';
-import { DATA, product, type Product } from '../core/data';
+import { DATA, hasFeature, product, supplier, type Category, type Product } from '../core/data';
 import { openShop } from '../core/day';
-import { shelfCount, totalQty, unlockedProducts, formatMoney } from '../core/state';
-import { assignCounterSlot, assignSlot, autoArrange, buyStock, checkCart, suggestCart, clearSlot, refillCounterSlot, refillSlot, warehouseCapacity, warehouseCellsUsed, type Cart } from '../core/stock';
+import { exportBackupCode, importBackupCode } from '../core/save';
+import { MAX_SHELVES, formatMoney, priceOf, shelfCount, totalQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
+import {
+  assignCounterSlot, assignSlot, autoArrange, bulkDiscounted, buyStock, checkCart, costTrend, hasPlaceFor, refillCounterSlot,
+  refillSlot, setClearance, slotFreshness, suggestCart, clearSlot, supplierUnlocked, unitCost, warehouseCapacity,
+  warehouseCellsUsed, type Cart,
+} from '../core/stock';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand } from '../services/liveShop';
 import { suspendLiveShop } from '../services/liveShop';
 import { productIcon } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
-import { ShelfView } from '../ui/shelves';
+import { ShelfView, ZONE_NAMES, placeErrorText } from '../ui/shelves';
 import { play, setSoundEnabled, stopMusic } from '../ui/sound';
 import { Button, dialog, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
 
 type Tab = 'buy' | 'arrange';
+
+/** Hướng dẫn ngắn khi một hệ thống mới mở khóa (hiện 1 lần, buổi sáng hôm sau). */
+const TUTORIALS: Record<string, { icon: string; title: string; body: string }> = {
+  land: { icon: '🏗️', title: 'Mở rộng tiệm', body: 'Vào ☰ Tiệm → Sắp xếp để mở Đất A, đặt thêm kệ và kéo thả nội thất.' },
+  fridge: { icon: '🧊', title: 'Tủ lạnh', body: 'Đồ uống để tủ lạnh bán chạy hơn. Mua tủ lạnh trong chế độ Sắp xếp; mỗi tủ tốn 5.000đ tiền điện/ngày.' },
+  quests: { icon: '🎯', title: 'Nhiệm vụ hằng ngày', body: 'Mỗi ngày có 3 nhiệm vụ. Xong thì vào ☰ Tiệm → Nhiệm vụ để nhận thưởng.' },
+  pricing: { icon: '💲', title: 'Chỉnh giá bán', body: 'Tăng giá thì lãi hơn nhưng khách dễ chê. Chỉnh ở ☰ Tiệm → Giá bán.' },
+  anh_ba: { icon: '🚚', title: 'Đại lý Anh Ba', body: 'Rẻ hơn 10% nhưng giao 15:00 hôm sau, đơn tối thiểu 200.000đ. Chọn ở tab Nhập hàng.' },
+  fresh: { icon: '🥚', title: 'Hàng tươi có hạn dùng', body: 'Trứng, bánh mì, rau... hết hạn cuối ngày sẽ hỏng. Ô sắp hết hạn có nhãn vàng/đỏ; chạm ô hết hạn hôm nay để bán xả.' },
+  credit: { icon: '📒', title: 'Khách ghi sổ', body: 'Hàng xóm quen có thể xin nợ. Theo dõi và nhắc nợ ở ☰ Tiệm → Sổ nợ.' },
+  warehouse: { icon: '📦', title: 'Nâng cấp kho', body: 'Vào ☰ Tiệm → Kho để nâng lên kệ sắt 50 ô, hoặc đặt kệ kho trong chế độ Sắp xếp.' },
+  decor: { icon: '🪴', title: 'Trang trí', body: 'Đồ trang trí tăng thu hút, khách tới đông hơn. Mua ở ☰ Tiệm → Trang trí.' },
+  freezer: { icon: '❄️', title: 'Tủ đông', body: 'Kem, xúc xích, há cảo... chỉ bày được trong tủ đông (8.000đ điện/ngày).' },
+  bargain: { icon: '🙏', title: 'Khách mặc cả', body: 'Bà nội trợ có thể xin bớt 5–15%. Bớt thì khách vui; không bớt thì có thể bỏ về.' },
+};
 
 const LIST_TOP = 100;
 const LIST_BOTTOM = 548;
@@ -29,6 +49,7 @@ interface Row {
   minus: Button;
   plus: Button;
   plus10: Button;
+  price: Phaser.GameObjects.Text;
 }
 
 export class MorningScene extends Phaser.Scene {
@@ -53,6 +74,9 @@ export class MorningScene extends Phaser.Scene {
   private selected: string | null = null;
   private counterMode = false;
   private pauseLayer: Phaser.GameObjects.Container | null = null;
+  private supplierId = 'co_tu';
+  private supplierBtns: Record<string, Button> = {};
+  private menuBtn!: Button;
 
   constructor() {
     super('Morning');
@@ -75,33 +99,58 @@ export class MorningScene extends Phaser.Scene {
     g.fillStyle(C.wall, 1).fillRect(0, HUD_H, W, H - HUD_H);
     this.hud = new Hud(this, G.state, { subtitle: 'Buổi sáng', onPause: () => this.pause() });
 
+    const phase2 = G.state.level >= 5;
+    const tabW = phase2 ? 128 : W / 2 - 16;
     this.tabBtns = {
-      buy: new Button(this, W / 4 + 4, 74, { w: W / 2 - 16, h: 38, label: '🛒 Nhập hàng', size: 14, onTap: () => this.setTab('buy') }),
-      arrange: new Button(this, (W * 3) / 4 - 4, 74, { w: W / 2 - 16, h: 38, label: '🧺 Bày kệ', size: 14, onTap: () => this.setTab('arrange') }),
+      buy: new Button(this, phase2 ? 70 : W / 4 + 4, 74, { w: tabW, h: 38, label: '🛒 Nhập hàng', size: 14, onTap: () => this.setTab('buy') }),
+      arrange: new Button(this, phase2 ? 204 : (W * 3) / 4 - 4, 74, { w: tabW, h: 38, label: '🧺 Bày kệ', size: 14, onTap: () => this.setTab('arrange') }),
     };
+    this.menuBtn = new Button(this, W - 44, 74, { w: 76, h: 38, label: '☰ Tiệm', size: 14, color: C.blue, onTap: () => this.openShopMenu() });
+    this.menuBtn.setVisible(phase2);
 
     this.buildBuy();
     this.buildArrange();
     // Có hàng trong kho mà kệ còn trống thì mở thẳng tab bày kệ.
-    const hasStock = Object.keys(G.state.warehouse).length > 0;
+    const hasStock = G.state.warehouse.length > 0;
     this.setTab(hasStock ? 'arrange' : 'buy');
 
     this.time.delayedCall(250, () => this.showMorningPopups(data?.gift ?? 0));
+  }
+
+  /** Hướng dẫn tính năng mới mở (mỗi tính năng 1 lần) kèm mũi tên chỉ nút ☰ Tiệm. */
+  private showTutorials(done: () => void): void {
+    const s = G.state;
+    const pending = Object.keys(TUTORIALS).filter((id) => hasFeature(s.level, id) && !s.tutorialsSeen.includes(id));
+    if (!pending.length) { done(); return; }
+    s.tutorialsSeen.push(...pending);
+    persist();
+    const arrow = txt(this, this.menuBtn.x, this.menuBtn.y + 34, '⬆', { size: 26, bold: true, color: HEX.red, origin: [0.5, 0.5] }).setDepth(2500);
+    this.tweens.add({ targets: arrow, y: arrow.y + 8, yoyo: true, repeat: -1, duration: 350 });
+    const close = () => { arrow.destroy(); done(); };
+    if (pending.length === 1) {
+      const t = TUTORIALS[pending[0]];
+      dialog(this, { icon: t.icon, title: `Mới: ${t.title}`, body: t.body, buttons: [{ label: 'Đã hiểu', onTap: close }] });
+      return;
+    }
+    // Nhiều tính năng mở cùng lúc (vd bản lưu cũ lên thẳng level cao): gộp vào một hộp.
+    const body = pending.map((id) => `${TUTORIALS[id].icon} ${TUTORIALS[id].title}`).join('\n') + '\n\nXem các tính năng ở nút ☰ Tiệm.';
+    dialog(this, { icon: '✨', title: 'Tính năng mới đã mở', body, buttons: [{ label: 'Đã hiểu', onTap: close }] });
   }
 
   private showMorningPopups(gift: number): void {
     const s = G.state;
     const unlockCounter = s.announcedLevel < 3 && s.level >= 3;
     const newProducts = s.announcedLevel < s.level ? unlockedProducts(s.level).filter((p) => p.unlockLevel > s.announcedLevel) : [];
+    const afterNew = () => this.showTutorials(() => this.showHolding());
     const showNew = () => {
       if (s.announcedLevel >= s.level) {
-        this.showLoginPrompt();
+        afterNew();
         return;
       }
       s.announcedLevel = s.level;
       persist();
       if (newProducts.length === 0) {
-        this.showLoginPrompt();
+        afterNew();
         return;
       }
       play('levelup');
@@ -109,10 +158,10 @@ export class MorningScene extends Phaser.Scene {
         icon: '🆕',
         title: 'Mặt hàng mới!',
         body: [
-          ...newProducts.map((p) => `${p.icon} ${p.name} · bán ${formatMoney(p.price)}`),
+          ...newProducts.slice(0, 8).map((p) => `${p.icon} ${p.name} · bán ${formatMoney(priceOf(p.id, s))}`),
           ...(unlockCounter ? ['🔐 Đã mở khu hàng Sau quầy.'] : []),
         ].join('\n'),
-        buttons: [{ label: 'Tuyệt!', onTap: () => this.showLoginPrompt() }],
+        buttons: [{ label: 'Tuyệt!', onTap: afterNew }],
       });
     };
     if (gift > 0) {
@@ -126,6 +175,31 @@ export class MorningScene extends Phaser.Scene {
     } else {
       showNew();
     }
+  }
+
+  /** Hàng Anh Ba giao hôm qua không vừa kho: nhắc dọn trước khi mở cửa. */
+  private showHolding(): void {
+    const held = G.state.holding.reduce((sum, lot) => sum + lot.qty, 0);
+    if (!held) { this.showLoginPrompt(); return; }
+    dialog(this, { icon: '🚚', title: 'Hàng chờ chưa vào kho', body: `Còn ${held} món chưa có chỗ trong kho. Dọn chỗ hoặc bỏ bớt trước khi mở cửa.`, buttons: [
+      { label: 'Để sau', color: C.grey },
+      { label: 'Mở kho', color: C.green, onTap: () => this.scene.start('Warehouse') },
+    ] });
+  }
+
+  /** Menu các màn quản lý giai đoạn 2, chỉ hiện mục đã mở khóa. */
+  private openShopMenu(): void {
+    const s = G.state;
+    const go = (key: string) => () => { persist(); this.scene.start(key); };
+    const buttons: { label: string; color?: number; onTap?: () => void }[] = [];
+    if (hasFeature(s.level, 'land')) buttons.push({ label: '🏗️ Sắp xếp · mở đất, nội thất', color: C.green, onTap: go('Build') });
+    buttons.push({ label: '📦 Kho hàng', color: C.wood, onTap: go('Warehouse') });
+    if (hasFeature(s.level, 'quests')) buttons.push({ label: '🎯 Nhiệm vụ · thành tựu', color: C.wood, onTap: go('Quests') });
+    if (hasFeature(s.level, 'pricing')) buttons.push({ label: '💲 Giá bán', color: C.wood, onTap: go('Prices') });
+    if (hasFeature(s.level, 'credit')) buttons.push({ label: '📒 Sổ nợ', color: C.wood, onTap: go('Ledger') });
+    if (hasFeature(s.level, 'decor')) buttons.push({ label: '🪴 Trang trí', color: C.wood, onTap: go('Decor') });
+    buttons.push({ label: 'Đóng', color: C.grey });
+    dialog(this, { title: '☰ Quản lý tiệm', body: s.level < 9 ? `Level sau mở thêm tính năng (tới level ${DATA.levels.maxLevel}).` : 'Đã mở mọi tính năng giai đoạn 2.', buttons });
   }
 
   private showLoginPrompt(): void {
@@ -158,11 +232,20 @@ export class MorningScene extends Phaser.Scene {
 
   private buildBuy(): void {
     this.buyLayer = this.add.container(0, 0);
-    const supplier = txt(this, 12, 98, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay', { size: 12, color: HEX.muted });
+    const supplierLabel = txt(this, 12, 98, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay', { size: 12, color: HEX.muted });
+    this.supplierBtns = {};
+    if (supplierUnlocked(G.state, 'anh_ba')) {
+      supplierLabel.setVisible(false);
+      DATA.suppliers.forEach((sp, i) => {
+        const b = new Button(this, 64 + i * 118, 104, { w: 112, h: 22, size: 11, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => { this.supplierId = sp.id; this.refresh(); } });
+        this.supplierBtns[sp.id] = b;
+        this.buyLayer.add(b);
+      });
+    }
     this.list = this.add.container(0, LIST_TOP + 16);
     const maskG = this.make.graphics({}, false).fillRect(0, LIST_TOP + 14, W, LIST_BOTTOM - LIST_TOP - 14);
     this.list.setMask(maskG.createGeometryMask());
-    this.buyLayer.add([supplier, this.list]);
+    this.buyLayer.add([supplierLabel, this.list]);
 
     const unlocked = unlockedProducts(G.state.level);
     const locked = DATA.products.filter((p) => !unlocked.includes(p));
@@ -175,7 +258,7 @@ export class MorningScene extends Phaser.Scene {
       bg.lineStyle(1, C.panelEdge, 1).strokeRoundedRect(8, y + 2, W - 16, ROW_H - 6, 10);
       const icon = productIcon(this, 34, y + ROW_H / 2 - 1, p, 40);
       const name = txt(this, 60, y + 8, p.name, { size: 14, bold: true });
-      const price = txt(this, 60, y + 27, `Nhập ${formatMoney(p.cost)} · bán ${formatMoney(p.price)}`, { size: 11, color: HEX.muted });
+      const price = txt(this, 60, y + 27, `Nhập ${formatMoney(p.cost)} · bán ${formatMoney(priceOf(p.id, G.state))}`, { size: 11, color: HEX.muted });
       const info = txt(this, 60, y + 43, '', { size: 11, color: HEX.green });
       this.list.add([bg, icon, name, price, info]);
       if (isLocked) {
@@ -194,7 +277,7 @@ export class MorningScene extends Phaser.Scene {
       const lack = txt(this, 60 + name.width + 6, y + 11, '', { size: 10, bold: true, color: HEX.white });
       lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1);
       this.list.add(lack);
-      this.rows.push({ p, qty, info, lack, minus, plus, plus10 });
+      this.rows.push({ p, qty, info, lack, minus, plus, plus10, price });
       y += ROW_H;
     }
     this.listH = y + 10;
@@ -211,7 +294,7 @@ export class MorningScene extends Phaser.Scene {
       color: C.blue,
       size: 13,
       onTap: () => {
-        this.cart = suggestCart(G.state);
+        this.cart = suggestCart(G.state, this.supplierId);
         if (Object.keys(this.cart).length === 0) toast(this, 'Hàng còn đủ, hoặc hết tiền/chỗ kho rồi!', H * 0.5);
         this.refresh();
       },
@@ -247,7 +330,7 @@ export class MorningScene extends Phaser.Scene {
     if (y < LIST_TOP + 14 || y > LIST_BOTTOM) return;
     const next = Math.max(0, (this.cart[id] ?? 0) + delta);
     const trial = { ...this.cart, [id]: next };
-    const check = checkCart(G.state, trial);
+    const check = checkCart(G.state, trial, this.supplierId);
     if (delta > 0 && !check.ok && check.reason === 'space') {
       play('error');
       toast(this, 'Kho đầy rồi!', H * 0.5, C.red);
@@ -265,13 +348,20 @@ export class MorningScene extends Phaser.Scene {
 
   private buy(): void {
     if (G.liveSnapshot) {
-      void this.liveCommand({ type: 'buyStock', cart: { ...this.cart } }, () => { this.cart = {}; this.setTab('arrange'); });
+      void this.liveCommand({ type: 'buyStock', cart: { ...this.cart }, supplierId: this.supplierId }, () => { this.cart = {}; this.setTab('arrange'); });
       return;
     }
-    const res = buyStock(G.state, this.cart);
+    const res = buyStock(G.state, this.cart, this.supplierId);
     if (!res.ok) return;
     this.cart = {};
     play('cash');
+    const sp = supplier(this.supplierId);
+    if (sp.delayDays > 0) {
+      toast(this, `Đã đặt ${sp.name}: -${formatMoney(res.total)}\nXe giao 15:00 ngày ${G.state.day + sp.delayDays}.`, H * 0.5, C.greenDark);
+      persist();
+      this.refresh();
+      return;
+    }
     toast(this, `Đã nhập hàng: -${formatMoney(res.total)}\nGiờ bày hàng lên kệ nhé!`, H * 0.5, C.greenDark);
     persist();
     // Nhập xong thì chuyển luôn sang bày kệ (bước tiếp theo trong buổi sáng).
@@ -296,7 +386,7 @@ export class MorningScene extends Phaser.Scene {
         play('tap');
         this.afterArrange();
       },
-    });
+    }, G.state);
     const g = this.add.graphics();
     g.fillStyle(C.floorB, 1).fillRect(0, 300, W, 250);
     g.fillStyle(C.woodDark, 1).fillRect(0, 300, W, 4);
@@ -328,9 +418,13 @@ export class MorningScene extends Phaser.Scene {
       color: C.blue,
       onTap: () => {
         if (G.liveSnapshot) { void this.liveCommand({ type: 'autoArrange' }); return; }
-        autoArrange(G.state);
+        const unplaced = autoArrange(G.state);
         play('pick');
         this.afterArrange();
+        if (unplaced.length) {
+          const groups = [...new Set(unplaced.map((id) => ZONE_NAMES[product(id).category as Exclude<Category, 'counter'>].toLowerCase()))].join(', ');
+          toast(this, `Không đủ kệ/tủ cho nhóm: ${groups} (${unplaced.length} món)\nMua thêm ở ☰ Tiệm → Sắp xếp.`, H * 0.62, C.redDark);
+        }
       },
     });
     const open = new Button(this, W - 90, H - 40, { w: 160, h: 54, label: 'Mở cửa ▶', color: C.red, size: 18, onTap: () => this.tryOpen() });
@@ -338,7 +432,7 @@ export class MorningScene extends Phaser.Scene {
   }
 
   private onSlotTap(r: number, c: number): void {
-    if (r >= shelfCount(G.state.level)) {
+    if (r < MAX_SHELVES && r >= shelfCount(G.state.level)) {
       toast(this, 'Kệ này mở ở level 3');
       return;
     }
@@ -352,15 +446,18 @@ export class MorningScene extends Phaser.Scene {
         if (G.liveSnapshot) { void this.liveCommand({ type: 'assignShelf', shelf: r, slot: c, productId: this.selected }); return; }
         assignSlot(G.state, r, c, this.selected);
       } catch (e) {
-        if (e instanceof Error && e.message === 'wrong-zone') {
-          toast(this, 'Sai khu hàng! Hãy chọn đúng kệ cùng nhóm.');
+        if (e instanceof Error) {
+          play('error');
+          toast(this, placeErrorText(e.message));
           return;
         }
         throw e;
       }
       play('pick');
-      if ((G.state.warehouse[this.selected] ?? 0) <= 0) this.selected = null;
+      if (warehouseQty(G.state, this.selected) <= 0) this.selected = null;
       this.afterArrange();
+    } else if (slot.productId && slot.qty > 0 && slotFreshness(slot, G.state.day) === 'today') {
+      this.askClearance(r, c);
     } else if (slot.productId) {
       if (G.liveSnapshot) { void this.liveCommand({ type: 'refillShelf', shelf: r, slot: c }); return; }
       if (refillSlot(G.state, r, c) > 0) play('pick');
@@ -368,6 +465,26 @@ export class MorningScene extends Phaser.Scene {
     } else {
       toast(this, 'Chọn một món trong kho trước', H * 0.62);
     }
+  }
+
+  /** Ô chứa hàng hết hạn hôm nay: đề nghị bán xả 30% / 50%. */
+  private askClearance(r: number, c: number): void {
+    const slot = G.state.shelves[r][c];
+    const p = product(slot.productId!);
+    const apply = (pct: number | null) => () => {
+      if (G.liveSnapshot) { void this.liveCommand({ type: 'setClearance', shelf: r, slot: c, pct }); return; }
+      setClearance(G.state, r, c, pct);
+      this.afterArrange();
+    };
+    dialog(this, { icon: '⏰', title: `${p.name} hết hạn hôm nay`, body: 'Bán xả để khách lấy nhanh hơn trước khi hàng hỏng cuối ngày.', buttons: [
+      { label: 'Bán xả 30%', color: C.blue, onTap: apply(30) },
+      { label: 'Bán xả 50%', color: C.red, onTap: apply(50) },
+      { label: slot.clearance ? 'Bỏ bán xả' : 'Nạp thêm hàng', color: C.grey, onTap: () => {
+        if (slot.clearance) { apply(null)(); return; }
+        refillSlot(G.state, r, c);
+        this.afterArrange();
+      } },
+    ] });
   }
 
   private afterArrange(): void {
@@ -386,7 +503,7 @@ export class MorningScene extends Phaser.Scene {
 
   private renderChips(): void {
     this.chips.removeAll(true);
-    const items = Object.entries(G.state.warehouse).filter(([id, q]) => q > 0 && !!product(id).behindCounter === this.counterMode);
+    const items = Object.entries(warehouseTotals(G.state)).filter(([id, q]) => q > 0 && !!product(id).behindCounter === this.counterMode);
     if (items.length === 0) {
       const message = this.counterMode ? 'Chưa có hàng sau quầy trong kho.' : 'Kho trống. Qua tab "Nhập hàng" để mua hàng.';
       this.chips.add(txt(this, W / 2, 420, message, { size: 13, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: 300 }));
@@ -420,7 +537,7 @@ export class MorningScene extends Phaser.Scene {
         ghost?.destroy();
         ghost = null;
         const target = this.shelves.slotAt(ptr.worldX, ptr.worldY);
-        if (target && target.shelf < shelfCount(G.state.level)) {
+        if (target && !(target.shelf < MAX_SHELVES && target.shelf >= shelfCount(G.state.level))) {
           if (p.behindCounter) {
             toast(this, 'Hàng sau quầy: thả vào một ô quầy bên dưới');
             return;
@@ -429,7 +546,7 @@ export class MorningScene extends Phaser.Scene {
             if (G.liveSnapshot) { void this.liveCommand({ type: 'assignShelf', shelf: target.shelf, slot: target.slot, productId: id }); return; }
             assignSlot(G.state, target.shelf, target.slot, id);
           } catch (e) {
-            if (e instanceof Error && e.message === 'wrong-zone') toast(this, 'Sai khu hàng!');
+            if (e instanceof Error) toast(this, placeErrorText(e.message));
             else throw e;
             return;
           }
@@ -477,7 +594,7 @@ export class MorningScene extends Phaser.Scene {
           }
           if (G.liveSnapshot) { void this.liveCommand({ type: 'assignCounter', slot: i, productId: this.selected }); return; }
           assignCounterSlot(G.state, i, this.selected);
-          if ((G.state.warehouse[this.selected] ?? 0) <= 0) this.selected = null;
+          if (warehouseQty(G.state, this.selected) <= 0) this.selected = null;
         } else if (slot.productId) {
           if (G.liveSnapshot) { void this.liveCommand({ type: 'refillCounter', slot: i }); return; }
           refillCounterSlot(G.state, i);
@@ -489,7 +606,14 @@ export class MorningScene extends Phaser.Scene {
   }
 
   private tryOpen(): void {
-    const onShelf = G.state.shelves.slice(0, shelfCount(G.state.level)).some((row) => row.some((s) => s.qty > 0));
+    if (G.state.holding.length) {
+      dialog(this, { icon: '🚚', title: 'Còn hàng chờ', body: 'Hàng giao tới chưa vào kho. Cất vào kho hoặc bỏ bớt trước khi mở cửa.', buttons: [
+        { label: 'Đóng', color: C.grey },
+        { label: 'Mở kho', color: C.green, onTap: () => this.scene.start('Warehouse') },
+      ] });
+      return;
+    }
+    const onShelf = G.state.shelves.some((row) => row.some((s) => s.qty > 0));
     const go = () => {
       if (G.liveSnapshot) {
         void this.liveCommand({ type: 'openShop' }, () => {
@@ -524,21 +648,37 @@ export class MorningScene extends Phaser.Scene {
     const s = G.state;
     this.hud.refresh();
     if (this.tab === 'buy') {
+      for (const [id, b] of Object.entries(this.supplierBtns)) b.setColor(id === this.supplierId ? C.red : C.wood);
       for (const r of this.rows) {
         const q = this.cart[r.p.id] ?? 0;
         r.qty.setText(String(q));
         const missed = s.yesterdayMissed[r.p.id] ?? 0;
-        r.info.setText(`Còn: ${totalQty(s, r.p.id)} · Hôm qua bán: ${s.yesterdaySold[r.p.id] ?? 0}`);
+        const cost = unitCost(s, r.p.id, this.supplierId);
+        const trend = costTrend(s, r.p.id, this.supplierId);
+        const bulk = bulkDiscounted(q);
+        r.price.setText(`Nhập ${formatMoney(cost)}${trend < 0 ? '▼' : trend > 0 ? '▲' : ''}${bulk ? ' -5%' : ''} · bán ${formatMoney(priceOf(r.p.id, s))}`);
+        r.price.setColor(bulk || trend < 0 ? HEX.green : trend > 0 ? HEX.red : HEX.muted);
+        const noPlace = !r.p.behindCounter && !hasPlaceFor(s, r.p);
+        const extra = noPlace ? ` · ❄ cần ${r.p.requiresCold === 'freezer' ? 'tủ đông' : 'tủ lạnh'}` : r.p.shelfLifeDays ? ` · hạn ${r.p.shelfLifeDays} ngày` : '';
+        r.info.setText(`Còn: ${totalQty(s, r.p.id)} · Hôm qua bán: ${s.yesterdaySold[r.p.id] ?? 0}${extra}`);
+        r.info.setColor(noPlace ? HEX.red : HEX.green);
         r.lack.setText(`thiếu ${missed}`).setVisible(missed > 0);
         r.minus.setEnabled(q > 0);
       }
-      const check = checkCart(s, this.cart);
-      this.cartText.setText(`Giỏ: ${formatMoney(check.total)} · Kho: ${check.cells}/${warehouseCapacity()} ô`);
-      this.cartWarn.setText(!check.ok && check.reason === 'money' ? `Thiếu ${formatMoney(check.missing)}` : !check.ok && check.reason === 'space' ? 'Kho đầy' : '');
+      const check = checkCart(s, this.cart, this.supplierId);
+      const sp = supplier(this.supplierId);
+      this.cartText.setText(`Giỏ: ${formatMoney(check.total)} · Kho: ${check.cells}/${warehouseCapacity(s)} ô`);
+      this.cartWarn.setText(
+        !check.ok && check.reason === 'money' ? `Thiếu ${formatMoney(check.missing)}`
+          : !check.ok && check.reason === 'space' ? 'Kho đầy'
+            : !check.ok && check.reason === 'min-order' ? `Đơn tối thiểu ${formatMoney(sp.minOrder)} (thiếu ${formatMoney(check.missing)})`
+              : sp.delayDays > 0 && Object.keys(this.cart).length ? `Giao 15:00 ngày ${s.day + sp.delayDays} · dư kho vào hàng chờ` : '',
+      );
+      this.buyBtn.setText(sp.delayDays > 0 ? 'Đặt hàng' : 'Nhập hàng');
       this.buyBtn.setEnabled(check.ok);
     } else {
       this.shelves.render(s, { mode: 'arrange' });
-      this.whLabel.setText(`📦 Kho · ${warehouseCellsUsed(s.warehouse)}/${warehouseCapacity()} ô`);
+      this.whLabel.setText(`📦 Kho · ${warehouseCellsUsed(s.warehouse)}/${warehouseCapacity(s)} ô${s.deliveries.length ? ' · 🚚 chờ giao' : ''}`);
       this.hint.setText(this.selected ? (this.counterMode ? `Chạm ô quầy để đặt ${product(this.selected).name}` : `Chạm ô kệ để bày ${product(this.selected).name}`) : (this.counterMode ? 'Chạm món sau quầy rồi chọn ô quầy' : 'Chạm món rồi chạm ô kệ (hoặc kéo thả)'));
       this.counterTabBtn.setVisible(s.level >= 3);
       this.counterTabBtn.setText(this.counterMode ? '📦 Kho hàng' : '🔐 Sau quầy');
@@ -556,7 +696,7 @@ export class MorningScene extends Phaser.Scene {
     L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
 
     const hasCloud = cloudSaveEnabled();
-    const panelH = hasCloud ? 420 : 364;
+    const panelH = hasCloud ? 470 : 414;
     const panelY = H / 2 - panelH / 2;
 
     L.add(panel(this, 50, panelY, W - 100, panelH));
@@ -622,6 +762,9 @@ export class MorningScene extends Phaser.Scene {
       );
     }
 
+    y += 50;
+    L.add(new Button(this, W / 2, y, { w: 220, h: 42, label: '💾 Mã sao lưu', color: C.woodDark, onTap: () => this.backupMenu() }));
+
     y += 52;
     L.add(
       new Button(this, W / 2, y, {
@@ -648,6 +791,42 @@ export class MorningScene extends Phaser.Scene {
     );
 
     this.pauseLayer = L;
+  }
+
+  /** Xuất / nhập mã sao lưu: phương án chuyển máy khi không đăng nhập Google. */
+  private backupMenu(): void {
+    dialog(this, { icon: '💾', title: 'Mã sao lưu', body: 'Xuất mã để chép tiến trình sang máy khác, hoặc dán mã từ máy cũ.', buttons: [
+      { label: '📤 Xuất mã', color: C.green, onTap: () => { void this.exportCode(); } },
+      { label: '📥 Nhập mã', color: C.blue, onTap: () => this.importCode() },
+      { label: 'Đóng', color: C.grey },
+    ] });
+  }
+
+  private async exportCode(): Promise<void> {
+    persist();
+    const code = await exportBackupCode(G.state);
+    try {
+      await navigator.clipboard.writeText(code);
+      toast(this, `Đã sao chép mã (${code.length} ký tự).\nDán vào ô "Nhập mã" trên máy mới.`, H * 0.3, C.greenDark);
+    } catch {
+      window.prompt('Sao chép mã sao lưu này:', code);
+    }
+  }
+
+  private importCode(): void {
+    const code = window.prompt('Dán mã sao lưu vào đây:');
+    if (!code) return;
+    void importBackupCode(code).then((state) => {
+      dialog(this, { icon: '⚠️', title: 'Ghi đè tiến trình?', body: `Mã: Ngày ${state.day} · Lv ${state.level} · ${formatMoney(state.money)}.\nTiến trình hiện tại (Ngày ${G.state.day}, Lv ${G.state.level}) sẽ bị thay.`, buttons: [
+        { label: 'Hủy', color: C.grey },
+        { label: 'Ghi đè', color: C.red, onTap: () => {
+          state.sync = { ...G.state.sync, dirty: true };
+          G.state = state;
+          persist();
+          this.scene.start(sceneForPhase());
+        } },
+      ] });
+    }).catch((error: unknown) => toast(this, error instanceof Error ? error.message : 'Mã không hợp lệ.', H * 0.3, C.red));
   }
 
   private resume(): void {

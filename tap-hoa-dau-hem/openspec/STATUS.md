@@ -1,30 +1,29 @@
-# Rà soát triển khai (26/09/2026)
+# Rà soát triển khai (26/09/2026, cập nhật sau khi làm phase 2)
 
 Đối chiếu `config.yaml`, toàn bộ `tasks.md` và các capability spec với mã hiện tại. Dấu `[x]` trong task là trạng thái ghi nhận của change, không tự động xác nhận kiểm thử trên thiết bị hay triển khai production.
 
 | Change | Đã đánh dấu | Chưa đánh dấu | Trạng thái tiếp theo |
 | --- | ---: | ---: | --- |
 | `phase-1-mvp-core-loop` | 44 | 2 | Chưa deploy lên Vercel/cổng game và chưa có phản hồi 3–5 người chơi thật. |
-| `self-service-shopping` | 42 | 3 | Core/UI và test tự động đã có; còn kiểm thử nạp khu/hàng sau quầy, một ngày trọn ở L1/L3/L4 trên điện thoại và deploy. |
-| `add-google-login-cloud-save` | 20 | 20 | Code Auth, đồng bộ, hộp xung đột, menu tài khoản và privacy đã có một phần; các bước Firebase Console, Emulator, đổi máy và triển khai vẫn chưa được xác nhận. |
-| `realtime-shared-shop` | 13 | 4 | Backend/client đã viết; còn emulator race test, hai phiên trình duyệt, đo quota/latency và deploy. Change này chưa nằm trong thứ tự phase của `config.yaml`. |
-| `phase-2-shop-expansion` | 0 | 42 | Chưa bắt đầu; phụ thuộc giai đoạn 1b chơi và triển khai được theo `config.yaml`. |
-| `phase-3-staff-and-manager` | 0 | 41 | Chưa bắt đầu; phụ thuộc phase 2. |
+| `self-service-shopping` | 42 | 3 | Core/UI và test tự động đã có; còn kiểm thử trên điện thoại thật và deploy. |
+| `add-google-login-cloud-save` | 20 | 20 | Code đăng nhập, đồng bộ, xung đột, tài khoản, lời mời sau ngày 3 đã có; còn Firebase Console, Emulator (máy chưa có Java), đổi máy thật, email liên hệ thật cho `privacy.html`, deploy. |
+| `realtime-shared-shop` | 13 | 4 | Đã thêm lệnh phiên chung cho mối sỉ, bán xả, mặc cả, ghi sổ; còn emulator race test, hai phiên trình duyệt, đo quota/latency và deploy. |
+| `phase-2-shop-expansion` | 36 | 6 | Core, dữ liệu, UI và mô phỏng 30 ngày xong. Còn 2.6 (nút "Về quầy"/camera cả mặt bằng), 2.8 (RenderTexture + đo 60fps), 3.5 (pixel art tủ/kệ), 8.2–8.4 (điện thoại thật, bản lưu người chơi thật, deploy). |
+| `phase-3-staff-and-manager` | 0 | 41 | Chưa bắt đầu; phụ thuộc phase 2 được chơi và deploy. |
 | `phase-4-events-food-branches` | 0 | 41 | Chưa bắt đầu; phụ thuộc phase 3. |
 
 ## Kiểm tra trong repo
 
-- Vitest: 132/132 test qua (12 file), gồm popup/redirect và chặn đăng nhập trong trình duyệt nhúng.
-- TypeScript client và Functions: biên dịch qua; Vite production build qua, PWA tạo service worker.
-- `scripts/playtest.ts 7 10`: 4 kiểu người chơi × 10 ván × 7 ngày; tất cả đạt L4 vào khoảng ngày 5–6, không có lỗi mô phỏng.
-- Chơi thử trình duyệt: từ tổng kết ngày 1 sang nhập hàng ngày 2, tăng số lượng, nhập hàng, tự bày và mở tiệm thành công.
-- Chưa đo 60fps hoặc xác nhận thao tác trên điện thoại 375×812 thật. Chưa kiểm thử đăng nhập/đồng bộ bằng tài khoản thật hoặc Firebase Emulator.
+- Vitest: 192/192 test qua (13 file), trong đó `tests/phase2.test.ts` có 45 test cho mặt bằng, kho lô FEFO, hạn dùng, tủ lạnh/điện, mối sỉ, giá bán, sổ nợ, mặc cả, nhiệm vụ, thành tựu, trang trí, mèo quầy, migrate v2→v3 (fixture `tests/fixtures/save-v2.json`) và mã sao lưu.
+- TypeScript client và Functions biên dịch qua; `npm run build` (Vite + PWA) qua.
+- `npm run playtest -- 30 5`: người chơi dùng "Gợi ý" lên L9 ở ngày ~21–22 (mục tiêu 20–30), hàng tươi hỏng 7–9% (mục tiêu < 10%), lãi ròng dương.
+- Chơi thử trình duyệt ở khung 375×812 giả lập: migrate bản v2 L7, mở đất, mua/kéo/xoay nội thất, chặn lối đi bị từ chối, nhập hàng, bán xả, mặc cả, ghi sổ, tổng kết và các màn Kho/Giá/Sổ nợ/Nhiệm vụ; ván mới L1 vẫn như giai đoạn 1. Chưa đo 60fps hay thử trên điện thoại thật.
 
-## Việc cần làm trước phase 2
+## Việc cần làm tiếp
 
-1. Hoàn thiện và kiểm thử các mục còn mở của `add-google-login-cloud-save` (đặc biệt Auth redirect, Firestore rules bằng Emulator, hai máy, offline và xung đột).
-2. Điền email liên hệ thật cho trang quyền riêng tư, cấu hình Firebase/OAuth và domain; deploy rules trước client.
-3. Chơi thử đầy đủ `self-service-shopping` trên điện thoại, đo hiệu năng, lấy phản hồi người chơi; deploy bản giai đoạn 1.
-4. Sau khi giai đoạn 1b hoạt động được trên production, triển khai `phase-2-shop-expansion` theo thứ tự 1.1 → 8.4 trong `tasks.md`.
+1. Cloud-save: cài Java + Firebase CLI để chạy test quy tắc bằng Emulator; cấu hình Firebase/OAuth; điền email liên hệ thật vào `public/privacy.html`; thử đăng nhập trên iOS Safari / Chrome Android / Messenger / Zalo.
+2. Chơi thử giai đoạn 1b + 2 trên điện thoại thật, đo hiệu năng (task 2.8), lấy phản hồi và deploy (phase 1 11.3–11.4, self-service 9.6b, phase 2 8.2–8.4).
+3. Hoàn thiện 2.6 và 3.5 nếu phản hồi cho thấy cần (camera cả mặt bằng lúc bán, pixel art tủ/kệ).
+4. Chỉ bắt đầu `phase-3-staff-and-manager` sau khi phase 2 đã chơi được trên production theo `config.yaml`.
 
 Không đánh dấu hoàn thành các task yêu cầu thiết bị thật, Console, Emulator hoặc deploy dựa trên test mô phỏng/trình duyệt cục bộ.

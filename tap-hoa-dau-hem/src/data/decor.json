@@ -1,0 +1,10 @@
+[
+  { "id": "bien_led", "name": "Biển hiệu đèn LED", "icon": "💡", "slot": "sign", "cost": 120000, "attraction": 20, "unlockLevel": 8 },
+  { "id": "day_den", "name": "Dây đèn nháy", "icon": "✨", "slot": "wall", "cost": 60000, "attraction": 10, "unlockLevel": 8 },
+  { "id": "chau_cay", "name": "Chậu cây", "icon": "🪴", "slot": "floor", "cost": 40000, "attraction": 8, "unlockLevel": 8 },
+  { "id": "lich_treo", "name": "Lịch treo tường", "icon": "📅", "slot": "wall", "cost": 20000, "attraction": 5, "unlockLevel": 8 },
+  { "id": "than_tai", "name": "Bàn thờ Thần Tài", "icon": "🏮", "slot": "wall", "cost": 150000, "attraction": 25, "unlockLevel": 8 },
+  { "id": "may_quat", "name": "Quạt trần", "icon": "🌀", "slot": "wall", "cost": 90000, "attraction": 12, "unlockLevel": 9 },
+  { "id": "tien_tai", "name": "Mèo thần tài vẫy tay", "icon": "🐈", "slot": "wall", "cost": 0, "attraction": 15, "unlockLevel": 1, "exclusive": true },
+  { "id": "meo_muop", "name": "Mèo mướp nằm quầy", "icon": "🐱", "slot": "counter", "cost": 0, "attraction": 5, "unlockLevel": 1, "exclusive": true, "cat": true }
+]

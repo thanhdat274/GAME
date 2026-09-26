@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { product } from '../src/core/data';
 import { advanceLiveShop, applyLiveShopCommand, createLiveShopAggregate, validateLiveCommandEnvelope } from '../src/core/liveSession';
-import { createNewGame } from '../src/core/state';
+import { createNewGame, warehouseQty } from '../src/core/state';
 
 describe('phiên tiệm dùng chung', () => {
   it('áp dụng hành động lần lượt lên trạng thái mới nhất', () => {
@@ -13,7 +13,7 @@ describe('phiên tiệm dùng chung', () => {
     expect(bought.aggregate.state.money).toBe(state.money - 4 * product('mi_goi').cost);
     expect(placed.aggregate.sequence).toBe(2);
     expect(placed.aggregate.state.shelves[0][0]).toMatchObject({ productId: 'mi_goi', qty: 4 });
-    expect(placed.aggregate.state.warehouse.mi_goi).toBeUndefined();
+    expect(warehouseQty(placed.aggregate.state, 'mi_goi')).toBe(0);
   });
 
   it('chặn command không đúng pha', () => {

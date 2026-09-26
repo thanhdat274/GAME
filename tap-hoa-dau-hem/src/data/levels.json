@@ -1,10 +1,15 @@
 {
-  "maxLevel": 4,
-  "nextTeaser": "Sắp ra mắt: Mở rộng tiệm",
+  "maxLevel": 9,
+  "nextTeaser": "Sắp ra mắt: Thuê nhân viên",
   "levels": [
-    { "level": 1, "exp": 0, "categories": ["dry"], "shelves": 2, "label": "Đồ khô + 2 kệ" },
-    { "level": 2, "exp": 120, "categories": ["dry", "snack"], "shelves": 2, "label": "Mở khóa ăn vặt" },
-    { "level": 3, "exp": 350, "categories": ["dry", "snack"], "shelves": 3, "counterUnlock": true, "label": "Mở thêm kệ thứ 3 · Hàng sau quầy" },
-    { "level": 4, "exp": 700, "categories": ["dry", "snack", "household"], "shelves": 3, "label": "Mở khóa đồ dùng" }
+    {"level": 1, "exp": 0, "categories": ["dry"], "shelves": 2, "label": "Đồ khô + 2 kệ"},
+    {"level": 2, "exp": 120, "categories": ["dry", "snack"], "shelves": 2, "label": "Mở khóa ăn vặt"},
+    {"level": 3, "exp": 350, "categories": ["dry", "snack"], "shelves": 3, "counterUnlock": true, "label": "Mở thêm kệ thứ 3 · Hàng sau quầy"},
+    {"level": 4, "exp": 700, "categories": ["dry", "snack", "household"], "shelves": 3, "label": "Mở khóa đồ dùng"},
+    {"level": 5, "exp": 1150, "categories": ["dry", "snack", "household", "drink"], "shelves": 3, "features": ["land", "fridge", "quests"], "label": "Đất A · Tủ lạnh · Đồ uống · Nhiệm vụ hằng ngày"},
+    {"level": 6, "exp": 1700, "categories": ["dry", "snack", "household", "drink"], "shelves": 3, "features": ["pricing", "anh_ba"], "label": "Chỉnh giá bán · Đại lý Anh Ba"},
+    {"level": 7, "exp": 2350, "categories": ["dry", "snack", "household", "drink", "fresh"], "shelves": 3, "features": ["fresh", "credit"], "label": "Đồ tươi · Khách ghi sổ"},
+    {"level": 8, "exp": 3100, "categories": ["dry", "snack", "household", "drink", "fresh"], "shelves": 3, "features": ["warehouse", "decor"], "label": "Đất B · Nâng cấp kho · Trang trí"},
+    {"level": 9, "exp": 4000, "categories": ["dry", "snack", "household", "drink", "fresh", "frozen"], "shelves": 3, "features": ["freezer", "bargain"], "label": "Sân sau · Tủ đông · Đồ đông lạnh · Khách mặc cả"}
   ]
 }

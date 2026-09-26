@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BACKUP_KEY, SAVE_KEY, deleteSave, loadGame, migrate, saveGame, type KeyValueStore } from '../src/core/save';
-import { createNewGame } from '../src/core/state';
+import { createNewGame, lotsFrom, warehouseQty } from '../src/core/state';
 
 class MemoryStore implements KeyValueStore {
   data = new Map<string, string>();
@@ -24,13 +24,13 @@ describe('lưu game', () => {
     const store = new MemoryStore();
     const s = createNewGame();
     s.money = 123000;
-    s.warehouse = { mi_goi: 7 };
+    s.warehouse = lotsFrom({ mi_goi: 7 });
     expect(saveGame(s, store)).toBe(true);
     const res = loadGame(store);
     expect(res.status).toBe('ok');
     if (res.status === 'ok') {
       expect(res.state.money).toBe(123000);
-      expect(res.state.warehouse).toEqual({ mi_goi: 7 });
+      expect(res.state.warehouse).toEqual(lotsFrom({ mi_goi: 7 }));
     }
   });
 
@@ -88,7 +88,7 @@ describe('lưu game', () => {
     const state = migrate({ version: 1, state: old });
     expect(state.zones[0]).toBe('dry');
     expect(state.shelves[0][2]).toEqual({ productId: null, qty: 0 });
-    expect(state.warehouse.keo).toBe(2);
+    expect(warehouseQty(state, 'keo')).toBe(2);
     expect(state.counter.every((slot) => !slot.productId)).toBe(true);
     expect(state.settings.autoScan).toBe(false);
   });
@@ -114,8 +114,8 @@ describe('lưu game', () => {
     delete old.counter;
     const state = migrate({ version: 1, state: old });
     expect(state.zones[0]).toBe('dry');
-    expect(state.shelves[0][0]).toEqual({ productId: 'mi_goi', qty: 4 });
-    expect(state.shelves[0][1]).toEqual({ productId: 'muoi', qty: 2 });
+    expect(state.shelves[0][0]).toMatchObject({ productId: 'mi_goi', qty: 4 });
+    expect(state.shelves[0][1]).toMatchObject({ productId: 'muoi', qty: 2 });
   });
 
   it('lưu local đánh dấu dirty, còn ghi sau đồng bộ giữ trạng thái sạch', () => {

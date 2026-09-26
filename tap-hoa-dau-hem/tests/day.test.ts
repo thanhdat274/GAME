@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DATA } from '../src/core/data';
 import { DaySession, endDay, grandmaHelp, openShop, startNextDay } from '../src/core/day';
 import { meanSpawnSeconds, newShopMultiplier, type Customer, type OrderLine } from '../src/core/customers';
-import { createNewGame, type GameState } from '../src/core/state';
+import { createNewGame, type GameState, lotsFrom } from '../src/core/state';
 import { makeChange } from '../src/core/change';
 import { generateOrder } from '../src/core/customers';
 import { Rng } from '../src/core/rng';
@@ -20,7 +20,7 @@ function stockedGame(level = 1, autoChange = false): GameState {
   s.shelves[0][3] = { productId: 'dau_an', qty: 5 };
   s.shelves[0][4] = { productId: 'duong', qty: 5 };
   s.shelves[0][5] = { productId: 'muoi', qty: 5 };
-  s.warehouse = Object.fromEntries(['mi_goi', 'gao', 'nuoc_mam', 'dau_an', 'duong', 'muoi'].map((id) => [id, 20]));
+  s.warehouse = lotsFrom(Object.fromEntries(['mi_goi', 'gao', 'nuoc_mam', 'dau_an', 'duong', 'muoi'].map((id) => [id, 20])));
   openShop(s);
   return s;
 }
@@ -312,7 +312,7 @@ describe('nhu cầu, tiến độ và ngày mới', () => {
     expect(newShopMultiplier(3)).toBe(1);
     expect(meanSpawnSeconds(600, 1, 1)).toBeGreaterThan(meanSpawnSeconds(600, 1, 3));
     const s = createNewGame();
-    s.warehouse = { mi_goi: 1 };
+    s.warehouse = lotsFrom({ mi_goi: 1 });
     endDay(s);
     startNextDay(s);
     expect(s.day).toBe(2);

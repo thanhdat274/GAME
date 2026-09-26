@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DATA, product } from '../core/data';
+import { questDef, questDone } from '../core/quests';
 import { startNextDay } from '../core/day';
 import { formatMoney } from '../core/state';
 import { G, persist } from '../game';
@@ -35,6 +36,17 @@ export class SummaryScene extends Phaser.Scene {
       ['Tiền tip', `+${formatMoney(sum.tips)}`, '#b7791f'],
     ];
     if (sum.overpaid > 0) rows.push(['Thối dư', `-${formatMoney(sum.overpaid)}`, HEX.red]);
+    if (sum.spoiledCost) {
+      const items = (sum.spoiled ?? []).slice(0, 2).map((x) => `${x.qty} ${product(x.productId).name.toLowerCase()}`).join(', ');
+      rows.push([`Hàng hỏng${items ? `: ${items}` : ''}`, `-${formatMoney(sum.spoiledCost)}`, HEX.red]);
+    }
+    if (sum.electricity) rows.push(['Tiền điện', `-${formatMoney(sum.electricity)}`, HEX.red]);
+    if (sum.debtGiven) rows.push(['Cho ghi sổ', formatMoney(sum.debtGiven), '#1f5fa0']);
+    if (sum.debtCollectedAmount) rows.push(['Thu nợ', `+${formatMoney(sum.debtCollectedAmount)}`, HEX.green]);
+    if (sum.badDebt) rows.push(['Nợ khó đòi', `-${formatMoney(sum.badDebt)}`, HEX.red]);
+    if (sum.netProfit !== undefined && (sum.spoiledCost || sum.electricity || sum.debtCollectedAmount)) {
+      rows.push(['Lãi ròng', formatMoney(sum.netProfit), sum.netProfit >= 0 ? HEX.green : HEX.red]);
+    }
     rows.push(
       ['Khách hài lòng', `${sum.happy} / ${sum.served + sum.left}`],
       ['Khách bỏ về', String(sum.left), sum.left > 0 ? HEX.red : HEX.ink],
@@ -42,10 +54,27 @@ export class SummaryScene extends Phaser.Scene {
       ['EXP nhận được', `+${sum.expGained}`, HEX.green],
     );
     let y = top + 18;
+    const pitch = rows.length > 10 ? 22 : 28;
+    const size = rows.length > 10 ? 13 : 15;
     for (const [label, value, color] of rows) {
-      txt(this, 34, y, label, { size: 15, color: HEX.ink });
-      txt(this, W - 34, y, value, { size: 15, bold: true, color: color ?? HEX.ink, origin: [1, 0] });
-      y += 28;
+      txt(this, 34, y, label, { size, color: HEX.ink });
+      txt(this, W - 34, y, value, { size, bold: true, color: color ?? HEX.ink, origin: [1, 0] });
+      y += pitch;
+    }
+    const complaints = sum.priceComplaints ?? [];
+    if (complaints.length) {
+      const t = txt(this, W / 2, y + 4, `💸 ${complaints.slice(0, 2).map((c) => `${product(c.productId).name}: ${c.qty} khách chê đắt`).join(' · ')}`, { size: 12, bold: true, color: HEX.red, origin: [0.5, 0], align: 'center', wrap: 290 });
+      y += t.height + 8;
+    }
+    if (sum.spoiledCost) {
+      const t = txt(this, W / 2, y + 2, 'Mẹo: nhập ít hàng tươi hơn, hoặc bán xả hàng hết hạn trong ngày.', { size: 11, color: HEX.muted, origin: [0.5, 0], align: 'center', wrap: 290 });
+      y += t.height + 6;
+    }
+    for (const id of sum.achievements ?? []) {
+      const a = DATA.achievements.find((item) => item.id === id);
+      if (!a) continue;
+      const t = txt(this, W / 2, y + 2, `🏆 Thành tựu: ${a.name}!`, { size: 13, bold: true, color: '#b7411f', origin: [0.5, 0] });
+      y += t.height + 6;
     }
     if (sum.bestSeller) {
       const p = product(sum.bestSeller.productId);
@@ -61,7 +90,7 @@ export class SummaryScene extends Phaser.Scene {
       const byZone = new Map<string, number>();
       for (const m of missed) {
         const category = product(m.productId).category;
-        const zone = category === 'dry' ? 'Đồ khô' : category === 'snack' ? 'Ăn vặt' : category === 'household' ? 'Đồ dùng' : 'Sau quầy';
+        const zone = ({ dry: 'Đồ khô', snack: 'Ăn vặt', household: 'Đồ dùng', drink: 'Đồ uống', fresh: 'Đồ tươi', frozen: 'Đông lạnh', counter: 'Sau quầy' } as const)[category];
         byZone.set(zone, (byZone.get(zone) ?? 0) + m.qty);
       }
       const busiestZone = [...byZone.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -101,6 +130,11 @@ export class SummaryScene extends Phaser.Scene {
         align: 'center',
         wrap: 290,
       });
+    }
+
+    const unclaimed = (s.quests?.list ?? []).filter((q) => !q.claimed && questDone(s, questDef(q.id))).length;
+    if (unclaimed) {
+      new Button(this, W / 2, H - 100, { w: 220, h: 40, label: `🎯 Nhận ${unclaimed} thưởng nhiệm vụ`, color: C.green, size: 13, onTap: () => this.scene.start('Quests', { back: 'Summary' }) });
     }
 
     new Button(this, W / 2, H - 42, {

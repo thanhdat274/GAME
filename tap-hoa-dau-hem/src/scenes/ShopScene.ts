@@ -1,17 +1,20 @@
 import Phaser from 'phaser';
 import type { Customer } from '../core/customers';
 import type { CustomerType } from '../core/data';
-import { DATA, product } from '../core/data';
+import { DATA, product, type Category } from '../core/data';
 import { DaySession, endDay } from '../core/day';
-import { formatClock, formatMoney } from '../core/state';
+import { canGiveCredit } from '../core/ledger';
+import { claimQuest, questDef, questDone, questProgress, questsUnlocked } from '../core/quests';
+import { formatClock, formatMoney, warehouseQty } from '../core/state';
+import { orderTotal } from '../core/customers';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand, startLivePulses, stopLivePulses, suspendLiveShop } from '../services/liveShop';
 import { cloudSaveEnabled } from '../services/firebase';
 import { bill, customerSprite, drawShopInterior, productIcon, setWalkFrame } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
-import { ShelfView, slotCenter } from '../ui/shelves';
+import { ShelfView } from '../ui/shelves';
 import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sound';
-import { Bar, Button, floatText, panel, toast } from '../ui/widgets';
+import { Bar, Button, dialog, floatText, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
 const SHELF_TOP = HUD_H + 10;
@@ -22,6 +25,16 @@ const PANEL_Y = 398;
 const QUEUE_X = [78, 150, 222, 294, 330];
 const DOOR_X = W + 16;
 const CUSTOMER_SCALE = 1.5;
+type SaleZone = Exclude<Category, 'counter'>;
+const ZONE_X: Record<SaleZone, number> = { dry: 60, snack: 175, household: 290, drink: 118, fresh: 232, frozen: 320 };
+const ZONE_BUTTON: Record<SaleZone, string> = { dry: 'Nạp đồ khô', snack: 'Nạp ăn vặt', household: 'Nạp đồ dùng', drink: 'Nạp đồ uống', fresh: 'Nạp đồ tươi', frozen: 'Nạp đông lạnh' };
+
+/** Khách quen (hàng xóm) dùng ngoại hình riêng: tạo loại khách ảo có id riêng để cache texture. */
+function lookOf(c: Customer): CustomerType {
+  if (!c.look || !c.name) return c.type;
+  const slug = c.name.normalize('NFD').replace(/[^a-zA-Z]/g, '').toLowerCase();
+  return { ...c.type, ...c.look, id: `${c.type.id}_${slug}` };
+}
 
 interface CustomerView {
   sprite: Phaser.GameObjects.Image;
@@ -49,7 +62,9 @@ export class ShopScene extends Phaser.Scene {
   private counterPulseTween: Phaser.Tweens.Tween | null = null;
   private counterRequestBar: Bar | null = null;
   private pauseLayer: Phaser.GameObjects.Container | null = null;
-  private zoneRefillButtons: Button[] = [];
+  private zoneRefillButtons: { zone: SaleZone; button: Button }[] = [];
+  private questBtn: Button | null = null;
+  private questsDoneSeen = new Set<string>();
   private renderAcc = 0;
   private ending = false;
 
@@ -65,11 +80,16 @@ export class ShopScene extends Phaser.Scene {
     this.panelMode = '';
     this.pauseLayer = null;
     this.ending = false;
+    this.zoneRefillButtons = [];
+    this.questBtn = null;
+    this.questsDoneSeen = new Set((G.state.quests?.list ?? []).filter((q) => q.claimed || questDone(G.state, questDef(q.id))).map((q) => q.id));
     const s = G.state;
     this.session = G.liveSnapshot?.dayRuntime
       ? DaySession.restore(s, G.liveSnapshot.dayRuntime)
       : new DaySession(s);
     if (G.liveSnapshot) startLivePulses();
+    // Chỉ bản dev: cho phép kiểm thử trên trình duyệt truy cập phiên bán (không có trong bản build).
+    if (import.meta.env.DEV) (window as unknown as { __thdhShop?: ShopScene }).__thdhShop = this;
 
     drawShopInterior(this, HUD_H, FLOOR_Y, PANEL_Y);
     this.shelves = new ShelfView(this, SHELF_TOP, {
@@ -78,7 +98,7 @@ export class ShopScene extends Phaser.Scene {
         if (G.liveSnapshot) void this.liveCommand({ type: 'startRefill', shelf: r, slot: c });
         else if (this.session.startRefill(r, c)) play('step');
       },
-    });
+    }, s);
     this.drawCounter();
     this.addZoneRefillButtons();
     this.hud = new Hud(this, s, { onPause: () => this.pause() });
@@ -120,28 +140,60 @@ export class ShopScene extends Phaser.Scene {
     txt(this, W - 90, COUNTER_Y + 30, 'QUẦY', { size: 12, bold: true, color: '#f6e3c4', origin: [0.5, 0.5] }).setDepth(201);
   }
 
+  /** Nút nạp cả khu (hiện khi quầy vắng khách), tối đa 6 khu xếp 2 hàng. */
   private addZoneRefillButtons(): void {
-    const zones = [
-      { id: 'dry' as const, label: 'Nạp đồ khô' },
-      { id: 'snack' as const, label: 'Nạp ăn vặt' },
-      { id: 'household' as const, label: 'Nạp đồ dùng' },
-    ];
+    const zones = (Object.keys(ZONE_BUTTON) as SaleZone[]).filter((zone) => G.state.zones.some((item) => item === zone));
+    const many = zones.length > 3;
     zones.forEach((zone, index) => {
-      const button = new Button(this, 60 + index * 120, 286, {
-        w: 108,
-        h: 32,
-        label: zone.label,
+      const col = index % 3;
+      const row = Math.floor(index / 3);
+      const button = new Button(this, 54 + col * 102, many ? 280 + row * 29 : 286, {
+        w: 96,
+        h: many ? 26 : 32,
+        label: ZONE_BUTTON[zone],
         color: C.wood,
         size: 10,
         onTap: () => {
-          if (G.liveSnapshot) void this.liveCommand({ type: 'refillZone', zone: zone.id });
-          else if (this.session.refillZone(zone.id)) play('step');
+          if (G.liveSnapshot) void this.liveCommand({ type: 'refillZone', zone });
+          else if (this.session.refillZone(zone)) play('step');
           else toast(this, 'Khu này chưa có ô cần nạp');
         },
       });
-      button.setVisible(G.state.zones.some((item) => item === zone.id));
-      this.zoneRefillButtons.push(button);
+      this.zoneRefillButtons.push({ zone, button });
     });
+    if (questsUnlocked(G.state)) {
+      this.questBtn = new Button(this, W - 26, 286, { w: 40, h: 34, label: '🎯', size: 16, color: C.blue, onTap: () => this.showQuests() });
+      this.questBtn.setDepth(210);
+    }
+  }
+
+  /** Bảng nhiệm vụ nổi trong lúc bán (tạm dừng mô phỏng khi mở). */
+  private showQuests(): void {
+    const s = G.state;
+    if (!s.quests) return;
+    if (!G.liveSnapshot) this.session.paused = true;
+    const resume = () => { if (!G.liveSnapshot && !this.pauseLayer) this.session.paused = false; };
+    const lines = s.quests.list.map((entry) => {
+      const q = questDef(entry.id);
+      const progress = Math.min(q.target, questProgress(s, q));
+      const mark = entry.claimed ? '✅' : questDone(s, q) ? '🎁' : '▫️';
+      const shown = q.metric === 'revenue' ? `${Math.round((progress / q.target) * 100)}%` : q.metric === 'noSpoil' || q.metric === 'leftAtMost' ? 'cuối ngày' : `${progress}/${q.target}`;
+      return `${mark} ${q.text} · ${shown}`;
+    }).join('\n');
+    const claimable = s.quests.list.map((entry, index) => ({ entry, index })).filter(({ entry }) => !entry.claimed && questDone(s, questDef(entry.id)));
+    const buttons = claimable.length
+      ? [{ label: `Nhận ${claimable.length} thưởng`, color: C.green, onTap: () => {
+        let money = 0;
+        for (const { index } of claimable) {
+          const r = claimQuest(G.state, index);
+          if (r.ok) money += r.money;
+        }
+        if (money) { play('coin'); floatText(this, W / 2, 240, `🎯 +${formatMoney(money)}`, HEX.green, 18); }
+        if (!G.liveSnapshot) persist();
+        resume();
+      } }, { label: 'Đóng', color: C.grey, onTap: resume }]
+      : [{ label: 'Đóng', color: C.grey, onTap: resume }];
+    dialog(this, { icon: '🎯', title: 'Nhiệm vụ hôm nay', body: lines, buttons, width: 320 });
   }
 
   private shelfOpts() {
@@ -195,13 +247,49 @@ export class ShopScene extends Phaser.Scene {
   private wireEvents(): void {
     const e = this.session.events;
     e.on('customerArrived', (c) => this.addCustomer(c));
-    e.on('customerBrowse', ({ customer, zone }) => {
+    e.on('customerBrowse', ({ customer, zone, shelf, tiles }) => {
       const v = this.views.get(customer.id);
       if (!v) return;
-      const x = zone === 'dry' ? 70 : zone === 'snack' ? 175 : 280;
+      const x = ZONE_X[zone as SaleZone] ?? 175;
+      if (shelf !== null) this.shelves.scrollToShelf(shelf);
       v.sprite.setY(FEET_Y - 48).setFlipX(x > v.sprite.x);
-      const walker = this.startWalking(v.sprite, customer.type);
-      this.tweens.add({ targets: v.sprite, x, duration: DATA.balance.zoneWalkSeconds * 1000, onComplete: () => this.stopWalking(walker) });
+      const walker = this.startWalking(v.sprite, lookOf(customer));
+      const seconds = DATA.balance.zoneWalkSeconds + Math.max(0, tiles - 3) * DATA.balance.walkSecondsPerTile;
+      this.tweens.add({ targets: v.sprite, x, duration: seconds * 1000, onComplete: () => this.stopWalking(walker) });
+    });
+    e.on('priceComplaint', ({ customer, productId }) => {
+      const v = this.views.get(customer.id);
+      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, `💸 Đắt quá! (${product(productId).name})`, HEX.red, 12);
+    });
+    e.on('notCold', ({ customer }) => {
+      const v = this.views.get(customer.id);
+      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, '🥵 Không lạnh à?', '#1f5fa0', 12);
+    });
+    e.on('catPetted', (customer) => {
+      const v = this.views.get(customer.id);
+      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, '🐱❤️', HEX.red, 16);
+    });
+    e.on('debtRepaid', ({ name, amount }) => {
+      play('coin');
+      toast(this, `📒 ${name} ghé trả nợ +${formatMoney(amount)}`, 300, C.greenDark);
+    });
+    e.on('delivery', ({ supplierId, held }) => {
+      play('door');
+      const name = DATA.suppliers.find((sp) => sp.id === supplierId)?.name ?? 'Mối sỉ';
+      toast(this, `🚚 ${name} giao hàng tới!${held ? `\n${held} món không vừa kho → hàng chờ` : ''}`, 300, held ? C.redDark : C.greenDark);
+      this.driveTruck();
+    });
+    e.on('bargainRequested', () => this.renderPanel(true));
+    e.on('creditRequested', () => this.renderPanel(true));
+    e.on('bargainResolved', ({ customer, accepted, left }) => {
+      const v = this.views.get(customer.id);
+      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, accepted ? '🥰 Cảm ơn nha!' : left ? '😤 Thôi khỏi mua!' : '😒 Ừ thì mua...', accepted ? HEX.green : HEX.red, 13);
+      this.renderPanel(true);
+    });
+    e.on('creditResolved', ({ customer, granted, amount }) => {
+      const v = this.views.get(customer.id);
+      floatText(this, v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74, granted ? `📒 Ghi sổ ${formatMoney(amount)}` : '😞 Thôi vậy...', granted ? '#1f5fa0' : HEX.red, 13);
+      this.renderPanel(true);
     });
     e.on('basketReady', () => { this.layoutQueue(); this.renderPanel(true); });
     e.on('customerFront', () => this.renderPanel(true));
@@ -263,9 +351,16 @@ export class ShopScene extends Phaser.Scene {
     e.on('dayEnded', () => this.finishDay());
   }
 
+  /** Xe giao hàng chạy ngang tới cửa. */
+  private driveTruck(): void {
+    const truck = txt(this, -30, FLOOR_Y + 30, '🚚', { size: 30, emoji: true, origin: [0.5, 0.5] }).setDepth(250);
+    this.tweens.add({ targets: truck, x: W + 40, duration: 2200, ease: 'Sine.easeInOut', onComplete: () => truck.destroy() });
+  }
+
   private addCustomer(c: Customer): void {
     play('door');
-    const sprite = customerSprite(this, DOOR_X, FEET_Y, c.type).setScale(CUSTOMER_SCALE / 2).setDepth(100);
+    const sprite = customerSprite(this, DOOR_X, FEET_Y, lookOf(c)).setScale(CUSTOMER_SCALE / 2).setDepth(100);
+    if (c.name) floatText(this, W - 60, FEET_Y - 80, `👋 ${c.name} ghé tiệm`, '#6b4220', 12);
     const bar = new Bar(this, 0, 0, 36, 5, C.green, 0x000000);
     bar.setDepth(150);
     this.views.set(c.id, { sprite, bar });
@@ -281,7 +376,7 @@ export class ShopScene extends Phaser.Scene {
         this.tweens.killTweensOf(v.sprite);
         const dur = Math.abs(v.sprite.x - x) * 6;
         v.sprite.setFlipX(x > v.sprite.x).setY(FEET_Y);
-        const walker = this.startWalking(v.sprite, c.type);
+        const walker = this.startWalking(v.sprite, lookOf(c));
         this.tweens.add({ targets: v.sprite, x, duration: dur, ease: 'Linear', onComplete: () => this.stopWalking(walker) });
       }
     });
@@ -299,7 +394,7 @@ export class ShopScene extends Phaser.Scene {
       if (reason !== 'served') play('wrong');
       this.tweens.killTweensOf(v.sprite);
       v.sprite.setFlipX(true).setY(FEET_Y);
-      const walker = this.startWalking(v.sprite, c.type);
+      const walker = this.startWalking(v.sprite, lookOf(c));
       this.tweens.add({
         targets: v.sprite,
         x: DOOR_X + 20,
@@ -329,7 +424,7 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private flyItem(productId: string, shelf: number, slot: number, c: Customer): void {
-    const from = slotCenter(SHELF_TOP, shelf, slot);
+    const from = this.shelves.slotCenter(shelf, slot);
     const v = this.views.get(c.id);
     const icon = productIcon(this, from.x, from.y, product(productId), 28).setDepth(400);
     this.tweens.add({
@@ -348,7 +443,7 @@ export class ShopScene extends Phaser.Scene {
   private onSlotTap(r: number, c: number): void {
     if (this.session.paused) return;
     const slot = G.state.shelves[r][c];
-    const inWh = slot.productId ? G.state.warehouse[slot.productId] ?? 0 : 0;
+    const inWh = slot.productId ? warehouseQty(G.state, slot.productId) : 0;
     toast(this, inWh > 0 ? 'Khách tự lấy hàng · bấm + xanh để nạp kệ' : 'Kệ trống hoặc đã hết hàng', 300);
   }
 
@@ -356,7 +451,7 @@ export class ShopScene extends Phaser.Scene {
 
   private renderPanel(force = false): void {
     const c = this.session.front;
-    const mode = !c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : `scan-${c.id}`;
+    const mode = !c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`;
     if (!force && mode === this.panelMode) return;
     const keepPay = mode === this.panelMode && mode.startsWith('pay');
     this.panelMode = mode;
@@ -378,12 +473,50 @@ export class ShopScene extends Phaser.Scene {
       return;
     }
     if (c.status === 'paying') this.renderPaying(c);
+    else if (c.status === 'bargain') this.renderBargain(c);
+    else if (c.status === 'credit') this.renderCredit(c);
     else this.renderScanning(c);
+  }
+
+  private who(c: Customer): string {
+    return c.name ?? c.type.name;
+  }
+
+  /** Khách mặc cả: Bớt / Không bớt. */
+  private renderBargain(c: Customer): void {
+    const L = this.panelLayer;
+    const total = orderTotal(c, G.state);
+    const after = Math.max(1000, Math.round((total * (100 - (c.bargainPct ?? 0))) / 100 / 1000) * 1000);
+    L.add(txt(this, W / 2, PANEL_Y + 40, `🙏 ${this.who(c)}: "Bớt cho cô ${c.bargainPct}% nha con!"`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
+    L.add(txt(this, W / 2, PANEL_Y + 84, `Đơn ${formatMoney(total)} → ${formatMoney(after)}`, { size: 16, bold: true, origin: [0.5, 0.5], color: HEX.ink }));
+    L.add(txt(this, W / 2, PANEL_Y + 112, 'Không bớt: khách có thể bỏ về, hoặc mua mà không vui (tối đa 3 sao).', { size: 11, origin: [0.5, 0.5], align: 'center', wrap: W - 50, color: HEX.muted }));
+    const answer = (accept: boolean) => () => {
+      if (G.liveSnapshot) void this.liveCommand({ type: 'resolveBargain', accept });
+      else this.session.resolveBargain(accept);
+    };
+    L.add(new Button(this, W / 2 - 80, PANEL_Y + 170, { w: 140, h: 52, label: '🤝 Bớt', color: C.green, size: 17, onTap: answer(true) }));
+    L.add(new Button(this, W / 2 + 80, PANEL_Y + 170, { w: 140, h: 52, label: 'Không bớt', color: C.red, size: 16, onTap: answer(false) }));
+  }
+
+  /** Khách xin ghi sổ: Cho nợ / Không cho. */
+  private renderCredit(c: Customer): void {
+    const L = this.panelLayer;
+    const total = orderTotal(c, G.state);
+    const allowed = canGiveCredit(G.state, total);
+    L.add(txt(this, W / 2, PANEL_Y + 40, `📒 ${this.who(c)}: "Ghi sổ giùm, mai mốt trả nghen!"`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
+    L.add(txt(this, W / 2, PANEL_Y + 84, `Nợ ${formatMoney(total)} · hạn 3 ngày`, { size: 16, bold: true, origin: [0.5, 0.5] }));
+    L.add(txt(this, W / 2, PANEL_Y + 112, allowed ? 'Không cho: khách bỏ về và chấm 2 sao.' : 'Sổ nợ đã đầy (tối đa 20% tiền mặt).', { size: 12, origin: [0.5, 0.5], align: 'center', wrap: W - 50, color: allowed ? HEX.muted : HEX.red }));
+    const answer = (grant: boolean) => () => {
+      if (G.liveSnapshot) void this.liveCommand({ type: 'resolveCredit', grant });
+      else this.session.resolveCredit(grant);
+    };
+    L.add(new Button(this, W / 2 - 80, PANEL_Y + 170, { w: 140, h: 52, label: allowed ? '📒 Cho nợ' : 'Sổ nợ đã đầy', color: C.blue, size: allowed ? 17 : 13, onTap: answer(true) }).setEnabled(allowed));
+    L.add(new Button(this, W / 2 + 80, PANEL_Y + 170, { w: 140, h: 52, label: 'Không cho', color: C.red, size: 16, onTap: answer(false) }));
   }
 
   private renderScanning(c: Customer): void {
     const L = this.panelLayer;
-    L.add(txt(this, 18, PANEL_Y + 14, `🛒 Giỏ của ${c.type.name}:`, { size: 15, bold: true }));
+    L.add(txt(this, 18, PANEL_Y + 14, `🛒 Giỏ của ${this.who(c)}:`, { size: 15, bold: true }));
     const n = c.order.length;
     const cw = Math.min(100, (W - 24) / n - 8);
     const x0 = W / 2 - ((n - 1) * (cw + 8)) / 2;
@@ -415,7 +548,7 @@ export class ShopScene extends Phaser.Scene {
         status = `⏱ ${Math.ceil(c.counterRequestLeft!)}s`;
         statusColor = HEX.ink;
       } else if (isOutOfStock) {
-        status = cw < 85 ? `Thiếu x${l.qty}` : `❌ Hết hàng`;
+        status = l.declined === 'price' ? '💸 Chê đắt' : l.declined === 'cold' ? '🥵 Không lạnh' : cw < 85 ? `Thiếu x${l.qty}` : `❌ Hết hàng`;
         statusColor = HEX.red;
       } else if (done) {
         status = `✓ x${l.scanned}`;
@@ -469,7 +602,8 @@ export class ShopScene extends Phaser.Scene {
         L.add(counterButton);
       });
     }
-    L.add(txt(this, 18, PANEL_Y + 142, `Giỏ: ${formatMoney(c.order.reduce((sum, line) => sum + line.picked * product(line.productId).price, 0))}`, { size: 12, color: HEX.muted }));
+    const cartValue = c.order.reduce((sum, line) => sum + (line.value ?? line.picked * product(line.productId).price), 0);
+    L.add(txt(this, 18, PANEL_Y + 142, `Giỏ: ${formatMoney(cartValue)}`, { size: 12, color: HEX.muted }));
     if (!request) L.add(
       new Button(this, W - 82, PANEL_Y + 178, {
         w: 136,
@@ -547,10 +681,8 @@ export class ShopScene extends Phaser.Scene {
       this.shelves.render(G.state, this.shelfOpts());
       this.renderPanel();
       const canShowZoneActions = this.session.customers.length === 0;
-      this.zoneRefillButtons.forEach((button, index) => {
-        const zones = ['dry', 'snack', 'household'];
-        button.setVisible(canShowZoneActions && G.state.zones.some((item) => item === zones[index]));
-      });
+      this.zoneRefillButtons.forEach(({ zone, button }) => button.setVisible(canShowZoneActions && G.state.zones.some((item) => item === zone)));
+      this.checkQuestProgress();
     }
     this.session.customers.forEach((c) => {
       const v = this.views.get(c.id);
@@ -563,6 +695,21 @@ export class ShopScene extends Phaser.Scene {
     if (this.counterTimerText?.active && requestLeft != null) {
       this.counterTimerText.setText(`⏱ ${Math.ceil(requestLeft)}s`);
       this.counterRequestBar?.set(requestLeft / Math.max(1, this.session.front?.counterRequestSeconds ?? 1), requestLeft <= 2 ? C.red : C.green);
+    }
+  }
+
+  /** Báo khi một nhiệm vụ vừa xong trong ngày. */
+  private checkQuestProgress(): void {
+    const s = G.state;
+    if (!s.quests) return;
+    for (const entry of s.quests.list) {
+      if (this.questsDoneSeen.has(entry.id)) continue;
+      const q = questDef(entry.id);
+      if (!questDone(s, q)) continue;
+      this.questsDoneSeen.add(entry.id);
+      play('levelup');
+      toast(this, `🎯 Xong nhiệm vụ: ${q.text}!\nBấm 🎯 để nhận thưởng.`, 240, C.greenDark);
+      if (this.questBtn) this.tweens.add({ targets: this.questBtn, scale: 1.25, yoyo: true, repeat: 3, duration: 180 });
     }
   }
 
