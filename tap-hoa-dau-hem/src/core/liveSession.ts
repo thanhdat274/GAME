@@ -77,7 +77,8 @@ export function applyLiveShopCommand(
 
   switch (command.type) {
     case 'buyStock':
-      requirePhase(state, 'morning');
+      // Nhập hàng được cả buổi sáng lẫn khi tạm dừng giữa giờ bán.
+      if (state.phase !== 'morning') requirePhase(state, 'open');
       result = buyStock(state, command.cart, command.supplierId ?? 'co_tu');
       break;
     case 'assignShelf':
