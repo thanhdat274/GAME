@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Nguyên liệu xôi
-Game SHALL thêm các nguyên liệu nếp, đậu xanh, hành phi, chà bông, lạp xưởng, dừa nạo và bao gói (lá chuối/hộp giấy) vào `products.json`. Các món này bán được ở tạp hóa và nhập được từ mối sỉ, mở từ L31. Trứng gà dùng mặt hàng có sẵn. Giá và hạn dùng lấy từ dữ liệu.
+Game SHALL thêm các nguyên liệu nếp, đậu xanh, hành phi, chà bông, lạp xưởng, dừa nạo và bao gói (lá chuối/hộp giấy) vào `products.json`. Các món này bán được ở tạp hóa và nhập được từ mối sỉ, mở từ L29. Trứng gà dùng mặt hàng có sẵn. Giá và hạn dùng lấy từ dữ liệu.
 
 #### Scenario: Tạp hóa bán nếp
-- **WHEN** người chơi đạt L31 và mở màn Nhập hàng ở tạp hóa
+- **WHEN** người chơi đạt L29 và mở màn Nhập hàng ở tạp hóa
 - **THEN** nếp và các nguyên liệu xôi xuất hiện trong danh sách nhập như hàng thường
 
 ### Requirement: Ngâm nếp
@@ -56,7 +56,7 @@ Tiệm xôi SHALL có 3 mini-game cảm ứng. **Hấp**: giữ ngọn lửa tro
 - **THEN** món vẫn được làm nhưng chất lượng là "Tạm được"
 
 ### Requirement: Khách tiệm xôi
-Tiệm xôi SHALL sinh khách theo đường cong mật độ riêng, cao điểm 5h–10h và vắng buổi chiều. Có các loại khách người đi làm, học sinh và công nhân. Khách xếp hàng ở quầy, gọi 1–3 món (có thể kèm biến thể), rồi mang đi. Khách đợi quá lâu thì bỏ đi và trừ đánh giá.
+Tiệm xôi SHALL sinh khách theo đường cong mật độ riêng, cao điểm 5h–10h và vắng buổi chiều. Có các loại khách người đi làm, học sinh và công nhân. Khách xếp hàng ở quầy, gọi 1–3 món (có thể kèm biến thể), rồi mang đi hoặc ngồi ăn tại bàn (xem yêu cầu "Ăn tại chỗ ở tiệm xôi"). Khách đợi quá lâu thì bỏ đi và trừ đánh giá.
 
 #### Scenario: Cao điểm buổi sáng
 - **WHEN** đồng hồ game ở 6h30 tại tiệm xôi
@@ -68,3 +68,25 @@ Game SHALL có vai trò nhân viên Thợ nấu xôi. Thợ tự ngâm, hấp v�
 #### Scenario: Thợ tự ngâm cho hôm sau
 - **WHEN** cuối ngày tiệm xôi có thợ và còn nếp trong kho
 - **THEN** thợ tự đặt mẻ ngâm đủ cho lượng bán dự kiến hôm sau, trong giới hạn nếp đang có
+
+### Requirement: Ăn tại chỗ ở tiệm xôi
+Tiệm xôi SHALL cho đặt bàn ghế ăn tại chỗ (dùng lại bàn 2 chỗ và 4 chỗ của phase 4). Layout mặc định có sẵn 1 bàn 2 chỗ. Mỗi khách chọn ngồi ăn hoặc mang đi theo tỉ lệ trong dữ liệu (mặc định 40% ngồi, chỉ khi còn bàn sạch). Khách ngồi ăn MUST có thể gọi thêm đồ uống kèm (trà đá, sữa đậu nành) theo xác suất trong dữ liệu. Ăn xong, bàn thành bàn bẩn và phải dọn mới xếp khách mới được. Hết bàn thì khách muốn ngồi sẽ đổi sang mang đi hoặc bỏ đi.
+
+#### Scenario: Khách ngồi ăn gọi thêm trà đá
+- **WHEN** một khách ngồi ăn xôi mặn tại bàn
+- **THEN** khách có thể gọi thêm 1 trà đá, và khi ăn xong bàn chuyển sang trạng thái bẩn
+
+#### Scenario: Hết bàn sạch
+- **WHEN** mọi bàn đang có khách hoặc bẩn và một khách muốn ngồi ăn
+- **THEN** khách đổi sang mang đi, hoặc bỏ đi nếu đã đợi quá lâu
+
+#### Scenario: Mô phỏng vắng chủ có bàn
+- **WHEN** tiệm xôi vắng chủ có 2 bàn
+- **THEN** mô phỏng sản xuất cộng doanh thu đồ uống kèm theo số chỗ ngồi và tỉ lệ ngồi ăn, không sinh từng khách
+
+### Requirement: Xôi chỉ làm ở tiệm xôi
+Món xôi SHALL chỉ nấu được ở tiệm loại `xoi`. Góc đồ ăn của tạp hóa MUST không có công thức xôi. Tạp hóa chỉ có xôi (xôi gói) khi đặt qua đơn nội bộ từ tiệm xôi.
+
+#### Scenario: Tạp hóa không thấy món xôi trong bếp
+- **WHEN** người chơi mở Bếp & quầy nước ở tạp hóa sau khi đã mở tiệm xôi
+- **THEN** menu không có món xôi nào, và có gợi ý "Đặt xôi gói từ Tiệm xôi nhà mình"

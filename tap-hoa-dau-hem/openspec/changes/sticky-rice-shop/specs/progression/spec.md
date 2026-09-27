@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Mở khóa Tiệm xôi
-L31 SHALL mở thêm tính năng `shop_xoi` (khu Tiệm xôi trên bản đồ), nguyên liệu xôi ở tạp hóa, và vai trò Thợ nấu xôi, bên cạnh Xe tải chuyển hàng. Nhãn L31 trong `levels.json` đổi thành "Xe tải chuyển hàng · Tiệm xôi".
+L29 SHALL mở thêm tính năng `shop_xoi` (khu Tiệm xôi trên bản đồ), nguyên liệu xôi ở tạp hóa, và vai trò Thợ nấu xôi, bên cạnh Nâng cấp góc đồ ăn. Bản đồ thành phố mở từ L29 nhưng chỉ có khu Tiệm xôi cho tới khi lên L30. Nhãn L29 trong `levels.json` đổi thành "Nâng cấp góc đồ ăn · Tiệm xôi".
 
-#### Scenario: Lên L31
-- **WHEN** người chơi lên L31
+#### Scenario: Lên L29
+- **WHEN** người chơi lên L29
 - **THEN** màn tổng kết liệt kê "Tiệm xôi" trong phần mở khóa, và sáng hôm sau có hướng dẫn chỉ vào Bản đồ
 
 ### Requirement: EXP ở tiệm xôi

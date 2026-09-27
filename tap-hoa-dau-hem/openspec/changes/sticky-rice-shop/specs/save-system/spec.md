@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Bản lưu v6
-Bản lưu SHALL lên phiên bản 6. Mỗi `StoreSnapshot` có `shopType`. Trạng thái chung có `internalOrders` và `recurringOrders`. Dữ liệu tiệm có mẻ ngâm (`soakBatches`) và nếp chín (`cookedRice`, kèm thời điểm hấp). Kích thước bản lưu MUST vẫn dưới 1 MB với 5 tiệm.
+Bản lưu SHALL lên phiên bản 6. Mỗi `StoreSnapshot` có `shopType`. Trạng thái chung có `internalOrders` và `recurringOrders`. Dữ liệu tiệm có mẻ ngâm (`soakBatches`) và nếp chín (`cookedRice`, kèm thời điểm hấp). Kích thước bản lưu MUST vẫn dưới 1 MB với 6 tiệm.
 
 #### Scenario: Lưu và tải chuỗi có tiệm xôi
 - **WHEN** người chơi lưu game có tiệm xôi đang ngâm nếp và một đơn định kỳ, rồi tải lại

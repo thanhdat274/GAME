@@ -1,5 +1,16 @@
 ## ADDED Requirements
 
+### Requirement: Mối nội bộ sinh từ dữ liệu loại tiệm
+Mỗi loại tiệm SHALL khai báo `supplies` (hàng cung cấp cho tiệm khác) và `sourcesFrom` (hàng ưu tiên lấy nội bộ) trong `shopTypes.json`. Mối nội bộ MUST được sinh từ hai trường này cho mọi cặp tiệm trong chuỗi, không viết riêng từng cặp. Mặt hàng thuộc `sourcesFrom` mà chuỗi chưa có tiệm cung cấp thì nhập từ mối sỉ như thường.
+
+#### Scenario: Thêm loại tiệm cung cấp đồ uống
+- **WHEN** nhà phát triển thêm một loại tiệm có `supplies: ["tra_da"]` và `xoi.sourcesFrom` chứa `tra_da`
+- **THEN** tiệm xôi thấy mối nội bộ bán trà đá mà không phải sửa mã core
+
+#### Scenario: Chưa có tiệm cung cấp
+- **WHEN** `xoi.sourcesFrom` có `tra_da` nhưng chuỗi chưa có tiệm nào cung cấp trà đá
+- **THEN** tiệm xôi nhập trà đá từ mối sỉ, không có lỗi
+
 ### Requirement: Mối hàng nội bộ
 Màn Nhập hàng SHALL liệt kê thêm các tiệm khác trong chuỗi làm mối, nếu tiệm đó có thể cung cấp mặt hàng cần. Tạp hóa thấy "Tiệm xôi nhà mình", bán các loại xôi gói. Tiệm xôi thấy "Tạp hóa nhà mình", bán nguyên liệu xôi đang có trong kho tạp hóa.
 

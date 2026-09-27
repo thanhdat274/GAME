@@ -5,31 +5,33 @@ Hiện game chỉ có một loại cửa hàng. Ba chi nhánh (Chợ, Cổng tr�
 ## What Changes
 
 - **Loại cửa hàng dữ liệu hóa** (`shopTypes.json`): mỗi loại khai báo nhóm hàng được bán, nội thất/trạm nấu được đặt, hồ sơ khách, giờ cao điểm và cách mô phỏng khi vắng chủ. `grocery` là loại hiện có. Thêm loại `xoi`.
-- **Tiệm xôi** (mở ở L31, đặt trên Bản đồ thành phố như một chi nhánh):
+- **Tiệm xôi** (mở ở L29, đặt trên Bản đồ thành phố như một chi nhánh):
   - Nguyên liệu mới bán ở tạp hóa và các mối sỉ: nếp, đậu xanh, hành phi, chà bông, lạp xưởng, dừa nạo, lá chuối/hộp giấy (trứng gà dùng hàng có sẵn).
   - Quy trình 2 bước: **ngâm nếp** từ hôm trước (phải lên kế hoạch), rồi **hấp mẻ** trong xửng vào buổi sáng ra "nếp chín", giữ nóng trong một số giờ game.
   - 4 món: xôi đậu xanh, xôi mặn (chà bông + lạp xưởng + hành phi), xôi trứng, xôi dừa. Có biến thể "thêm topping".
   - 3 mini-game: canh lửa hấp, múc xôi và rắc topping theo thứ tự, gói lá/hộp.
-  - Khách đông từ 5h–10h sáng (người đi làm, học sinh, công nhân), mua mang đi ở quầy.
+  - **Ăn tại chỗ và mang đi**: có bàn ghế (dùng lại bàn phase 4), khách ngồi ăn có thể gọi thêm trà đá, sữa đậu nành; ăn xong phải dọn bàn.
+  - Xôi **chỉ** nấu ở tiệm xôi. Góc đồ ăn tạp hóa không có món xôi, nên muốn bán xôi ở tạp hóa thì phải đặt từ tiệm xôi.
+  - Khách đông từ 5h–10h sáng (người đi làm, học sinh, công nhân), mua mang đi hoặc ngồi ăn tại chỗ.
   - Vai trò nhân viên **Thợ nấu xôi** (dùng lại cơ chế Đầu bếp): tự hấp và gói theo chỉ số.
 - **Đặt hàng nội bộ giữa các tiệm:**
   - Tạp hóa có mối mới "Tiệm xôi nhà mình" để đặt **xôi gói** (thành phẩm để trên kệ tạp hóa, hạn trong ngày). Có thể đặt một lần hoặc đặt định kỳ mỗi ngày.
   - Tiệm xôi có mối "Tạp hóa nhà mình" để lấy nguyên liệu từ kho tạp hóa theo giá vốn (FEFO, giữ hạn dùng), dùng xe chuyển hàng có sẵn.
   - Đơn nội bộ có trạng thái (chờ làm → đã làm → đang chở → đã giao / thiếu hàng). Thiếu hàng thì giao một phần và ghi chú vào buổi sáng.
 - **Mô phỏng sản xuất khi vắng chủ**: tiệm xôi không đứng chơi vẫn *thực sự* tiêu nguyên liệu và làm ra xôi theo năng lực Thợ nấu xôi. Nó ưu tiên đơn nội bộ, phần còn lại bán lẻ theo hồ sơ khách. Tiệm xôi không dùng cách "lãi trung bình × hiệu suất" như tạp hóa.
-- Giới hạn chuỗi tăng từ 4 lên **5 cửa hàng**.
+- Giới hạn chuỗi tăng từ 4 lên **6 cửa hàng**, đọc từ dữ liệu (`balance.json › chain.maxStores`) để sau này nâng tiếp mà không sửa code.
 - **BREAKING (dữ liệu lưu)**: bản lưu v6 thêm `StoreSnapshot.shopType`, `internalOrders`, mẻ ngâm/hấp; có migrate v5 → v6 (mọi tiệm cũ thành `grocery`).
 
 ## Capabilities
 
 ### New Capabilities
 - `shop-types`: Định nghĩa loại cửa hàng bằng dữ liệu, quyết định hàng, nội thất, khách, giờ cao điểm và kiểu mô phỏng khi vắng chủ.
-- `sticky-rice-shop`: Tiệm xôi: nguyên liệu, ngâm và hấp nếp, món và biến thể, mini-game, khách buổi sáng, Thợ nấu xôi.
+- `sticky-rice-shop`: Tiệm xôi: nguyên liệu, ngâm và hấp nếp, món và biến thể, mini-game, khách buổi sáng, ăn tại chỗ và mang đi, Thợ nấu xôi, quy tắc xôi chỉ làm ở tiệm xôi.
 - `internal-supply`: Đặt hàng giữa các tiệm trong chuỗi (một lần hoặc định kỳ), trạng thái đơn, giao thiếu, mô phỏng sản xuất khi vắng chủ.
 
 ### Modified Capabilities
-- `branch-network`: Mở được tiệm thuộc loại khác tạp hóa, giới hạn 5 tiệm, và tiệm sản xuất dùng mô phỏng sản xuất thay cho lãi trung bình.
-- `progression`: L31 mở thêm Tiệm xôi. Nguyên liệu xôi mở ở tạp hóa từ L31.
+- `branch-network`: Mở được tiệm thuộc loại khác tạp hóa, giới hạn 6 tiệm (theo dữ liệu), và tiệm sản xuất dùng mô phỏng sản xuất thay cho lãi trung bình.
+- `progression`: L29 mở thêm Tiệm xôi (và Bản đồ thành phố sớm hơn một level, chỉ có khu Tiệm xôi). Nguyên liệu xôi mở ở tạp hóa từ L29.
 - `save-system`: Bản lưu v6 và migrate v5 → v6.
 
 ## Impact

@@ -28,7 +28,7 @@ Hiện trạng liên quan (sau phase 4):
 ## Decisions
 
 ### D1. `shopType` tách khỏi `kind` (khu vực)
-Thêm `StoreSnapshot.shopType` (`'grocery' | 'xoi' | …`), giữ `kind` là khu vực. `branches.json` thêm trường `shopType` (mặc định `grocery`) và một mục mới `xoi` (L31, 700.000đ). Định nghĩa loại tiệm nằm trong `shopTypes.json`: `categories`, `fixtures`, `customers`, `densityCurve`, `sim: 'profit_average' | 'production'`, `recipes`.
+Thêm `StoreSnapshot.shopType` (`'grocery' | 'xoi' | …`), giữ `kind` là khu vực. `branches.json` thêm trường `shopType` (mặc định `grocery`) và một mục mới `xoi` (L29, 700.000đ). Định nghĩa loại tiệm nằm trong `shopTypes.json`: `categories`, `fixtures`, `customers`, `densityCurve`, `sim: 'profit_average' | 'production'`, `recipes`.
 - *Vì sao*: sau này có thể có "tiệm xôi ở Cổng trường". Hai trục khu vực và loại tiệm độc lập với nhau.
 - *Phương án bị loại*: thêm `'xoi'` vào `kind`. Làm vậy sẽ trộn khu vực với loại tiệm và phải đụng mọi chỗ `switch (kind)`.
 
@@ -55,7 +55,7 @@ Lô hàng hiện tính hạn theo *ngày*, còn nếp cần đồng hồ theo *p
 InternalOrder { id, fromStoreId, toStoreId, items: Record<productId, qty>, filled: Record<productId, qty>,
                 createdDay, dueDay, dueMinute, status, shortReason? }
 ```
-Mối nội bộ hiện ở màn Nhập hàng dưới dạng nhà cung cấp ảo `internal:<storeId>`, do hàm `internalSuppliers(state)` sinh ra (không ghi vào `suppliers.json`). Có hai hướng:
+Mối nội bộ hiện ở màn Nhập hàng dưới dạng nhà cung cấp ảo `internal:<storeId>`, do hàm `internalSuppliers(state)` sinh ra từ `supplies`/`sourcesFrom` của loại tiệm (không ghi vào `suppliers.json`; xem "Nguyên tắc chuỗi cung ứng"). Có hai hướng:
 - **Xôi gói → tạp hóa** (*pull theo đơn*): đơn `pending` được lấp khi tiệm xôi làm món có đầu ra `*_goi`. Lúc `dueMinute` (mặc định 420 = 7h) xe chở phần đã lấp vào `holding` tạp hóa **cùng ngày**. `BranchShipment` được mở rộng thêm `arriveMinute`.
 - **Nguyên liệu → tiệm xôi** (*kéo từ kho tạp hóa*): `pullFromStore(state, fromId, productId, qty)` dùng `storeView` + `takeLots` trên kho tạp hóa và tạo `BranchShipment` tới sáng hôm sau. Giữ lô FEFO và dùng phí xe cũ.
 
@@ -77,10 +77,17 @@ Chạy đầu ngày thì tạp hóa nhận xôi kịp lúc 7h. Kết quả đư�
 Tạp hóa vắng chủ vẫn dùng `profit_average`, nên hàng giao tới sẽ nằm yên. Quy tắc bổ sung: với hàng `recipeOnly` được giao tới tiệm `profit_average` vắng chủ, bán `floor(qty × efficiency)` theo giá bán hiện tại (cộng tiền và 50% EXP). Phần còn lại hỏng cuối ngày. Nhờ vậy đơn định kỳ vẫn có ý nghĩa khi người chơi đang đứng ở tiệm xôi.
 
 ### D9. Bản lưu v6
-`migrate_5_to_6`: gán `shopType: 'grocery'` cho mọi snapshot, thêm `internalOrders = []` và `recurringOrders = []`, gán `soakBatches`/`cookedRice` rỗng cho dữ liệu tiệm. Thêm `soakBatches` và `cookedRice` vào `STORE_KEYS`. Kiểm tra kích thước với fixture 5 tiệm: đơn nội bộ đã `delivered`/`cancelled` được dọn sau 7 ngày.
+`migrate_5_to_6`: gán `shopType: 'grocery'` cho mọi snapshot, thêm `internalOrders = []` và `recurringOrders = []`, gán `soakBatches`/`cookedRice` rỗng cho dữ liệu tiệm. Thêm `soakBatches` và `cookedRice` vào `STORE_KEYS`. Kiểm tra kích thước với fixture 6 tiệm: đơn nội bộ đã `delivered`/`cancelled` được dọn sau 7 ngày.
 
 ### D10. Mở khóa và cân bằng mặc định
-L31: `shop_xoi` + nguyên liệu xôi + Thợ nấu xôi. Giá mở 700.000đ, rẻ hơn chi nhánh Chợ, vì tiệm xôi nhỏ và phụ thuộc tạp hóa. Mẻ 5 kg nếp ra 25 phần. Giá xôi 12k–25k, xôi gói bán ở tạp hóa 15k–22k. Mục tiêu: lãi tiệm xôi đứng chơi ≈ 60–80% lãi chi nhánh Chợ, và đơn định kỳ xôi gói tăng lãi tạp hóa 5–10%. Mọi số nằm trong JSON, và được kiểm lại bằng `npm run playtest`.
+L29: `shop_xoi` + nguyên liệu xôi + Thợ nấu xôi, gộp với "Nâng cấp góc đồ ăn" có sẵn. Tính năng `branches` (Bản đồ) hiện mở ở L30; `BranchesScene` sẽ mở từ khi có `shop_xoi` **hoặc** `branches`, và chỉ hiện các khu đã đủ level. Xe tải (`truck`) mở ở L31, nhưng đơn nội bộ **không** cần `truck`: chuyến giao nội bộ luôn có sẵn từ khi có tiệm xôi. Chuyển hàng tự do giữa chi nhánh vẫn cần L31. Giới hạn chuỗi đọc từ `balance.json › chain.maxStores` (mặc định 6). Giá mở 700.000đ, rẻ hơn chi nhánh Chợ, vì tiệm xôi nhỏ và phụ thuộc tạp hóa. Mẻ 5 kg nếp ra 25 phần. Giá xôi 12k–25k, xôi gói bán ở tạp hóa 15k–22k. Mục tiêu: lãi tiệm xôi đứng chơi ≈ 60–80% lãi chi nhánh Chợ, và đơn định kỳ xôi gói tăng lãi tạp hóa 5–10%. Mọi số nằm trong JSON, và được kiểm lại bằng `npm run playtest`.
+
+### D11. Ăn tại chỗ dùng lại `dining.ts`
+Tiệm xôi dùng `food_table_2`/`food_table_4` và `ensureDiningTables` sẵn có. `shopTypes.json › xoi` khai báo `dineInChance` (0,4) và `addOns` (trà đá, sữa đậu nành với xác suất gọi thêm). Hai đồ uống kèm là hàng bình thường nhập từ mối sỉ, không cần mini-game. Khi vắng chủ, mô phỏng không xếp bàn mà cộng doanh thu kèm = `min(khách bán lẻ × dineInChance, số chỗ × lượt quay bàn/ngày) × xác suất gọi thêm × giá`.
+- *Phương án bị loại*: chỉ bán mang đi. Người chơi muốn tiệm xôi có không khí quán ăn, và phần bàn ghế đã có sẵn từ phase 4.
+
+### D12. Xôi độc quyền của tiệm xôi
+Món xôi chỉ nằm trong `shopTypes.json › xoi.recipes`. `KitchenScene` lọc menu theo loại tiệm, nên góc đồ ăn tạp hóa không thể nấu xôi. Nguồn xôi duy nhất ở tạp hóa là xôi gói từ đơn nội bộ. Nhờ vậy chuỗi cung ứng là cách *duy nhất* để tạp hóa có mặt hàng này.
 
 ## Risks / Trade-offs
 
@@ -89,7 +96,8 @@ L31: `shop_xoi` + nguyên liệu xôi + Thợ nấu xôi. Giá mở 700.000đ, r
 - [Đơn định kỳ bị bỏ quên, gây giao thiếu mãi] → Sau 3 lần `short` liên tiếp thì tự tạm dừng và báo ở màn Buổi sáng.
 - [Người chơi thấy phiền với việc ngâm từ hôm trước] → Tổng kết cuối ngày có nút "Ngâm cho mai" gợi ý số kg. Có thợ thì thợ tự làm.
 - [ShopScene bị nhồi quá nhiều nhánh `if (shopType)`] → Gom khác biệt vào đối tượng `ShopTypeBehavior` (cách sinh khách, danh sách nội thất, panel phụ). Scene chỉ gọi qua giao diện này.
-- [Hiệu năng khi 5 tiệm cùng mô phỏng lúc tải offline dài] → Mô phỏng thuần số học, không sinh khách từng người. Đặt ngưỡng 100 ngày × 5 tiệm dưới 200 ms trong test.
+- [Mở ở L29 trước chi nhánh Chợ (L30) khiến người chơi thiếu tiền mở tiếp] → Giá tiệm xôi 700.000đ thấp hơn Chợ. Playtest kiểm tra người chơi dùng "Gợi ý" vẫn mở được Chợ trước ngày game ~ L30 + 5.
+- [Hiệu năng khi 6 tiệm cùng mô phỏng lúc tải offline dài] → Mô phỏng thuần số học, không sinh khách từng người. Đặt ngưỡng 100 ngày × 6 tiệm dưới 200 ms trong test.
 
 ## Migration Plan
 
@@ -100,9 +108,16 @@ L31: `shop_xoi` + nguyên liệu xôi + Thợ nấu xôi. Giá mở 700.000đ, r
 
 Rollback: nếu bản v6 lỗi, bản v5 cũ vẫn tải được bằng build trước vì migrate chỉ thêm trường. Giữ bản sao v5 trong localStorage (`save_backup_v5`) một tuần sau khi migrate.
 
-## Open Questions
+## Quyết định đã chốt (27/09/2026)
 
-- Mở ở **L31** (cùng Xe tải) có quá muộn không? Hay nên mở ở L29/L30 để người chơi thấy sớm hơn?
-- Có cho **tạp hóa bán xôi nóng** (tự làm ở góc đồ ăn), hay xôi chỉ đến từ tiệm xôi? Đề xuất: chỉ đến từ tiệm xôi, để chuỗi cung ứng có ý nghĩa.
-- Tiệm xôi có cần **bàn ghế ăn tại chỗ** không, hay chỉ bán mang đi?
-- Giới hạn **5 tiệm** có đủ chỗ cho tiệm trà sữa sau này không (tiệm chính + 3 chi nhánh + xôi + trà sữa = 6)?
+- Tiệm xôi mở ở **L29**, sớm hơn chi nhánh Chợ một level.
+- Tạp hóa **không** tự nấu xôi. Xôi ở tạp hóa chỉ đến từ đơn nội bộ (D12).
+- Tiệm xôi có **cả ăn tại chỗ lẫn mang đi** (D11).
+- Giới hạn chuỗi là **6 tiệm**, đọc từ dữ liệu nên có thể nâng tiếp khi thêm tiệm trà sữa.
+- Khi có tiệm trà sữa (change sau), trà đá và sữa đậu nành ở tiệm xôi sẽ **đặt từ tiệm trà sữa** qua đơn nội bộ. Trong change này, hai món đó tạm nhập từ mối sỉ.
+
+### Nguyên tắc chuỗi cung ứng
+Các tiệm trong chuỗi là hàng quán gần nhau, cùng phục vụ dân quanh khu, nên **tiệm nào làm ra được hàng gì thì các tiệm khác đều đặt được hàng đó**. Để giữ nguyên tắc này cho các loại tiệm sau:
+- `shopTypes.json` khai báo `supplies` (các mặt hàng loại tiệm này cung cấp cho tiệm khác) và `sourcesFrom` (mặt hàng ưu tiên lấy từ tiệm nội bộ khi có). `internalSuppliers(state)` sinh mối nội bộ từ hai trường này, không viết riêng cho từng cặp tạp hóa ↔ xôi.
+- Mặt hàng có trong `sourcesFrom` mà chuỗi chưa có tiệm cung cấp thì fallback về mối sỉ. Khi tiệm cung cấp được mở, màn Nhập hàng gợi ý chuyển sang đặt nội bộ.
+- Thêm tiệm trà sữa sau này chỉ cần: tiệm trà sữa khai báo `supplies: [tra_da, sua_dau_nanh, tra_sua_ly…]`, và `xoi.sourcesFrom` thêm hai đồ uống kèm.
