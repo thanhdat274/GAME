@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import { DATA, product, supplier, type Category } from '../core/data';
 import type { LiveShopCommand } from '../core/liveSession';
-import { formatMoney, priceOf, shelfQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
+import { formatMoney, priceOf, shelfQty, unlockedProducts, usableShelves, warehouseQty, warehouseTotals } from '../core/state';
 import {
-  assignCounterSlot, assignSlot, buyStock, checkCart, clearSlot, counterFreeForNew, hasPlaceFor, planNewProducts, refillSlot, slotFreeForNew,
+  assignCounterSlot, assignSlot, buyStock, canRefill, checkCart, clearSlot, counterFreeForNew, hasPlaceFor, planNewProducts, refillSlot, slotFreeForNew,
   suggestRestockCart, supplierUnlocked, unitCost, warehouseCapacity, warehouseCellsUsed, type Cart,
 } from '../core/stock';
 import { G, persist } from '../game';
@@ -381,15 +381,25 @@ export class RestockScene extends Phaser.Scene {
     );
   }
 
-  /** Tự bày giữa giờ bán: chỉ xếp món chưa có ô vào ô trống hợp lệ, không nạp ô đang bày. */
+  /** Tự bày giữa giờ bán: nạp các ô đang có nút + xanh, rồi xếp món chưa có ô vào ô trống hợp lệ. */
   private async autoArrange(): Promise<void> {
+    // Ô cần nạp tính trước khi xếp món mới: món mới chưa có ô nên không trùng với các ô này.
+    const refills: { shelf: number; slot: number }[] = [];
+    for (const shelf of usableShelves(G.state)) {
+      G.state.shelves[shelf].forEach((_, slot) => { if (canRefill(G.state, shelf, slot)) refills.push({ shelf, slot }); });
+    }
     const { placements, unplaced } = planNewProducts(G.state);
-    if (!placements.length && !unplaced.length) { toast(this, 'Món nào trong kho cũng đã có ô trên kệ.', H * 0.62); return; }
-    for (const { shelf, slot, productId } of placements) {
+    if (!refills.length && !placements.length && !unplaced.length) { toast(this, 'Kệ đã đầy, món nào trong kho cũng đã có ô.', H * 0.62); return; }
+    let ok = true;
+    for (const { shelf, slot } of refills) {
+      if (G.liveSnapshot) { if (!(ok = await this.liveCommand({ type: 'refillShelf', shelf, slot }))) break; }
+      else refillSlot(G.state, shelf, slot);
+    }
+    for (const { shelf, slot, productId } of ok ? placements : []) {
       if (G.liveSnapshot) { if (!(await this.liveCommand({ type: 'assignShelf', shelf, slot, productId }))) break; }
       else assignSlot(G.state, shelf, slot, productId);
     }
-    if (placements.length) play('pick');
+    if (refills.length || placements.length) play('pick');
     if (!G.liveSnapshot) persist();
     this.renderArrange();
     if (unplaced.length) {
