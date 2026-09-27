@@ -40,6 +40,7 @@ export class Button extends Phaser.GameObjects.Container {
       align: 'center',
     });
     this.add([this.bg, this.label]);
+    this.fitLabel();
     this.setSize(o.w, o.h);
     this.draw();
     this.setInteractive({ useHandCursor: true });
@@ -127,8 +128,30 @@ export class Button extends Phaser.GameObjects.Container {
 
   setText(s: string): this {
     this.label.setText(s);
+    this.fitLabel();
     return this;
   }
+
+  /** Chữ dài hơn nút (màn hẹp, tên mối sỉ dài...) thì thu nhỏ cho vừa thay vì tràn ra ngoài. */
+  private fitLabel(): void {
+    this.label.setScale(1);
+    const room = this.o.w - 10;
+    if (this.label.width > room) this.label.setScale(room / this.label.width);
+  }
+}
+
+/**
+ * Chia đều một hàng nút theo bề ngang màn hình (W): trả về bề rộng mỗi nút và tâm nút thứ i.
+ * Dùng thay cho tọa độ cứng để thêm/bớt nút (mối sỉ, tab...) không bị tràn ra ngoài mép.
+ */
+export function rowLayout(count: number, o: { left?: number; right?: number; gap?: number; maxW?: number } = {}): { w: number; x: (i: number) => number } {
+  const left = o.left ?? 8;
+  const right = o.right ?? W - 8;
+  const gap = o.gap ?? 6;
+  const n = Math.max(1, count);
+  const w = Math.min(o.maxW ?? Infinity, (right - left - gap * (n - 1)) / n);
+  const start = left + (right - left - (w * n + gap * (n - 1))) / 2;
+  return { w, x: (i) => start + w / 2 + i * (w + gap) };
 }
 
 export function panel(scene: Phaser.Scene, x: number, y: number, w: number, h: number, color: number = C.panel): Phaser.GameObjects.Graphics {

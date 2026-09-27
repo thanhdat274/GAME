@@ -19,7 +19,7 @@ import { Hud, HUD_H } from '../ui/hud';
 import { ROW_PITCH, SHELF_VIEW_ROWS, ShelfView, ZONE_NAMES, placeErrorText } from '../ui/shelves';
 import { play, setSoundEnabled, stopMusic, vibrate } from '../ui/sound';
 import { Culler, KineticScroll, clipInteractive, snap } from '../ui/scroll';
-import { Button, dialog, panel, toast } from '../ui/widgets';
+import { Button, dialog, panel, rowLayout, toast } from '../ui/widgets';
 import { openBackupMenu } from '../ui/backupCode';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
@@ -409,8 +409,10 @@ export class MorningScene extends Phaser.Scene {
     const hasWholesaleTabs = supplierUnlocked(G.state, 'anh_ba');
     if (hasWholesaleTabs) {
       supplierLabel.setVisible(false);
-      DATA.suppliers.filter((sp) => supplierUnlocked(G.state, sp.id)).forEach((sp, i) => {
-        const b = new Button(this, 64 + i * 118, 106, { w: 112, h: 28, size: 11, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => { this.supplierId = sp.id; this.refresh(); } });
+      const unlocked = DATA.suppliers.filter((sp) => supplierUnlocked(G.state, sp.id));
+      const row = rowLayout(unlocked.length, { gap: 8 });
+      unlocked.forEach((sp, i) => {
+        const b = new Button(this, row.x(i), 106, { w: row.w, h: 28, size: 11, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => { this.supplierId = sp.id; this.refresh(); } });
         this.supplierBtns[sp.id] = b;
         this.buyLayer.add(b);
       });

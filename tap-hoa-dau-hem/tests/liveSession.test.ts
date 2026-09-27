@@ -106,4 +106,22 @@ describe('phiên tiệm dùng chung', () => {
     expect(placements.map((p) => p.productId)).toEqual([other.id]);
     expect(state.shelves[placements[0].shelf][placements[0].slot].productId).toBeNull();
   });
+
+  it('tự bày dùng lại ô đã bán hết khi kho cũng hết món cũ, không đụng ô còn hàng trong kho', () => {
+    const state = createNewGame();
+    const dry = DATA.products.filter((p) => p.category === 'dry' && p.unlockLevel <= state.level && !p.requiresCold && !p.behindCounter);
+    const [soldOut, restockable, fresh] = dry;
+    // Kệ 0 kín ô: một ô hết hàng và kho hết, một ô hết hàng nhưng kho còn, các ô khác đang bán.
+    state.shelves[0] = state.shelves[0].map((_, i) => ({ productId: `${dry[3 + i]?.id ?? 'mi_goi'}`, qty: 5 }));
+    state.shelves[0][0] = { productId: soldOut.id, qty: 0 };
+    state.shelves[0][1] = { productId: restockable.id, qty: 0 };
+    state.zones[0] = 'dry';
+    for (let r = 1; r < state.shelves.length; r++) state.shelves[r] = state.shelves[r].map(() => ({ productId: null, qty: 0 }));
+    addLot(state, restockable.id, 4, null);
+    addLot(state, fresh.id, 3, null);
+
+    const { placements } = planNewProducts(state);
+    expect(placements).toContainEqual({ shelf: 0, slot: 0, productId: fresh.id });
+    expect(placements.some((p) => p.shelf === 0 && p.slot === 1)).toBe(false);
+  });
 });

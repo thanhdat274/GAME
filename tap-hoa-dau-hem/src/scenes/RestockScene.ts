@@ -9,11 +9,12 @@ import {
 } from '../core/stock';
 import { G, persist } from '../game';
 import { dispatchLiveCommand } from '../services/liveShop';
-import { productIcon, productName } from '../ui/art';
+import { productIcon } from '../ui/art';
 import { PAGE_TOP, ScrollArea, pageFrame } from '../ui/page';
 import { ROW_PITCH, SHELF_VIEW_ROWS, ShelfView, ZONE_NAMES, placeErrorText } from '../ui/shelves';
 import { play } from '../ui/sound';
-import { Button, toast } from '../ui/widgets';
+import { Button, rowLayout, toast } from '../ui/widgets';
+import { ChipGrid } from '../ui/chipGrid';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
 type Tab = 'buy' | 'arrange';
@@ -59,6 +60,8 @@ export class RestockScene extends Phaser.Scene {
   private hint!: Phaser.GameObjects.Text;
   private arrangeBusy = false;
   private arrangeButton!: Button;
+  private chipGrid!: ChipGrid;
+  private chipsEmpty!: Phaser.GameObjects.Text;
   private renderingBuy = false;
   private buyRenderedStart = -1;
 
@@ -129,8 +132,9 @@ export class RestockScene extends Phaser.Scene {
     const top = TAB_Y + 28;
     const suppliers = DATA.suppliers.filter((sp) => supplierUnlocked(G.state, sp.id));
     if (suppliers.length > 1) {
+      const row = rowLayout(suppliers.length, { gap: 8 });
       suppliers.forEach((sp, i) => {
-        const b = new Button(this, 68 + i * 124, top + 10, { w: 112, h: 28, size: 11.5, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => {
+        const b = new Button(this, row.x(i), top + 10, { w: row.w, h: 28, size: 11.5, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => {
           this.supplierId = sp.id;
           this.cart = {};
           this.list.setScroll(0);
@@ -375,6 +379,12 @@ export class RestockScene extends Phaser.Scene {
     this.whLabel = txt(this, 12, this.floorY + 9, '', { size: 14, bold: true, color: HEX.white });
     this.hint = txt(this, 12, this.floorY + 30, '', { size: 11, color: HEX.cream, wrap: W - 24 });
     this.chips = new ScrollArea(this, this.chipTop, FOOT_Y - 4);
+    this.chipsEmpty = txt(this, W / 2, 30, 'Kho trống. Qua tab "Nhập hàng" để mua thêm.', { size: 13, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: 300 }).setVisible(false);
+    this.chips.add(this.chipsEmpty);
+    this.chipGrid = new ChipGrid(this, this.chips, {
+      cols: CHIP_COLS, chipW: CHIP_W, chipH: CHIP_H, x0: 31, y0: CHIP_H / 2 + 4, pitchX: 59.5, pitchY: CHIP_H + 6,
+      onTap: (id, ptr) => this.onChipTap(id, ptr),
+    });
 
     const foot = this.add.graphics();
     foot.fillStyle(C.hud, 1).fillRect(0, FOOT_Y, W, H - FOOT_Y);
@@ -391,39 +401,18 @@ export class RestockScene extends Phaser.Scene {
     this.hint.setText(this.selected
       ? `Chạm ô kệ để bày ${product(this.selected).name}`
       : 'Chạm món rồi chạm ô kệ trống để bày. Hàng 🔐 chạm là vào quầy trống.');
-    this.chips.clear();
-    const items = Object.entries(warehouseTotals(s)).filter(([, q]) => q > 0);
-    if (!items.length) {
-      this.chips.add(txt(this, W / 2, 30, 'Kho trống. Qua tab "Nhập hàng" để mua thêm.', { size: 13, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: 300 }));
-      this.chips.setHeight(60);
-      return;
-    }
-    items.forEach(([id, q], i) => {
-      const x = 31 + (i % CHIP_COLS) * 59.5;
-      const y = CHIP_H / 2 + 4 + Math.floor(i / CHIP_COLS) * (CHIP_H + 6);
-      const p = product(id);
-      const sel = this.selected === id;
-      const bg = this.add.graphics();
-      bg.fillStyle(sel ? C.yellow : C.slot, 1).fillRoundedRect(-CHIP_W / 2, -CHIP_H / 2, CHIP_W, CHIP_H, 10);
-      bg.lineStyle(sel ? 3 : 2, sel ? C.red : C.slotEdge, 1).strokeRoundedRect(-CHIP_W / 2, -CHIP_H / 2, CHIP_W, CHIP_H, 10);
-      const parts: Phaser.GameObjects.GameObject[] = [
-        bg,
-        productIcon(this, 0, -CHIP_H / 2 + 16, p, 26),
-        productName(this, 0, CHIP_H / 2 - 1, p, CHIP_W - 4, { origin: [0.5, 1] }),
-        txt(this, CHIP_W / 2 - 3, -CHIP_H / 2 + 29, `x${q}`, { size: 10, bold: true, color: HEX.white, origin: [1, 1] }).setBackgroundColor('#3b2618cc').setPadding(3, 0, 3, 0),
-      ];
-      if (p.behindCounter) parts.push(txt(this, -CHIP_W / 2 + 3, -CHIP_H / 2 + 2, '🔐', { size: 10, emoji: true }));
-      const chip = this.add.container(x, y, parts).setSize(CHIP_W, CHIP_H).setInteractive({ useHandCursor: true });
-      chip.on('pointerup', (ptr: Phaser.Input.Pointer) => {
-        if (ptr.getDistance() > 10 || !this.chips.inView(ptr.worldY)) return;
-        play('tap');
-        if (p.behindCounter) { this.toCounter(id); return; }
-        this.selected = sel ? null : id;
-        this.renderArrange();
-      });
-      this.chips.add(chip);
-    });
-    this.chips.setHeight(Math.ceil(items.length / CHIP_COLS) * (CHIP_H + 6) + 8);
+    const items = Object.entries(warehouseTotals(s)).filter(([, q]) => q > 0).map(([id, qty]) => ({ id, qty, selected: this.selected === id }));
+    this.chipsEmpty.setVisible(!items.length);
+    const height = this.chipGrid.update(items);
+    this.chips.setHeight(items.length ? height + 8 : 60);
+  }
+
+  private onChipTap(id: string, ptr: Phaser.Input.Pointer): void {
+    if (ptr.getDistance() > 10 || !this.chips.inView(ptr.worldY)) return;
+    play('tap');
+    if (product(id).behindCounter) { this.toCounter(id); return; }
+    this.selected = this.selected === id ? null : id;
+    this.renderArrange();
   }
 
   private onSlotTap(r: number, c: number): void {
@@ -492,7 +481,8 @@ export class RestockScene extends Phaser.Scene {
       this.renderArrange();
       if (unplaced.length) {
         const groups = [...new Set(unplaced.map((id) => ZONE_NAMES[product(id).category as Exclude<Category, 'counter'>]?.toLowerCase() ?? 'sau quầy'))].join(', ');
-        toast(this, `Đã xếp ${placed} món. Không đủ kệ/tủ cho nhóm: ${groups} (${unplaced.length} món)`, H * 0.62, C.redDark);
+        const done = [placed ? `xếp ${placed} món mới` : '', refills.length ? `nạp ${refills.length} ô` : ''].filter(Boolean).join(' · ');
+        toast(this, `${done ? `Đã ${done}. ` : ''}Không đủ kệ/tủ trống cho nhóm: ${groups} (${unplaced.length} món)`, H * 0.62, C.redDark);
       } else {
         toast(this, `Đã tự bày xong${placed ? ` · ${placed} món mới` : ''}${refills.length ? ` · nạp ${refills.length} ô` : ''}.`, H * 0.62, C.greenDark);
       }
