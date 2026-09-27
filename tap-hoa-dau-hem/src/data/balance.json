@@ -350,5 +350,19 @@
     "mealSeconds": 36,
     "extraOrderSeconds": 12,
     "maxExtraOrders": 2
+  },
+  "tax": {
+    "yearlyThreshold": 25000000,
+    "rates": {
+      "goods": { "vat": 0.01, "pit": 0.005 },
+      "food": { "vat": 0.03, "pit": 0.015 },
+      "service": { "vat": 0.05, "pit": 0.02 }
+    },
+    "dueDays": 5,
+    "remindDays": 2,
+    "lateInterestPerDay": 0.005,
+    "enforceAfterDays": 10,
+    "enforceFine": 0.2,
+    "historyBills": 12
   }
 }

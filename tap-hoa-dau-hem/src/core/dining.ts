@@ -1,5 +1,6 @@
 import { DATA, product } from './data';
 import { formatMoney, type DiningTableState, type GameState } from './state';
+import { recordTaxableRevenue } from './tax';
 
 const TABLE_TYPES = new Set(['food_table_2', 'food_table_4', 'drink_table_2']);
 
@@ -69,6 +70,7 @@ export function serveExtraDiningOrder(state: GameState, fixtureUid: number, coun
   slot.qty--;
   state.money += amount;
   state.today.revenue += amount;
+  recordTaxableRevenue(state, 'food', amount);
   state.today.cogs += item.cost;
   state.today.sold[item.id] = (state.today.sold[item.id] ?? 0) + 1;
   state.today.itemsScanned++;

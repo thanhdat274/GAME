@@ -3,6 +3,7 @@ import { Rng, daySeed } from './rng';
 import { takeLots, takeOneFromSlot } from './stock';
 import { weekIndex } from './weeklyQuests';
 import { type GameState, type PartyOrder, type Slot } from './state';
+import { recordTaxableRevenue } from './tax';
 
 export function refreshPartyOrder(state: GameState): void {
   if (state.level < 27) { state.partyOrder = null; return; }
@@ -74,6 +75,7 @@ export function fulfillPartyOrder(state: GameState): { ok: true; reward: number 
   for (const [id, qty] of Object.entries(order.items)) removeStock(state, id, qty);
   order.status = 'fulfilled';
   state.money += order.rewardMoney;
+  recordTaxableRevenue(state, 'goods', order.rewardMoney);
   state.regulars[order.customer] = (state.regulars[order.customer] ?? 0) + 1;
   state.today.journal.push({ m: state.clock, t: `Giao đơn tiệc cho ${order.customer}: +${order.rewardMoney.toLocaleString('vi-VN')}đ và tăng thân thiết.` });
   return { ok: true, reward: order.rewardMoney };

@@ -23,6 +23,7 @@ import { Button, dialog, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
 import { scheduleEvents } from '../core/eventScheduler';
+import { openBills, taxBillOverdue } from '../core/tax';
 
 type Tab = 'buy' | 'arrange';
 
@@ -39,6 +40,7 @@ const TUTORIALS: Record<string, { icon: string; title: string; body: string }> =
   decor: { icon: '🪴', title: 'Trang trí', body: 'Đồ trang trí tăng thu hút, khách tới đông hơn. Mua ở ☰ Tiệm → Trang trí.' },
   freezer: { icon: '❄️', title: 'Tủ đông', body: 'Kem, xúc xích, há cảo... chỉ bày được trong tủ đông (8.000đ điện/ngày).' },
   bargain: { icon: '🙏', title: 'Khách mặc cả', body: 'Bà nội trợ có thể xin bớt 5–15%. Bớt thì khách vui; không bớt thì có thể bỏ về.' },
+  tax: { icon: '🧾', title: 'Đăng ký hộ kinh doanh', body: 'Tiệm đã lớn, phải đóng thuế như ngoài đời! Doanh thu mỗi năm dưới ngưỡng thì miễn thuế; vượt ngưỡng thì nộp VAT + thuế TNCN theo % doanh thu, chốt mỗi tháng. Xem ở ☰ Tiệm → Sổ thuế.' },
   staff: { icon: '👥', title: 'Thuê nhân viên', body: 'Tiệm đông rồi! Vào ☰ Tiệm → Nhân sự để thuê thu ngân. Bé Lan đang chờ ở bảng tuyển dụng.' },
   warehouse_big: { icon: '🏬', title: 'Kho tổng', body: 'Nâng kho lên 120 ô ở ☰ Tiệm → Kho hàng.' },
   refill_staff: { icon: '🧺', title: 'Nhân viên bổ sung kệ', body: 'Thêm chỗ thứ 2. Nhân viên bổ sung kệ tự nạp ô vơi dưới 40%.' },
@@ -273,6 +275,11 @@ export class MorningScene extends Phaser.Scene {
     if (hasFeature(s.level, 'quests')) items.push({ label: '🎯 Nhiệm vụ', color: C.wood, onTap: go('Quests') });
     if (hasFeature(s.level, 'pricing')) items.push({ label: '💲 Giá bán', color: C.wood, onTap: go('Prices') });
     if (hasFeature(s.level, 'credit')) items.push({ label: '📒 Sổ nợ', color: C.wood, onTap: go('Ledger') });
+    if (hasFeature(s.level, 'tax')) {
+      const bills = openBills(s);
+      const late = bills.some((bill) => taxBillOverdue(s, bill));
+      items.push({ label: `🧾 Sổ thuế${bills.length ? ` (${bills.length})` : ''}`, color: late ? C.red : C.wood, onTap: go('Tax') });
+    }
     if (hasFeature(s.level, 'decor')) items.push({ label: '🪴 Trang trí', color: C.wood, onTap: go('Decor') });
     if (hasFeature(s.level, 'staff')) items.push({ label: '👥 Nhân sự', color: C.blue, onTap: go('Staff') });
     if (hasFeature(s.level, 'schedule')) items.push({ label: '📅 Xếp ca', color: C.blue, onTap: go('Schedule') });

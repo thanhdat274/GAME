@@ -214,6 +214,7 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
     branchShipments: Array.isArray(loaded.branchShipments) ? loaded.branchShipments : [],
     storyProgress: loaded.storyProgress ?? [],
     storyStarted: loaded.storyStarted ?? {},
+    tax: loaded.tax ? { ...base.tax, ...loaded.tax, monthRevenue: { ...base.tax.monthRevenue, ...loaded.tax.monthRevenue }, bills: Array.isArray(loaded.tax.bills) ? loaded.tax.bills : [] } : base.tax,
     version: CURRENT_VERSION,
   } as GameState;
   syncActiveStore(result);

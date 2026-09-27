@@ -1,5 +1,5 @@
 import {
-  DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type StaffRole, type StaffStats,
+  DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type StaffRole, type StaffStats, type TaxKind,
 } from './data';
 import type { Review } from './reviews';
 
@@ -224,6 +224,8 @@ export interface DayStats {
   closedEarlyAt?: number;
   /** Số khách đang lựa hàng / chờ vào mà chưa lấy gì, được mời về khi đóng cửa sớm. */
   sentHome?: number;
+  /** Thuế phát sinh trên doanh thu hôm nay (nộp gộp cuối tháng). */
+  taxAccrued: number;
 }
 
 export interface DaySummary {
@@ -264,6 +266,8 @@ export interface DaySummary {
   /** Đóng cửa sớm lúc (phút trong ngày). */
   closedEarlyAt?: number;
   sentHome?: number;
+  /** Thuế phát sinh hôm nay (VAT + TNCN), nộp gộp theo tháng. */
+  tax?: number;
 }
 
 /** Hiệu quả những ngày quản lý gần nhất (cho thu nhập offline). */
@@ -329,6 +333,55 @@ export interface BranchShipment {
   sentDay: number;
   arriveDay: number;
   fee: number;
+}
+
+/** Tờ thuế một tháng: lập khi sang tháng mới, nộp trước hạn để khỏi bị tính tiền chậm nộp. */
+export interface TaxBill {
+  id: number;
+  year: number;
+  month: number;
+  /** Doanh thu tháng theo nhóm ngành (kể cả phần dưới ngưỡng miễn thuế). */
+  revenue: Record<TaxKind, number>;
+  vat: number;
+  pit: number;
+  /** Số thuế còn phải nộp (chưa gồm tiền chậm nộp tính từ `interestFrom`). */
+  amount: number;
+  /** Hạn nộp: hết ngày này. */
+  dueDay: number;
+  /** Tiền chậm nộp tính từ sau ngày này. */
+  interestFrom: number;
+  status: 'open' | 'paid' | 'enforced';
+  /** Đã bị phạt khi cưỡng chế. */
+  fined?: boolean;
+  paidDay?: number;
+  /** Tổng tiền đã nộp cho tờ này (thuế + chậm nộp + phạt). */
+  paidTotal?: number;
+}
+
+export interface TaxState {
+  /** Đã đăng ký hộ kinh doanh (mở ở level có tính năng `tax`). */
+  registered: boolean;
+  registeredDay: number;
+  /** Năm lịch đang tính ngưỡng. */
+  year: number;
+  /** Tháng đang cộng dồn, dạng năm·12 + (tháng − 1). */
+  month: number;
+  /** Doanh thu cả năm đã ghi nhận (để so với ngưỡng miễn thuế). */
+  yearRevenue: number;
+  monthRevenue: Record<TaxKind, number>;
+  monthVat: number;
+  monthPit: number;
+  bills: TaxBill[];
+  nextBillId: number;
+  /** Tổng tiền đã nộp thuế từ trước tới nay. */
+  lifetimePaid: number;
+}
+
+export function emptyTaxState(): TaxState {
+  return {
+    registered: false, registeredDay: 0, year: 0, month: 0, yearRevenue: 0,
+    monthRevenue: { goods: 0, food: 0, service: 0 }, monthVat: 0, monthPit: 0, bills: [], nextBillId: 1, lifetimePaid: 0,
+  };
 }
 
 export interface ActiveEvent {
@@ -438,6 +491,8 @@ export interface GameState {
   branchShipments: BranchShipment[];
   storyProgress: string[];
   storyStarted: Record<string, number>;
+  /** Thuế hộ kinh doanh: dùng chung cho cả chuỗi tiệm (một hộ, một ngưỡng miễn thuế). */
+  tax: TaxState;
 }
 
 /** Số kệ gốc của giai đoạn 1 (vẫn khóa theo level). */
@@ -451,6 +506,7 @@ export function emptyStats(): DayStats {
     badDebt: 0, bargainDiscount: 0, questMoney: 0,
     wages: 0, bonuses: 0, theftCost: 0, thefts: 0, thievesCaught: 0, fines: 0, deliveryFees: 0, deliveries: 0, lateDeliveries: 0,
     complaints: 0, staffExp: 0, hourly: Array.from({ length: Math.ceil((DATA.balance.closeMinute - DATA.balance.openMinute) / 60) }, () => 0), staffPerf: {}, journal: [], managerDay: false, staffLevelUps: [],
+    taxAccrued: 0,
   };
 }
 
@@ -537,6 +593,7 @@ export function createNewGame(): GameState {
     branchShipments: [],
     storyProgress: [],
     storyStarted: {},
+    tax: emptyTaxState(),
   };
   state.stores = [{ id: 'main', name: 'Tiệm chính', kind: 'main', data: storeData(state) }];
   return state;

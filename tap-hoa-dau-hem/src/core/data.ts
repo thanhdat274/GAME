@@ -167,6 +167,28 @@ export interface Balance {
   analytics: { historyDays: number; topCount: number; slowDays: number };
   restock: { suggestThresholdDays: number; suggestQtyDays: number };
   dining: { mealSeconds: number; extraOrderSeconds: number; maxExtraOrders: number };
+  tax: TaxBalance;
+}
+
+export type TaxKind = 'goods' | 'food' | 'service';
+
+/** Thuế hộ kinh doanh: miễn dưới ngưỡng doanh thu năm, vượt ngưỡng thì nộp VAT + TNCN theo % doanh thu. */
+export interface TaxBalance {
+  /** Ngưỡng doanh thu mỗi năm game được miễn thuế. */
+  yearlyThreshold: number;
+  rates: Record<TaxKind, { vat: number; pit: number }>;
+  /** Hạn nộp: số ngày tính từ ngày đầu tháng mới. */
+  dueDays: number;
+  /** Nhắc trước hạn bao nhiêu ngày. */
+  remindDays: number;
+  /** Tiền chậm nộp mỗi ngày quá hạn (tỉ lệ trên số thuế còn nợ). */
+  lateInterestPerDay: number;
+  /** Quá hạn bấy nhiêu ngày thì bị cưỡng chế trừ thẳng vào tiền mặt. */
+  enforceAfterDays: number;
+  /** Tiền phạt khi bị cưỡng chế (tỉ lệ trên số thuế). */
+  enforceFine: number;
+  /** Số tờ thuế đã xong giữ lại để xem lịch sử. */
+  historyBills: number;
 }
 
 export interface StaffBalance {

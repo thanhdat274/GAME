@@ -38,6 +38,7 @@ import {
   spoilFrozenStock,
 } from './stock';
 import { PLAYER, ROLE_TASKS, TaskQueue, type Task } from './tasks';
+import { recordTaxableRevenue, taxKindOfProduct, taxReminders, updateTax } from './tax';
 
 /** 'closed' = tiệm đóng cửa sớm, khách chưa lấy gì được mời về (không chấm sao). */
 export type LeaveReason = 'served' | 'patience' | 'nothing' | 'thief' | 'closed';
@@ -1043,6 +1044,22 @@ export class DaySession {
     return ordinary + (c.comboTipEligible && !automatic && c.shortAttempts === 0 && c.undos === 0 ? DATA.balance.scanTipBonus : 0);
   }
 
+  /** Tách doanh thu một đơn theo nhóm ngành chịu thuế (món chế biến = ăn uống, còn lại = hàng hóa). */
+  private recordSaleTax(c: Customer): void {
+    let gross = 0;
+    let food = 0;
+    for (const line of c.order) {
+      if (line.scanned <= 0) continue;
+      const unit = line.value !== undefined && line.picked > 0 ? line.value / line.picked : priceOf(line.productId, this.state);
+      const value = unit * line.scanned;
+      gross += value;
+      if (taxKindOfProduct(line.productId) === 'food') food += value;
+    }
+    const foodPart = gross > 0 ? Math.round((c.total * food) / gross) : 0;
+    recordTaxableRevenue(this.state, 'food', foodPart);
+    recordTaxableRevenue(this.state, 'goods', c.total - foodPart);
+  }
+
   private completeSale(c: Customer, tip: number, lost: number, credit = false, staff?: Staff): void {
     const b = DATA.balance;
     const t = this.state.today;
@@ -1060,6 +1077,7 @@ export class DaySession {
     if (!credit) {
       this.state.money += c.total + tip - lost;
       t.revenue += c.total;
+      this.recordSaleTax(c);
     }
     t.tips += tip;
     t.overpaid += lost;
@@ -1782,6 +1800,8 @@ export class DaySession {
     this.state.money += o.value + (o.onTime ? o.fee : 0);
     t.revenue += o.value;
     t.cogs += o.cost;
+    recordTaxableRevenue(this.state, 'goods', o.value);
+    if (o.onTime) recordTaxableRevenue(this.state, 'service', o.fee);
     for (const [pid, q] of Object.entries(o.items)) t.sold[pid] = (t.sold[pid] ?? 0) + q;
     this.state.lifetime.sold += units;
     t.deliveries++;
@@ -1902,7 +1922,7 @@ export function endDay(state: GameState): DaySummary {
     debtGiven: t.debtGiven,
     badDebt: t.badDebt,
     netProfit: t.revenue - t.cogs + t.tips - t.overpaid + t.debtCollectedAmount - t.spoiledCost - t.electricity + t.questMoney
-      - t.wages - t.bonuses - t.theftCost + t.fines + t.deliveryFees,
+      - t.wages - t.bonuses - t.theftCost + t.fines + t.deliveryFees - Math.round(t.taxAccrued ?? 0),
     achievements,
     wages: t.wages,
     wageDebt: state.wageDebt,
@@ -1914,6 +1934,7 @@ export function endDay(state: GameState): DaySummary {
     journal: [...t.journal],
     closedEarlyAt: t.closedEarlyAt,
     sentHome: t.sentHome,
+    tax: Math.round(t.taxAccrued ?? 0),
   };
   recordDay(state, summary);
   if (t.managerDay) {
@@ -1992,6 +2013,8 @@ export function startNextDay(state: GameState): number {
   state.clock = DATA.balance.openMinute;
   state.today = emptyStats();
   state.lastSummary = null;
+  updateTax(state);
+  state.morningNotes.push(...taxReminders(state));
   scheduleEvents(state);
   ensureDailyQuests(state);
   ensureWeeklyQuests(state);
@@ -2031,6 +2054,8 @@ export function openShop(state: GameState): void {
   // Buổi sáng: thưởng, trợ cấp sa thải và nhật ký tự nhập hàng vẫn tính cho ngày này.
   state.today.bonuses = morning.bonuses ?? 0;
   state.today.wages = morning.wages ?? 0;
+  // Thuế của doanh thu buổi sáng (giao đơn tiệc, thu nợ) vẫn tính vào tổng kết ngày.
+  state.today.taxAccrued = morning.taxAccrued ?? 0;
   state.today.journal = [...(morning.journal ?? [])];
   state.today.managerDay = state.manager.enabled && hasFeature(state.level, 'manager');
   ensureDailyQuests(state);

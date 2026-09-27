@@ -12,7 +12,7 @@
     {"level": 7, "exp": 1080, "categories": ["dry", "snack", "household", "drink", "fresh"], "shelves": 3, "features": ["fresh", "credit"], "label": "Đồ tươi · Khách ghi sổ"},
     {"level": 8, "exp": 1400, "categories": ["dry", "snack", "household", "drink", "fresh"], "shelves": 3, "features": ["warehouse", "decor"], "label": "Đất B · Nâng cấp kho · Trang trí"},
     {"level": 9, "exp": 1780, "categories": ["dry", "snack", "household", "drink", "fresh", "frozen"], "shelves": 3, "features": ["freezer", "bargain"], "label": "Sân sau · Tủ đông · Đồ đông lạnh · Khách mặc cả"},
-    {"level": 10, "exp": 2200, "categories": ["dry", "snack", "household", "drink", "fresh", "frozen"], "shelves": 3, "staffSlots": 1, "features": ["staff"], "label": "Tuyển thu ngân (1 chỗ)", "traffic": 1.6},
+    {"level": 10, "exp": 2200, "categories": ["dry", "snack", "household", "drink", "fresh", "frozen"], "shelves": 3, "staffSlots": 1, "features": ["staff", "tax"], "label": "Tuyển thu ngân (1 chỗ) · Đăng ký hộ kinh doanh", "traffic": 1.6},
     {"level": 11, "exp": 2900, "categories": ["dry", "snack", "household", "drink", "fresh", "frozen"], "shelves": 3, "staffSlots": 1, "features": ["warehouse_big"], "label": "Kho tổng", "traffic": 1.9},
     {"level": 12, "exp": 3630, "categories": ["dry", "snack", "household", "drink", "fresh", "frozen"], "shelves": 3, "staffSlots": 2, "features": ["refill_staff"], "label": "Nhân viên bổ sung kệ (2 chỗ)", "traffic": 3},
     {"level": 13, "exp": 4390, "categories": ["dry", "snack", "household", "drink", "fresh", "frozen"], "shelves": 3, "staffSlots": 2, "features": ["schedule"], "label": "Xếp ca làm", "traffic": 3.3},
