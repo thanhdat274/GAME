@@ -7,7 +7,9 @@
     <meta name="description" content="Tạp Hóa Đầu Hẻm - game mở tiệm tạp hóa nhỏ: nhập hàng, bày kệ, bán hàng và thối tiền." />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Keep iOS status bar on a solid dark surface; black-translucent lets the
+         game show through the system area and Safari applies a frosted blur. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>Tạp Hóa Đầu Hẻm</title>
@@ -18,6 +20,7 @@
         padding: 0;
         width: 100%;
         height: 100%;
+        min-height: 100%;
         height: 100dvh;
         background: #2b1d14;
         overflow: hidden;
@@ -29,18 +32,9 @@
       }
       #game {
         position: fixed;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        top: constant(safe-area-inset-top);
-        top: env(safe-area-inset-top, 0px);
-        bottom: constant(safe-area-inset-bottom);
-        bottom: env(safe-area-inset-bottom, 0px);
-        left: constant(safe-area-inset-left);
-        left: env(safe-area-inset-left, 0px);
-        right: constant(safe-area-inset-right);
-        right: env(safe-area-inset-right, 0px);
+        inset: 0;
+        inset: constant(safe-area-inset-top) constant(safe-area-inset-right) constant(safe-area-inset-bottom) constant(safe-area-inset-left);
+        inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
         margin: 0;
         padding: 0;
         overflow: hidden;
