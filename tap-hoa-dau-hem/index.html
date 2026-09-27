@@ -13,6 +13,27 @@
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>Tạp Hóa Đầu Hẻm</title>
+    <script>
+      // App iOS mở từ màn hình chính (iOS 26+): hệ thống luôn phủ một dải kính mờ ~50pt ngay dưới
+      // thanh trạng thái, trang web không tắt được. Đẩy game xuống dưới dải đó; phần trống là dải màu
+      // đặc (#edge-top) nên lớp mờ chỉ làm mờ một màu phẳng. Thử độ cao khác: mở link với ?pocket=40
+      // (lưu lại cho lần sau), ?pocket= (rỗng) để về mặc định.
+      (function () {
+        try {
+          var ua = navigator.userAgent;
+          var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+          var standalone = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+          var q = new URLSearchParams(location.search).get('pocket');
+          if (q !== null) {
+            if (q === '') localStorage.removeItem('thdh-pocket');
+            else localStorage.setItem('thdh-pocket', q);
+          }
+          var saved = localStorage.getItem('thdh-pocket');
+          var px = saved !== null ? Number(saved) : ios && standalone ? 48 : 0;
+          if (px > 0) document.documentElement.style.setProperty('--edge-pad', px + 'px');
+        } catch (e) {}
+      })();
+    </script>
     <style>
       html,
       body {
@@ -35,7 +56,7 @@
       #game {
         position: fixed;
         inset: 0;
-        inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+        inset: calc(env(safe-area-inset-top, 0px) + var(--edge-pad, 0px)) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
         margin: 0;
         padding: 0;
         overflow: hidden;
@@ -64,7 +85,7 @@
       #edge-top {
         top: 0;
         background-color: var(--thdh-edge-top, #2b1d14);
-        height: env(safe-area-inset-top, 0px);
+        height: calc(env(safe-area-inset-top, 0px) + var(--edge-pad, 0px));
       }
       #edge-bottom {
         bottom: 0;
