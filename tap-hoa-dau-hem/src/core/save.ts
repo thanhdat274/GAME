@@ -5,7 +5,7 @@ import { createNewGame, defaultFixtures, emptySlots, syncActiveStore, type GameS
 
 export const SAVE_KEY = 'thdh.save.v1';
 export const BACKUP_KEY = 'thdh.save.v1.bak';
-export const CURRENT_VERSION = 5;
+export const CURRENT_VERSION = 6;
 /** Bản lưu trước khi migrate lên version mới, giữ 14 ngày để khôi phục. */
 export const PRE_MIGRATE_KEY = 'thdh.save.premigrate';
 const PRE_MIGRATE_DAYS = 14;
@@ -140,6 +140,20 @@ const migrations: Record<number, Migration> = {
     storyProgress: [],
     storyStarted: {},
   }),
+  /** v5 (giai đoạn 4) -> v6 (tiệm xôi): mọi tiệm cũ là tạp hóa; thêm đơn nội bộ và mẻ nếp rỗng. */
+  5: (state) => ({
+    ...state,
+    version: 6,
+    stores: (Array.isArray(state.stores) ? state.stores as Record<string, unknown>[] : []).map((store) => ({
+      ...store,
+      shopType: 'grocery',
+      data: { ...(store.data as Record<string, unknown> ?? {}), soakBatches: [], cookedRice: [] },
+    })),
+    soakBatches: [],
+    cookedRice: [],
+    internalOrders: [],
+    recurringOrders: [],
+  }),
 };
 
 /** Kệ / tủ từ bản lưu cũ (ít ô hơn) được nới thêm ô trống cho đủ số ô hiện tại. */
@@ -207,7 +221,7 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
       money: loaded.money ?? base.money,
     },
     manager: { ...base.manager, ...loaded.manager },
-    stores: loaded.stores?.length ? loaded.stores : base.stores,
+    stores: (loaded.stores?.length ? loaded.stores : base.stores).map((store) => ({ ...store, shopType: store.shopType ?? 'grocery' })),
     activeStoreId: loaded.activeStoreId ?? 'main',
     calendarStartMonth: loaded.calendarStartMonth ?? base.calendarStartMonth,
     calendarStartYear: loaded.calendarStartYear ?? base.calendarStartYear,
@@ -221,6 +235,10 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
     branchShipments: Array.isArray(loaded.branchShipments) ? loaded.branchShipments : [],
     storyProgress: loaded.storyProgress ?? [],
     storyStarted: loaded.storyStarted ?? {},
+    soakBatches: Array.isArray(loaded.soakBatches) ? loaded.soakBatches : [],
+    cookedRice: Array.isArray(loaded.cookedRice) ? loaded.cookedRice : [],
+    internalOrders: Array.isArray(loaded.internalOrders) ? loaded.internalOrders : [],
+    recurringOrders: Array.isArray(loaded.recurringOrders) ? loaded.recurringOrders : [],
     tax: loaded.tax ? {
       ...base.tax, ...loaded.tax,
       monthRevenue: { ...base.tax.monthRevenue, ...loaded.tax.monthRevenue },

@@ -6,6 +6,7 @@ import {
   sellValue, unlockPlot, type PlaceError,
 } from '../core/layout';
 import { formatMoney, type Fixture, type GameState } from '../core/state';
+import { activeShopType } from '../core/shopTypes';
 import { sellFixture } from '../core/stock';
 import { G, persist } from '../game';
 import { play } from '../ui/sound';
@@ -14,7 +15,7 @@ import { Button, dialog, toast } from '../ui/widgets';
 import { KineticScroll } from '../ui/scroll';
 import { C, H, HEX, W, emoji, setupCamera, txt } from '../ui/theme';
 
-const CELL = 46;
+const CELL = 43;
 const GX = (W - DATA.land.cols * CELL) / 2;
 const GY = 60;
 const PANEL_Y = GY + DATA.land.rows * CELL + 6;
@@ -48,7 +49,8 @@ const PLACE_TEXT: Record<PlaceError, string> = {
 
 /** Những gì có thể mua trong chế độ Sắp xếp (nội thất + đồ trang trí đặt sàn). */
 function catalog(state: GameState): { id: string; name: string; icon: string; cost: number; level: number; decor: boolean }[] {
-  const items = DATA.furniture.filter((f) => !f.fixed).map((f) => ({ id: f.id, name: f.name, icon: f.icon, cost: f.cost, level: f.unlockLevel, decor: false }));
+  const shop = activeShopType(state);
+  const items = DATA.furniture.filter((f) => !f.fixed && shop.allowsFixture(f.id)).map((f) => ({ id: f.id, name: f.name, icon: f.icon, cost: f.cost, level: f.unlockLevel, decor: false }));
   const floor = DATA.decor.filter((d) => d.slot === 'floor' && !d.exclusive).map((d) => ({ id: d.id, name: d.name, icon: d.icon, cost: d.cost, level: Math.max(d.unlockLevel, 8), decor: true }));
   return [...items, ...(hasFeature(state.level, 'decor') || state.level >= 5 ? floor : [])];
 }
@@ -151,15 +153,19 @@ export class BuildScene extends Phaser.Scene {
 
     this.fixtureLayer.removeAll(true);
     this.fixtureLayer.add(emoji(this, GX + door.x * CELL + CELL / 2, GY + door.y * CELL + CELL / 2, '🚪', 20));
-    // Đất khóa: nhãn giá / level ở giữa mảnh.
+    // Đất khóa: nhãn giá / level ở giữa mảnh (ngắt dòng tên dài và ghim trong màn hình để không bị che khuất).
     for (const p of DATA.land.plots) {
       if (s.land.includes(p.id)) continue;
       const cells = plotCells(p);
-      const cx = GX + (cells.reduce((a, c) => a + c.x, 0) / cells.length) * CELL + CELL / 2;
+      const rawCx = GX + (cells.reduce((a, c) => a + c.x, 0) / cells.length) * CELL + CELL / 2;
       const cy = GY + (cells.reduce((a, c) => a + c.y, 0) / cells.length) * CELL + CELL / 2;
       const status = plotStatus(s, p.id);
-      const label = status === 'level' ? `🔒 ${p.name}\nCần level ${p.level}` : `🔒 ${p.name}\n${formatMoney(p.cost)}`;
-      const t = txt(this, cx, cy, label, { size: 11, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center' });
+      const shortName = p.name.includes('·') ? p.name.replace(/\s*·\s*/, '\n') : p.name;
+      const costOrLevel = status === 'level' ? `Cần level ${p.level}` : formatMoney(p.cost);
+      const label = `🔒 ${shortName}\n${costOrLevel}`;
+      const cx = Phaser.Math.Clamp(rawCx, 65, W - 65);
+      const t = txt(this, cx, cy, label, { size: 10, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center' });
+      t.setLineSpacing(-2);
       t.setBackgroundColor(status === 'available' ? '#2a7a43cc' : '#00000088').setPadding(4, 2, 4, 2);
       this.fixtureLayer.add(t);
     }
@@ -370,6 +376,7 @@ export class BuildScene extends Phaser.Scene {
       const msg = result === 'money' ? 'Chưa đủ tiền'
         : result === 'level' ? 'Chưa mở khóa'
         : result === 'plot' ? 'Mở Đất D để mua món này'
+        : result === 'shop' ? 'Loại tiệm này không đặt được món này'
         : result === 'limit' ? `Đã đủ số lượng ${furniture(id).name}`
         : result in PLACE_TEXT ? PLACE_TEXT[result as PlaceError]
         : 'Không đặt được';

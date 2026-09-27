@@ -4,7 +4,7 @@ import { Rng, daySeed } from './rng';
 import { EffectStack } from './effects';
 import {
   fixtureOfShelf, shelfKind, shelfUsable, slotEarliestExp, slotLots, sortLots, totalQty, unlockedProducts,
-  usableShelves, warehouseTotals, type GameState, type Lot, type ShelfZone, type Slot, type SlotLot,
+  usableShelves, warehouseTotals, type GameState, type Lot, type ShelfZone, type Slot, type SlotLot, type StoreData,
 } from './state';
 
 export type Cart = Record<string, number>;
@@ -61,7 +61,7 @@ export function expiryFor(productId: string, day: number): number | null {
   return life ? day + life : null;
 }
 
-export function addLot(state: GameState, productId: string, qty: number, exp: number | null, into: Lot[] = state.warehouse): void {
+export function addLot(state: StoreData, productId: string, qty: number, exp: number | null, into: Lot[] = state.warehouse): void {
   if (qty <= 0) return;
   const same = into.find((lot) => lot.productId === productId && lot.exp === exp);
   if (same) same.qty += qty;
@@ -69,8 +69,8 @@ export function addLot(state: GameState, productId: string, qty: number, exp: nu
   sortLots(into);
 }
 
-/** Lấy tối đa `want` đơn vị từ kho theo hạn sớm nhất trước. */
-export function takeLots(state: GameState, productId: string, want: number): SlotLot[] {
+/** Lấy tối đa `want` đơn vị từ kho theo hạn sớm nhất trước. Nhận `storeView` để lấy từ kho tiệm không đứng. */
+export function takeLots(state: StoreData, productId: string, want: number): SlotLot[] {
   const taken: SlotLot[] = [];
   let left = want;
   sortLots(state.warehouse);

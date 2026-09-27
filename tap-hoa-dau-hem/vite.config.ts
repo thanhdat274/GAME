@@ -1,7 +1,17 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import pkg from './package.json' with { type: 'json' };
+
+// Hiện ở chân trang màn hình chính: version + giờ build (giờ VN), mỗi lần deploy tự đổi.
+const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+const pad = (n: number) => String(n).padStart(2, '0');
+const buildTime = `${pad(vnNow.getUTCDate())}/${pad(vnNow.getUTCMonth() + 1)} ${pad(vnNow.getUTCHours())}:${pad(vnNow.getUTCMinutes())}`;
 
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(pkg.version),
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(buildTime),
+  },
   // Đường dẫn tương đối để chạy được cả ở gốc domain lẫn thư mục con của cổng game.
   base: './',
   build: {

@@ -18,6 +18,8 @@ import { applyOfflineIncome, offlineElapsed, offlineUnlocked, type OfflineReport
 import { formatMoney } from '../core/state';
 import { getServerNow } from '../services/serverTime';
 import { cacheGoogleAvatar } from '../ui/avatar';
+import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
+import { openBackupMenu } from '../ui/backupCode';
 
 const INTRO = [
   { icon: '👵', text: 'Cháu ơi, bà già rồi, đứng tiệm không nổi nữa...' },
@@ -75,6 +77,33 @@ export class TitleScene extends Phaser.Scene {
       soundIcon.setText(G.state.settings.sound ? '🔊' : '🔇');
       if (hasSave()) persist();
     });
+
+    // Nút Kiểm tra cập nhật cạnh nút âm thanh
+    const updateBtnG = this.add.graphics();
+    updateBtnG.fillStyle(0x000000, 0.25).fillCircle(66, 23, 16);
+    updateBtnG.fillStyle(0x3e2314, 1).fillCircle(66, 22, 16);
+    updateBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(66, 22, 16);
+    txt(this, 66, 22, '🔄', { size: 14, emoji: true, origin: [0.5, 0.5] });
+    let checkingUpdate = false;
+    const updateZone = this.add.zone(66, 22, 34, 34).setInteractive({ useHandCursor: true });
+    updateZone.on('pointerup', () => {
+      if (checkingUpdate) return;
+      checkingUpdate = true;
+      toast(this, 'Đang kiểm tra cập nhật…');
+      void checkForUpdate().then((result) => {
+        checkingUpdate = false;
+        if (this.scene.isActive()) toast(this, manualCheckMessage(result));
+      });
+    });
+
+    // Nút Mã sao lưu (xuất / nhập tiến trình để chuyển máy) cạnh nút cập nhật
+    const backupBtnG = this.add.graphics();
+    backupBtnG.fillStyle(0x000000, 0.25).fillCircle(104, 23, 16);
+    backupBtnG.fillStyle(0x3e2314, 1).fillCircle(104, 22, 16);
+    backupBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(104, 22, 16);
+    txt(this, 104, 22, '💾', { size: 14, emoji: true, origin: [0.5, 0.5] });
+    const backupZone = this.add.zone(104, 22, 34, 34).setInteractive({ useHandCursor: true });
+    backupZone.on('pointerup', () => openBackupMenu(this, () => this.scene.restart()));
 
     // Pill tài khoản Google góc trên bên phải
     if (!isMaxLevelSimulation && cloudSaveEnabled()) {
@@ -318,7 +347,9 @@ export class TitleScene extends Phaser.Scene {
     }
 
     // Chân trang hoài niệm
-    txt(this, W / 2, H - 24, '★  Tiệm Tạp Hóa Đầu Hẻm · Phiên bản 0.1  ★', {
+    const version = import.meta.env.VITE_APP_VERSION ?? '0.1.0';
+    const buildTime = import.meta.env.VITE_BUILD_TIME;
+    txt(this, W / 2, H - 24, `★  Tiệm Tạp Hóa Đầu Hẻm · v${version}${buildTime ? ` (${buildTime})` : ''}  ★`, {
       size: 10,
       color: '#dfc7a8',
       origin: [0.5, 0.5],

@@ -10,6 +10,8 @@ import {
   advanceLiveShop,
   applyLiveShopCommand,
   createLiveShopAggregate,
+  decodeLiveShopDoc,
+  encodeLiveShopDoc,
   validateLiveCommandEnvelope,
   type LiveShopAggregate,
 } from '../../src/core/liveSession';
@@ -17,6 +19,8 @@ import { compressSave, decompressSave } from '../../src/core/compress';
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
+// GameState có trường tùy chọn mang giá trị undefined (vd. yesterdayComplaints); Admin SDK mặc định từ chối.
+db.settings({ ignoreUndefinedProperties: true });
 const REGION = 'asia-southeast1';
 const MAX_LIVE_BYTES = 850_000;
 const MAX_ADVANCE_SECONDS = 5;
@@ -30,12 +34,14 @@ export const openSharedShop = onCall(async (request) => {
   const refs = userRefs(uid);
   return db.runTransaction(async (tx) => {
     const liveSnap = await tx.get(refs.live);
-    if (liveSnap.exists) return publicSnapshot(liveSnap.data()!);
+    if (liveSnap.exists) {
+      return publicSnapshot({ ...parseAggregate(liveSnap.data()!), simulatedAtMs: Number(liveSnap.data()!.simulatedAtMs) });
+    }
     const saveSnap = await tx.get(refs.save);
     const aggregate = await aggregateFromSave(saveSnap.data());
     assertPayloadSize(aggregate);
     tx.create(refs.live, {
-      ...aggregate,
+      ...encodeLiveShopDoc(aggregate),
       simulatedAtMs: now,
       updatedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
@@ -55,11 +61,11 @@ export const submitShopCommand = onCall(async (request) => {
   try {
     return await db.runTransaction(async (tx) => {
       const [liveSnap, receiptSnap, saveSnap] = await Promise.all([tx.get(refs.live), tx.get(receipt), tx.get(refs.save)]);
-      if (receiptSnap.exists) return receiptSnap.data()!.response;
+      if (receiptSnap.exists) return JSON.parse(receiptSnap.data()!.response);
       let aggregate = liveSnap.exists
         ? parseAggregate(liveSnap.data()!)
         : await aggregateFromSave(saveSnap.data());
-      let lastCheckpointSequence = Number(liveSnap.data()?.lastCheckpointSequence) || -1;
+      let lastCheckpointSequence = checkpointSequence(liveSnap.data());
       const simulatedAtMs = liveSnap.exists ? Number(liveSnap.data()!.simulatedAtMs) : now;
       const elapsedSeconds = Math.max(0, Math.min(MAX_ADVANCE_SECONDS, (now - simulatedAtMs) / 1000));
       aggregate = advanceLiveShop(aggregate, elapsedSeconds);
@@ -71,7 +77,7 @@ export const submitShopCommand = onCall(async (request) => {
         lastCheckpointSequence = applied.aggregate.sequence;
       }
       tx.set(refs.live, {
-        ...applied.aggregate,
+        ...encodeLiveShopDoc(applied.aggregate),
         simulatedAtMs: now,
         ...(lastCheckpointSequence >= 0 ? { lastCheckpointSequence } : {}),
         updatedAt: FieldValue.serverTimestamp(),
@@ -79,14 +85,15 @@ export const submitShopCommand = onCall(async (request) => {
       tx.create(receipt, {
         deviceId: envelope.deviceId,
         observedSequence: envelope.observedSequence,
-        response,
+        // Chuỗi JSON: kết quả lệnh có thể chứa undefined hoặc mảng lồng mà Firestore không lưu được.
+        response: JSON.stringify(response),
         expireAt: new Date(now + RECEIPT_TTL_MS),
       });
       return response;
     });
   } catch (error) {
     if (error instanceof HttpsError) throw error;
-    logger.error('Live shop command rejected', { uid, commandId: envelope.commandId, error });
+    logger.warn('Live shop command rejected', { uid, commandId: envelope.commandId, error: error instanceof Error ? error.message : String(error) });
     throw new HttpsError('failed-precondition', error instanceof Error ? error.message : 'Không áp dụng được thao tác.');
   }
 });
@@ -112,7 +119,7 @@ export const pulseSharedShop = onCall(async (request) => {
     }
     const elapsedSeconds = Math.max(0, Math.min(MAX_ADVANCE_SECONDS, (now - simulatedAtMs) / 1000));
     const advanced = advanceLiveShop(aggregate, elapsedSeconds);
-    let lastCheckpointSequence = Number(liveSnap.data()?.lastCheckpointSequence) || -1;
+    let lastCheckpointSequence = checkpointSequence(liveSnap.data());
     const checkpoint = shouldCheckpoint(advanced, lastCheckpointSequence);
     if (checkpoint) {
       const saveSnap = await tx.get(refs.save);
@@ -122,7 +129,7 @@ export const pulseSharedShop = onCall(async (request) => {
     if (!liveSnap.exists || advanced.sequence !== aggregate.sequence || checkpoint) {
       assertPayloadSize(advanced);
       tx.set(refs.live, {
-        ...advanced,
+        ...encodeLiveShopDoc(advanced),
         simulatedAtMs: now,
         ...(lastCheckpointSequence >= 0 ? { lastCheckpointSequence } : {}),
         updatedAt: FieldValue.serverTimestamp(),
@@ -164,14 +171,12 @@ async function aggregateFromSave(save: FirebaseFirestore.DocumentData | undefine
 }
 
 function parseAggregate(value: FirebaseFirestore.DocumentData): LiveShopAggregate {
-  const aggregate = value as LiveShopAggregate;
-  if (aggregate.schemaVersion !== 1 || !Number.isSafeInteger(aggregate.sequence) || !aggregate.state) {
-    throw new HttpsError('data-loss', 'Phiên tiệm trên cloud không hợp lệ.');
-  }
+  const aggregate = decodeLiveShopDoc(value);
+  if (!aggregate) throw new HttpsError('data-loss', 'Phiên tiệm trên cloud không hợp lệ.');
   return aggregate;
 }
 
-function publicSnapshot(value: FirebaseFirestore.DocumentData | LiveShopAggregate & { simulatedAtMs: number }) {
+function publicSnapshot(value: LiveShopAggregate & { simulatedAtMs: number }) {
   return {
     schemaVersion: value.schemaVersion,
     sequence: value.sequence,
@@ -210,6 +215,11 @@ async function writeCheckpoint(
     data,
     updatedAt: FieldValue.serverTimestamp(),
   });
+}
+
+function checkpointSequence(live: FirebaseFirestore.DocumentData | undefined): number {
+  const value = live?.lastCheckpointSequence;
+  return Number.isSafeInteger(value) ? value : -1;
 }
 
 function requireUid(uid: string | undefined): string {

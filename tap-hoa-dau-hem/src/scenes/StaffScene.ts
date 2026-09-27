@@ -111,8 +111,8 @@ export class StaffScene extends Phaser.Scene {
     yy = y + h - 34;
     const bw = (W - 40) / 4;
     const btn = (i: number, label: string, color: number, onTap: () => void, enabled = true) =>
-      this.list.add(new Button(this, 20 + bw / 2 + i * (bw + 2), yy, { w: bw - 4, h: 32, label, size: 11, color, onTap: this.list.guard(onTap) }).setEnabled(enabled));
-    btn(0, `🎁 Thưởng ${DATA.balance.staff.bonusAmount / 1000}k`, C.green, () => {
+      this.list.add(new Button(this, 20 + bw / 2 + i * (bw + 2), yy, { w: bw - 4, h: 32, label, size: 10, color, onTap: this.list.guard(onTap) }).setEnabled(enabled));
+    btn(0, `🎁 Thưởng\n${DATA.balance.staff.bonusAmount / 1000}k`, C.green, () => {
       if (!bonusStaff(s, st.id)) { toast(this, 'Không đủ tiền thưởng', H / 2, C.red); return; }
       play('coin');
       persist();

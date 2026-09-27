@@ -201,15 +201,23 @@ export function expToNext(s: Staff): number {
   return cfg().expPerLevel * s.level;
 }
 
-/** Cộng EXP; mỗi lần lên cấp: +1 chỉ số chính, lương +8%. Trả về số cấp vừa lên. */
+/** Chỉ số được +1 khi lên cấp: chỉ số chính, đã tối đa thì chỉ số thấp nhất (null: mọi chỉ số đã tối đa). */
+export function levelUpStat(s: Staff): StatKey | null {
+  const main = roleDef(s.role).mainStat;
+  if (s.stats[main] < 10) return main;
+  const keys = STAT_KEYS.filter((k) => s.stats[k] < 10);
+  return keys.sort((a, b) => s.stats[a] - s.stats[b])[0] ?? null;
+}
+
+/** Cộng EXP; mỗi lần lên cấp: +1 chỉ số chính (tối đa rồi thì chỉ số thấp nhất), lương +8%. Trả về số cấp vừa lên. */
 export function addStaffExp(s: Staff, amount: number): number {
   s.exp += amount;
   let ups = 0;
   while (s.exp >= expToNext(s)) {
     s.exp -= expToNext(s);
     s.level++;
-    const main = roleDef(s.role).mainStat;
-    s.stats[main] = clampStat(s.stats[main] + 1);
+    const stat = levelUpStat(s);
+    if (stat) s.stats[stat] = clampStat(s.stats[stat] + 1);
     s.wage = roundWage(s.wage * cfg().levelWageMul);
     ups++;
   }

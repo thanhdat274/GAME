@@ -41,7 +41,7 @@ Người chơi SHALL có thể thưởng (tiền, +tâm trạng) hoặc nhắc n
 - **THEN** tiền −20.000đ, tâm trạng bé Lan +15
 
 ### Requirement: Lên cấp nhân viên
-Nhân viên SHALL nhận EXP theo việc làm; mỗi lần lên cấp được +1 điểm chỉ số chính của vai trò và lương tăng 8%.
+Nhân viên SHALL nhận EXP theo việc làm; mỗi lần lên cấp được +1 điểm chỉ số chính của vai trò (chỉ số chính đã tối đa 10 thì +1 vào chỉ số thấp nhất) và lương tăng 8%.
 
 #### Scenario: Thu ngân lên cấp 2
 - **WHEN** bé Lan đủ EXP cấp 2

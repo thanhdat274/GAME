@@ -4,7 +4,7 @@ import { EffectStack, validateEventsData } from '../src/core/effects';
 import { scheduleEvents } from '../src/core/eventScheduler';
 import { activateStore, addStoreSnapshot, createNewGame, lotsFrom } from '../src/core/state';
 import { warehouseCapacity, warehouseCellsUsed } from '../src/core/stock';
-import { migrate } from '../src/core/save';
+import { CURRENT_VERSION, migrate } from '../src/core/save';
 import saveV4 from './fixtures/save-v4.json';
 import eventData from '../src/data/events.json';
 import { DATA } from '../src/core/data';
@@ -47,7 +47,7 @@ describe('nền tảng phase 4a', () => {
 
   it('migrate v4 → v5 giữ dữ liệu nhân viên và đóng gói tiệm chính', () => {
     const state = migrate(structuredClone(saveV4) as unknown as { version: number; state: Record<string, unknown> });
-    expect(state.version).toBe(5);
+    expect(state.version).toBe(CURRENT_VERSION);
     expect(state.money).toBe(2450000);
     expect(state.level).toBe(20);
     expect(state.calendarStartMonth).toBe(3);
@@ -123,7 +123,9 @@ describe('nền tảng phase 4a', () => {
   it('mỗi hồ sơ chi nhánh có lưới và nội thất mặc định riêng, không chặn lối vào', async () => {
     const { openBranch } = await import('../src/core/branches');
     const layouts: string[] = [];
-    for (const def of DATA.branches) {
+    // Khu cần tính năng riêng (Tiệm xôi) được kiểm ở tests/shopTypes.test.ts.
+    const grocery = DATA.branches.filter((def) => !def.feature);
+    for (const def of grocery) {
       const state = createNewGame();
       state.level = def.unlockLevel;
       state.money = 5_000_000;
@@ -133,7 +135,7 @@ describe('nền tảng phase 4a', () => {
       expect(def.defaultLayout.some((fixture) => fixture.x === 0 && fixture.y === 7)).toBe(false);
       layouts.push(JSON.stringify(def.defaultLayout));
     }
-    expect(new Set(layouts).size).toBe(3);
+    expect(new Set(layouts).size).toBe(grocery.length);
   });
 
   it('xe hàng trừ kho theo FEFO và giao đến khu nhận ngày sau, giữ hạn dùng', async () => {

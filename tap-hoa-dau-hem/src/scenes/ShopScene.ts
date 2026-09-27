@@ -7,7 +7,7 @@ import { orderShortfall, orderUnits, tripSeconds, type PhoneOrder } from '../cor
 import { roleDef, moodLabel } from '../core/staff';
 import { canGiveCredit } from '../core/ledger';
 import { claimQuest, questDef, questDone, questProgress, questsUnlocked } from '../core/quests';
-import { formatClock, formatMoney, warehouseQty } from '../core/state';
+import { MAX_SHELVES, formatClock, formatMoney, warehouseQty } from '../core/state';
 import { askable, orderTotal } from '../core/customers';
 import { ensureDiningTables } from '../core/dining';
 import { calendarDate } from '../core/calendar';
@@ -17,18 +17,21 @@ import { cloudSaveEnabled } from '../services/firebase';
 import { bakeStatic, bill, customerLook, customerSprite, drawShopInterior, ownerSprite, productIcon, setWalkFrame, staffSprite } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
 import { LiveMap } from '../ui/liveMap';
-import { ShelfView } from '../ui/shelves';
+import { ROW_PITCH, SHELF_VIEW_ROWS, ShelfView } from '../ui/shelves';
 import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sound';
 import { Bar, Button, dialog, floatText, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
 
 const SHELF_TOP = HUD_H + 10;
-const FLOOR_Y = 262;
-const COUNTER_Y = 330;
-const FEET_Y = 352;
-const PANEL_Y = 398;
-const QUEUE_X = [78, 150, 222, 294, 330];
+/** Màn hình đủ cao thì hiện thêm 1 hàng kệ; sàn, quầy và ô bên dưới dời xuống tương ứng. */
+const SHELF_ROWS = SHELF_VIEW_ROWS;
+const DY = (SHELF_ROWS - MAX_SHELVES) * ROW_PITCH;
+const FLOOR_Y = 262 + DY;
+const COUNTER_Y = 330 + DY;
+const FEET_Y = 352 + DY;
+const PANEL_Y = 398 + DY;
+const QUEUE_X = [140, 184, 228, 272, 312];
 const DOOR_X = W + 16;
 const CUSTOMER_SCALE = 1.5;
 type SaleZone = Exclude<Category, 'counter' | 'food' | 'beverage'>;
@@ -75,8 +78,10 @@ export class ShopScene extends Phaser.Scene {
   private cashierX = new Map<string, number>();
   /** Chủ tiệm (người chơi) đứng ở quầy của mình, bên cạnh quầy thu ngân. */
   private ownerAvatar: Phaser.GameObjects.Image | null = null;
-  /** Vị trí chủ tiệm đứng ở quầy của mình, cạnh máy tính tiền. */
-  private readonly ownerX = 150;
+  /** Vị trí chủ tiệm đứng ở quầy của mình (tự động dịch sang trái khi có thêm thu ngân). */
+  private get ownerX(): number {
+    return (this.session && this.session.lanes && this.session.lanes.length > 0) ? 116 : 140;
+  }
   private phoneBtn: Button | null = null;
   private ordersBtn: Button | null = null;
   private managerStatus: Phaser.GameObjects.Text | null = null;
@@ -130,9 +135,9 @@ export class ShopScene extends Phaser.Scene {
         else if (this.session.startRefill(r, c)) play('step');
       },
       onScroll: (atCounter) => this.counterBtn?.setVisible(!atCounter && !this.topDown),
-    }, s);
+    }, s, SHELF_ROWS);
     // Tiệm nhiều kệ: kéo một ngón để xem kệ phía sau, nút này đưa khung nhìn về các kệ sát quầy.
-    this.counterBtn = new Button(this, W - 58, SHELF_TOP + 3 * 64 - 8, { w: 100, h: 26, label: '↓ Về quầy', size: 11, color: C.blue, onTap: () => this.shelves.scrollToCounter() });
+    this.counterBtn = new Button(this, W - 58, SHELF_TOP + SHELF_ROWS * ROW_PITCH - 8, { w: 100, h: 26, label: '↓ Về quầy', size: 11, color: C.blue, onTap: () => this.shelves.scrollToCounter() });
     this.counterBtn.setDepth(260).setVisible(!this.shelves.atCounter);
     this.playMap = null;
     this.awayCover = null;
@@ -235,7 +240,6 @@ export class ShopScene extends Phaser.Scene {
     g.fillStyle(C.woodLight, 1).fillRect(0, COUNTER_Y, W - 56, 10);
     g.fillStyle(C.wood, 1).fillRect(0, COUNTER_Y + 10, W - 56, PANEL_Y - COUNTER_Y - 10);
     for (let x = 16; x < W - 56; x += 40) g.fillStyle(C.woodDark, 1).fillRect(x, COUNTER_Y + 16, 2, PANEL_Y - COUNTER_Y - 22);
-    this.drawCashRegister(g, 100);
     bakeStatic(this, [g], 200);
     txt(this, 22, COUNTER_Y - 10, '🧾', { size: 22, emoji: true, origin: [0.5, 0.5] }).setDepth(201);
     txt(this, W - 90, COUNTER_Y + 30, 'QUẦY', { size: 12, bold: true, color: '#f6e3c4', origin: [0.5, 0.5] }).setDepth(201);
@@ -272,7 +276,7 @@ export class ShopScene extends Phaser.Scene {
     zones.forEach((zone, index) => {
       const col = index % 3;
       const row = Math.floor(index / 3);
-      const button = new Button(this, 54 + col * 102, many ? 280 + row * 29 : 286, {
+      const button = new Button(this, 54 + col * 102, many ? 280 + DY + row * 29 : 286 + DY, {
         w: 96,
         h: many ? 26 : 32,
         label: ZONE_BUTTON[zone],
@@ -287,13 +291,13 @@ export class ShopScene extends Phaser.Scene {
       this.zoneRefillButtons.push({ zone, button });
     });
     if (questsUnlocked(G.state)) {
-      this.questBtn = new Button(this, W - 26, 286, { w: 40, h: 34, label: '🎯', size: 16, color: C.blue, onTap: () => this.showQuests() });
+      this.questBtn = new Button(this, W - 26, 286 + DY, { w: 40, h: 34, label: '🎯', size: 16, color: C.blue, onTap: () => this.showQuests() });
       this.questBtn.setDepth(270);
     }
     // Luôn hiện: tạm dừng tiệm để nhập thêm hàng và bày lên kệ.
-    this.restockBtn = new Button(this, W - 26, 324, { w: 44, h: 36, label: '📦', size: 18, color: C.green, onTap: () => this.openRestock() });
+    this.restockBtn = new Button(this, W - 26, 324 + DY, { w: 44, h: 36, label: '📦', size: 18, color: C.green, onTap: () => this.openRestock() });
     this.restockBtn.setDepth(270);
-    this.add.text(W - 26, 344, 'Nhập hàng', { fontFamily: 'sans-serif', fontSize: '8px', color: '#fff6e2', backgroundColor: '#2f7a3d', padding: { x: 2, y: 1 } }).setOrigin(0.5, 0).setDepth(271);
+    this.add.text(W - 26, 344 + DY, 'Nhập hàng', { fontFamily: 'sans-serif', fontSize: '8px', color: '#fff6e2', backgroundColor: '#2f7a3d', padding: { x: 2, y: 1 } }).setOrigin(0.5, 0).setDepth(271);
   }
 
   /** Bảng nhiệm vụ nổi trong lúc bán (tạm dừng mô phỏng khi mở). */
@@ -317,7 +321,7 @@ export class ShopScene extends Phaser.Scene {
           const r = claimQuest(G.state, index);
           if (r.ok) money += r.money;
         }
-        if (money) { play('coin'); floatText(this, W / 2, 240, `🎯 +${formatMoney(money)}`, HEX.green, 18); }
+        if (money) { play('coin'); floatText(this, W / 2, 240 + DY, `🎯 +${formatMoney(money)}`, HEX.green, 18); }
         if (!G.liveSnapshot) persist();
         resume();
       } }, { label: 'Đóng', color: C.grey, onTap: resume }]
@@ -462,7 +466,7 @@ export class ShopScene extends Phaser.Scene {
     e.on('changeResult', ({ result, given, customer, auto }) => {
       if (auto && customer.changeDue > 0) {
         const v = this.views.get(customer.id);
-        this.sideFloat(v?.sprite.x ?? 80, 306, `🧮 Thối ${formatMoney(customer.changeDue)}`, '#1f5fa0', 13);
+        this.sideFloat(v?.sprite.x ?? 80, 306 + DY, `🧮 Thối ${formatMoney(customer.changeDue)}`, '#1f5fa0', 13);
       }
       if (result === 'short') {
         play('error');
@@ -477,8 +481,8 @@ export class ShopScene extends Phaser.Scene {
       play('cash');
       const v = this.views.get(customer.id);
       const x = v?.sprite.x ?? 80;
-      this.sideFloat(x, 266, `+${formatMoney(amount)}`, HEX.green, 17);
-      if (tip > 0) this.time.delayedCall(250, () => this.sideFloat(x + 40, 248, `+${formatMoney(tip)} tip`, '#b7791f', 14));
+      this.sideFloat(x, 266 + DY, `+${formatMoney(amount)}`, HEX.green, 17);
+      if (tip > 0) this.time.delayedCall(250, () => this.sideFloat(x + 40, 248 + DY, `+${formatMoney(tip)} tip`, '#b7791f', 14));
     });
     e.on('invoice', ({ customer, issued }) => {
       const v = this.views.get(customer.id);
@@ -510,7 +514,7 @@ export class ShopScene extends Phaser.Scene {
     });
     e.on('staffServed', ({ customer }) => {
       const v = this.views.get(customer.id);
-      if (v) this.sideFloat(v.sprite.x, 266, `+${formatMoney(customer.total)}`, HEX.green, 14);
+      if (v) this.sideFloat(v.sprite.x, 266 + DY, `+${formatMoney(customer.total)}`, HEX.green, 14);
     });
     e.on('thiefFleeing', (c) => this.thiefRuns(c));
     e.on('thiefCaught', ({ by, fine }) => {
@@ -539,6 +543,15 @@ export class ShopScene extends Phaser.Scene {
     if (!this.staffLayer) return;
     this.staffLayer.removeAll(true);
     this.cashierX.clear();
+
+    // Máy tính tiền (POS CRT) đặt trên mặt quầy cho quầy của Bạn và từng quầy nhân viên
+    const regG = this.add.graphics();
+    this.drawCashRegister(regG, this.ownerX - 28);
+    this.session.lanes.forEach((_lane, i) => {
+      this.drawCashRegister(regG, this.laneX(i) - 28);
+    });
+    this.staffLayer.add(regG);
+
     this.ownerAvatar = ownerSprite(this, this.ownerX, PANEL_Y + 2).setScale(0.75).setFlipX(true);
     this.ownerAvatar.setVisible(!this.session.closed && this.session.playerAway <= 0);
     this.staffLayer.add([
@@ -596,7 +609,7 @@ export class ShopScene extends Phaser.Scene {
   private updatePhone(): void {
     const ringing = this.session.phoneOrders.find((o) => o.status === 'ringing');
     if (ringing && !this.phoneBtn) {
-      this.phoneBtn = new Button(this, W - 26, 248, { w: 44, h: 34, label: '☎️', size: 18, color: C.red, onTap: () => this.answerPhone() }).setDepth(270);
+      this.phoneBtn = new Button(this, W - 26, 248 + DY, { w: 44, h: 34, label: '☎️', size: 18, color: C.red, onTap: () => this.answerPhone() }).setDepth(270);
       this.tweens.add({ targets: this.phoneBtn, angle: { from: -12, to: 12 }, yoyo: true, repeat: -1, duration: 90 });
     } else if (!ringing && this.phoneBtn) {
       this.tweens.killTweensOf(this.phoneBtn);
@@ -606,7 +619,7 @@ export class ShopScene extends Phaser.Scene {
     const waiting = this.session.phoneOrders.filter((o) => o.status === 'accepted' && !o.courier);
     const courier = G.state.staff.some((st) => st.role === 'delivery' && this.session.workerOf(st.id)?.present);
     if (waiting.length && !courier && !this.ordersBtn) {
-      this.ordersBtn = new Button(this, W - 70, 212, { w: 124, h: 30, label: '', size: 11, color: C.blue, onTap: () => this.selfDeliver() }).setDepth(270);
+      this.ordersBtn = new Button(this, W - 70, 212 + DY, { w: 124, h: 30, label: '', size: 11, color: C.blue, onTap: () => this.selfDeliver() }).setDepth(270);
     }
     if (this.ordersBtn && (!waiting.length || courier)) {
       this.ordersBtn.destroy();
@@ -741,9 +754,15 @@ export class ShopScene extends Phaser.Scene {
         this.tweens.add({ targets: v.sprite, x, duration: dur, ease: 'Linear', onComplete: () => this.stopWalking(walker) });
       }
     };
-    // Không có quầy nhân viên: xếp hàng như giai đoạn 1–2. Có thì quầy người chơi dồn sang trái.
-    const playerX = lanes.length ? [60, 104, 148, 180] : QUEUE_X;
-    this.session.queue.forEach((c, i) => place(c, playerX[Math.min(i, playerX.length - 1)], FEET_Y));
+    // Khách đứng thanh toán thẳng hàng 1-1 với thu ngân tương ứng:
+    // Quầy Bạn: vị trí this.ownerX (khách trả tiền đứng đúng đối diện Bạn).
+    // Quầy nhân viên: vị trí this.laneX(k) (khách trả tiền đứng đúng đối diện nhân viên).
+    // Các khách đợi sau trong hàng xếp lùi dần chéo 2.5D (+14, -5) gọn gàng.
+    if (lanes.length) {
+      this.session.queue.forEach((c, i) => place(c, this.ownerX + Math.min(i, 3) * 14, FEET_Y - Math.min(i, 3) * 5));
+    } else {
+      this.session.queue.forEach((c, i) => place(c, QUEUE_X[Math.min(i, QUEUE_X.length - 1)], FEET_Y));
+    }
     lanes.forEach((lane, k) => {
       lane.queue.forEach((c, i) => place(c, this.laneX(k) + Math.min(i, 3) * 14, FEET_Y - Math.min(i, 3) * 5));
     });
@@ -904,8 +923,9 @@ export class ShopScene extends Phaser.Scene {
       if (G.liveSnapshot) void this.liveCommand({ type: 'resolveBargain', accept });
       else this.session.resolveBargain(accept);
     };
-    L.add(new Button(this, W / 2 - 80, PANEL_Y + 170, { w: 140, h: 52, label: '🤝 Bớt', color: C.green, size: 17, onTap: answer(true) }));
-    L.add(new Button(this, W / 2 + 80, PANEL_Y + 170, { w: 140, h: 52, label: 'Không bớt', color: C.red, size: 16, onTap: answer(false) }));
+    const actionY = Math.max(PANEL_Y + 170, H - 38);
+    L.add(new Button(this, W / 2 - 80, actionY, { w: 140, h: 52, label: '🤝 Bớt', color: C.green, size: 17, onTap: answer(true) }));
+    L.add(new Button(this, W / 2 + 80, actionY, { w: 140, h: 52, label: 'Không bớt', color: C.red, size: 16, onTap: answer(false) }));
   }
 
   /** Khách xin ghi sổ: Cho nợ / Không cho. */
@@ -920,8 +940,9 @@ export class ShopScene extends Phaser.Scene {
       if (G.liveSnapshot) void this.liveCommand({ type: 'resolveCredit', grant });
       else this.session.resolveCredit(grant);
     };
-    L.add(new Button(this, W / 2 - 80, PANEL_Y + 170, { w: 140, h: 52, label: allowed ? '📒 Cho nợ' : 'Sổ nợ đã đầy', color: C.blue, size: allowed ? 17 : 13, onTap: answer(true) }).setEnabled(allowed));
-    L.add(new Button(this, W / 2 + 80, PANEL_Y + 170, { w: 140, h: 52, label: 'Không cho', color: C.red, size: 16, onTap: answer(false) }));
+    const actionY = Math.max(PANEL_Y + 170, H - 38);
+    L.add(new Button(this, W / 2 - 80, actionY, { w: 140, h: 52, label: allowed ? '📒 Cho nợ' : 'Sổ nợ đã đầy', color: C.blue, size: allowed ? 17 : 13, onTap: answer(true) }).setEnabled(allowed));
+    L.add(new Button(this, W / 2 + 80, actionY, { w: 140, h: 52, label: 'Không cho', color: C.red, size: 16, onTap: answer(false) }));
   }
 
   private renderScanning(c: Customer): void {
@@ -1014,18 +1035,21 @@ export class ShopScene extends Phaser.Scene {
     }
     const cartValue = c.order.reduce((sum, line) => sum + (line.value ?? line.picked * product(line.productId).price), 0);
     L.add(txt(this, 18, PANEL_Y + 142, `Giỏ: ${formatMoney(cartValue)}`, { size: 12, color: HEX.muted }));
-    if (!request) L.add(
-      new Button(this, W - 82, PANEL_Y + 178, {
-        w: 136,
-        h: 48,
-        label: 'Quét hết ✓',
-        color: C.red,
-        onTap: () => {
-          if (G.liveSnapshot) void this.liveCommand({ type: 'scanAll' });
-          else if (this.session.scanAll()) play('pick');
-        },
-      }).setEnabled(anyPicked),
-    );
+    if (!request) {
+      const scanY = Math.max(PANEL_Y + 178, H - 38);
+      L.add(
+        new Button(this, W - 82, scanY, {
+          w: 136,
+          h: 48,
+          label: 'Quét hết ✓',
+          color: C.red,
+          onTap: () => {
+            if (G.liveSnapshot) void this.liveCommand({ type: 'scanAll' });
+            else if (this.session.scanAll()) play('pick');
+          },
+        }).setEnabled(anyPicked),
+      );
+    }
   }
 
   private renderPaying(c: Customer): void {
@@ -1040,10 +1064,12 @@ export class ShopScene extends Phaser.Scene {
     this.trayBills = this.add.container(0, 0);
     L.add([this.trayText, this.trayBills]);
 
+    const by = Math.max(PANEL_Y + 204, H - 34);
+    const startY = Math.min(PANEL_Y + 104, by - 96);
     const drawer = DATA.balance.drawer;
     drawer.forEach((v, i) => {
       const x = 50 + (i % 4) * 87;
-      const y = PANEL_Y + 104 + Math.floor(i / 4) * 46;
+      const y = startY + Math.floor(i / 4) * 46;
       const b = bill(this, x, y, v, 80, 40);
       b.setInteractive({ useHandCursor: true });
       b.on('pointerdown', () => b.setScale(0.93));
@@ -1057,7 +1083,6 @@ export class ShopScene extends Phaser.Scene {
       L.add(b);
     });
 
-    const by = PANEL_Y + 204;
     const undo = new Button(this, 58, by, { w: 92, h: 44, label: '↩ Bỏ tờ', color: C.grey, size: 13, onTap: () => {
       if (G.liveSnapshot) void this.liveCommand({ type: 'undoBill' }); else this.session.undoBill();
     } });

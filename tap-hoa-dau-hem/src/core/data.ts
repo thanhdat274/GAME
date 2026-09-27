@@ -14,6 +14,7 @@ import storyJson from '../data/story.json';
 import titlesJson from '../data/titles.json';
 import weeklyQuestsJson from '../data/weeklyQuests.json';
 import partyOrdersJson from '../data/partyOrders.json';
+import shopTypesJson from '../data/shopTypes.json';
 
 export type Category = 'dry' | 'snack' | 'household' | 'drink' | 'fresh' | 'frozen' | 'counter' | 'food' | 'beverage';
 export type ColdKind = 'fridge' | 'freezer';
@@ -167,6 +168,8 @@ export interface Balance {
   analytics: { historyDays: number; topCount: number; slowDays: number };
   restock: { suggestThresholdDays: number; suggestQtyDays: number };
   dining: { mealSeconds: number; extraOrderSeconds: number; maxExtraOrders: number };
+  /** Giới hạn số cửa hàng trong chuỗi (tính cả tiệm chính). */
+  chain: { maxStores: number };
   tax: TaxBalance;
 }
 
@@ -400,6 +403,7 @@ export interface GameData {
   staff: StaffData;
   recipes: RecipeDef[];
   branches: BranchDef[];
+  shopTypes: ShopTypeDef[];
   story: StoryChapter[];
   titles: PrestigeTitle[];
 }
@@ -419,10 +423,43 @@ export interface StoryChapter {
   rivalDays?: number;
 }
 
+/** Một khoảng giờ và hệ số mật độ khách (giống `balance.density`). */
+export interface DensitySegment { from: number; to: number; mul: number }
+
+/** Loại cửa hàng (shopTypes.json): quyết định hàng, nội thất, khách, giờ cao điểm và mô phỏng khi vắng chủ. */
+export interface ShopTypeDef {
+  id: 'grocery' | 'xoi';
+  name: string;
+  icon: string;
+  /** Nhóm hàng được bày bán trên kệ/quầy. */
+  categories: Category[];
+  /** Mặt hàng nhập thêm ngoài các nhóm trên (nguyên liệu, bao gói, đồ uống kèm). */
+  ingredients: string[];
+  /** Nội thất và trạm nấu được đặt. */
+  fixtures: string[];
+  /** Loại khách ghé tiệm. */
+  customers: string[];
+  /** null = dùng `balance.density` như tạp hóa. */
+  densityCurve: DensitySegment[] | null;
+  sim: 'profit_average' | 'production';
+  /** Công thức được nấu ở loại tiệm này. */
+  recipes: string[];
+  /** Mặt hàng loại tiệm này cung cấp cho tiệm khác trong chuỗi. */
+  supplies: string[];
+  /** Mặt hàng ưu tiên lấy từ tiệm nội bộ khi chuỗi có tiệm cung cấp. */
+  sourcesFrom: string[];
+  dineInChance: number;
+  addOns: { productId: string; chance: number }[];
+}
+
 export interface BranchDef {
   id: string;
   name: string;
-  kind: 'market' | 'school' | 'industrial';
+  kind: 'market' | 'school' | 'industrial' | 'xoi';
+  /** Loại cửa hàng khi mở (mặc định grocery). */
+  shopType?: 'grocery' | 'xoi';
+  /** Tính năng level cần có để thấy và mở khu này (ngoài unlockLevel). */
+  feature?: string;
   icon: string;
   unlockLevel: number;
   cost: number;
@@ -514,6 +551,7 @@ export const DATA: GameData = {
   staff: staffJson as StaffData,
   recipes: recipesJson as unknown as RecipeDef[],
   branches: branchesJson as unknown as BranchDef[],
+  shopTypes: shopTypesJson as unknown as ShopTypeDef[],
   story: storyJson as unknown as StoryChapter[],
   titles: titlesJson as unknown as PrestigeTitle[],
 };

@@ -1,4 +1,5 @@
 import { DATA, furniture, type LandPlot, type Rect } from './data';
+import { activeShopType } from './shopTypes';
 import { emptySlots, type Fixture, type GameState } from './state';
 
 export interface Cell { x: number; y: number }
@@ -227,7 +228,7 @@ export function walkTiles(state: GameState, from: Fixture | null, to: Fixture | 
 
 // ---------- Mua / bán / di chuyển nội thất ----------
 
-export type BuyFixtureResult = 'ok' | 'money' | 'level' | 'limit' | 'plot' | PlaceError;
+export type BuyFixtureResult = 'ok' | 'money' | 'level' | 'limit' | 'plot' | 'shop' | PlaceError;
 
 function freeShelfIndex(state: GameState, slots: number): number {
   for (let i = 3; i < state.shelves.length; i++) {
@@ -245,6 +246,7 @@ function freeShelfIndex(state: GameState, slots: number): number {
 export function buyFixture(state: GameState, type: string, x: number, y: number, rot: 0 | 1 = 0): BuyFixtureResult {
   const def = furniture(type);
   if (def.fixed) return 'level';
+  if (!activeShopType(state).allowsFixture(type)) return 'shop';
   if (state.level < def.unlockLevel) return 'level';
   if (def.requiresPlot && !state.land.includes(def.requiresPlot)) return 'plot';
   if (def.limit !== undefined && state.fixtures.filter((f) => f.type === type).length >= def.limit) return 'limit';

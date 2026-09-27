@@ -1,11 +1,11 @@
 ## 1. Đợt A - Nền: truy cập tiệm bất kỳ, loại cửa hàng, bản lưu v6
 
-- [ ] 1.1 Core: kiểu `StoreData` + `storeView(state, storeId)` trả state khi là tiệm đang đứng và snapshot đã gõ kiểu khi là tiệm khác; test đọc/ghi kho tiệm không đứng rồi `activateStore` thấy thay đổi
-- [ ] 1.2 Chuyển `takeLots`/thêm lô, `prepareRecipe`, `expirePreparedFood` sang nhận `StoreData`; 277 test cũ vẫn xanh
-- [ ] 1.3 `shopTypes.json` (`grocery`, `xoi`) + `shopTypes.ts` (`shopTypeOf(store)`, `ShopTypeBehavior`) + trình kiểm tra dữ liệu gộp vào `validate:recipes`; test tham chiếu sai bị báo lỗi
-- [ ] 1.4 `StoreSnapshot.shopType`; `branches.json` thêm trường `shopType` và mục `xoi` (L29, 700.000đ, layout mặc định có 1 bàn 2 chỗ); `openBranch` dùng layout và loại tiệm; giới hạn chuỗi đọc từ `balance.json › chain.maxStores` = 6 (sửa cả thông báo ở `BranchesScene`); test
-- [ ] 1.5 Bản lưu v6: `internalOrders`, `recurringOrders`, `soakBatches`, `cookedRice` (thêm vào `STORE_KEYS`); `migrate_5_to_6` + fixture v5 có 3 tiệm; sao lưu `save_backup_v5`; test kích thước < 1 MB với 6 tiệm
-- [ ] 1.6 Lọc màn Sắp xếp, Nhập hàng, Kệ theo loại tiệm; kiểm thử trên màn hình điện thoại 375x812 rằng tạp hóa và chi nhánh cũ không đổi
+- [x] 1.1 Core: kiểu `StoreData` + `storeView(state, storeId)` trả state khi là tiệm đang đứng và snapshot đã gõ kiểu khi là tiệm khác; test đọc/ghi kho tiệm không đứng rồi `activateStore` thấy thay đổi
+- [x] 1.2 Chuyển `takeLots`/thêm lô, `prepareRecipe`, `expirePreparedFood` sang nhận `StoreData`; 277 test cũ vẫn xanh (nay 441 test)
+- [x] 1.3 `shopTypes.json` (`grocery`, `xoi`) + `shopTypes.ts` (`shopTypeOf(store)`, `ShopTypeBehavior`) + trình kiểm tra dữ liệu gộp vào `validate:recipes`; test tham chiếu sai bị báo lỗi — `xoi` mới tham chiếu nội thất/khách có sẵn; xửng hấp, thùng ngâm, món xôi thêm ở 2.1–2.5
+- [x] 1.4 `StoreSnapshot.shopType`; `branches.json` thêm trường `shopType` và mục `xoi` (L29, 700.000đ, layout mặc định có 1 bàn 2 chỗ); `openBranch` dùng layout và loại tiệm; giới hạn chuỗi đọc từ `balance.json › chain.maxStores` = 6 (sửa cả thông báo ở `BranchesScene`); test — khu `xoi` khóa bằng tính năng `shop_xoi` (thêm vào L29 ở 2.1) nên đợt A chưa hiện với người chơi
+- [x] 1.5 Bản lưu v6: `internalOrders`, `recurringOrders`, `soakBatches`, `cookedRice` (thêm vào `STORE_KEYS`); `migrate_5_to_6` + fixture v5 có 3 tiệm; sao lưu `save_backup_v5`; test kích thước < 1 MB với 6 tiệm — bản trước migrate giữ qua `thdh.save.premigrate` (14 ngày) có sẵn, không thêm khóa `save_backup_v5` riêng
+- [x] 1.6 Lọc màn Sắp xếp, Nhập hàng, Kệ theo loại tiệm; kiểm thử trên màn hình điện thoại 375x812 rằng tạp hóa và chi nhánh cũ không đổi — lọc qua `unlockedProducts` và `buyFixture`/catalog Sắp xếp; chạy bản build ở 375×812 với bản lưu v5 3 tiệm: màn Buổi sáng và Nhập hàng tạp hóa như cũ
 
 ## 2. Đợt B - Tiệm xôi: nguyên liệu, ngâm, hấp, món
 

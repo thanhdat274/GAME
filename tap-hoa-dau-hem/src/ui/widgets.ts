@@ -24,6 +24,7 @@ export class Button extends Phaser.GameObjects.Container {
   private color: number;
   private strokeColor?: number;
   private strokeAlpha?: number;
+  private isPressed = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, private o: ButtonOpts) {
     super(scene, x, y);
@@ -43,11 +44,25 @@ export class Button extends Phaser.GameObjects.Container {
     this.draw();
     this.setInteractive({ useHandCursor: true });
     this.on('pointerdown', () => {
-      if (this.enabled) this.setScale(0.95);
+      if (this.enabled) {
+        this.isPressed = true;
+        this.label.y = 1;
+        this.draw();
+      }
     });
-    this.on('pointerout', () => this.setScale(1));
+    this.on('pointerout', () => {
+      if (this.isPressed) {
+        this.isPressed = false;
+        this.label.y = 0;
+        this.draw();
+      }
+    });
     this.on('pointerup', (p: Phaser.Input.Pointer) => {
-      this.setScale(1);
+      if (this.isPressed) {
+        this.isPressed = false;
+        this.label.y = 0;
+        this.draw();
+      }
       if (!this.enabled || p.getDistance() > 10) return;
       if (o.sound !== false) play('tap');
       o.onTap();
@@ -57,18 +72,34 @@ export class Button extends Phaser.GameObjects.Container {
 
   private draw(): void {
     const { w, h } = this.o;
-    const r = this.o.radius ?? 10;
+    // Phong cách pixel art hoài cổ: góc bo nhỏ gọn 4-6px kiểu nút cơ thập niên 90
+    const r = Math.min(this.o.radius ?? 5, 8);
     const g = this.bg;
     g.clear();
     const base = this.enabled ? this.color : C.grey;
-    g.fillStyle(0x000000, 0.28).fillRoundedRect(-w / 2, -h / 2 + 3.5, w, h, r);
-    g.fillStyle(base, 1).fillRoundedRect(-w / 2, -h / 2, w, h, r);
-    g.fillStyle(0xffffff, 0.18).fillRoundedRect(-w / 2 + 2, -h / 2 + 2, w - 4, Math.floor(h / 2) - 2, { tl: r - 2, tr: r - 2, bl: 0, br: 0 });
-    if (this.strokeColor !== undefined) {
-      g.lineStyle(1.5, this.strokeColor, this.strokeAlpha ?? 0.6).strokeRoundedRect(-w / 2, -h / 2, w, h, r);
-    } else {
-      g.lineStyle(1, 0xffffff, 0.15).strokeRoundedRect(-w / 2, -h / 2, w, h, r);
+    const dy = this.isPressed ? 1.5 : 0;
+
+    // Đáy bóng cơ học 3D (shadow)
+    if (!this.isPressed) {
+      g.fillStyle(0x1a120b, 0.42).fillRoundedRect(-w / 2, -h / 2 + 2.5, w, h, r);
     }
+
+    // Thân nút
+    const bh = this.isPressed ? h - 1 : h - 2;
+    g.fillStyle(base, 1).fillRoundedRect(-w / 2, -h / 2 + dy, w, bh, r);
+
+    // Gờ vát sáng retro pixel (top highlight)
+    g.fillStyle(0xffffff, this.isPressed ? 0.12 : 0.26).fillRect(-w / 2 + 2, -h / 2 + dy + 1, w - 4, 2);
+    // Gờ vát sáng bên trái (left highlight)
+    g.fillStyle(0xffffff, this.isPressed ? 0.08 : 0.18).fillRect(-w / 2 + 2, -h / 2 + dy + 1, 2, Math.max(1, bh - 4));
+
+    // Gờ vát tối retro pixel (bottom shadow)
+    g.fillStyle(0x000000, this.isPressed ? 0.15 : 0.28).fillRect(-w / 2 + 2, -h / 2 + dy + bh - 3, w - 4, 2);
+
+    // Viền sẫm màu pixel art
+    const borderCol = this.strokeColor ?? 0x24160d;
+    const borderAlpha = this.strokeAlpha ?? 0.85;
+    g.lineStyle(1.5, borderCol, borderAlpha).strokeRoundedRect(-w / 2, -h / 2 + dy, w, bh, r);
   }
 
   setEnabled(on: boolean): this {
@@ -102,9 +133,10 @@ export class Button extends Phaser.GameObjects.Container {
 
 export function panel(scene: Phaser.Scene, x: number, y: number, w: number, h: number, color: number = C.panel): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
-  g.fillStyle(0x000000, 0.2).fillRoundedRect(x, y + 3, w, h, 12);
-  g.fillStyle(color, 1).fillRoundedRect(x, y, w, h, 12);
-  g.lineStyle(2, C.panelEdge, 1).strokeRoundedRect(x, y, w, h, 12);
+  g.fillStyle(0x1a120b, 0.35).fillRoundedRect(x, y + 2.5, w, h, 6);
+  g.fillStyle(color, 1).fillRoundedRect(x, y, w, h, 6);
+  g.lineStyle(1, 0xffffff, 0.18).strokeRoundedRect(x + 2, y + 2, w - 4, h - 4, 5);
+  g.lineStyle(1.8, C.panelEdge, 1).strokeRoundedRect(x, y, w, h, 6);
   return g;
 }
 
