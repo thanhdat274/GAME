@@ -3,7 +3,6 @@ import { DATA, hasFeature, product, supplier, type Category, type Product } from
 import { openShop, setManagerMode } from '../core/day';
 import { shiftsWithoutCashier } from '../core/schedule';
 import { letGo, retainStaff } from '../core/staff';
-import { exportBackupCode, importBackupCode } from '../core/save';
 import { MAX_SHELVES, formatMoney, priceOf, shelfCount, totalQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
 import {
   assignCounterSlot, assignSlot, autoArrange, bulkDiscounted, buyStock, checkCart, costTrend, hasPlaceFor, refillCounterSlot,
@@ -20,6 +19,7 @@ import { ROW_PITCH, SHELF_VIEW_ROWS, ShelfView, ZONE_NAMES, placeErrorText } fro
 import { play, setSoundEnabled, stopMusic, vibrate } from '../ui/sound';
 import { Culler, KineticScroll, clipInteractive, snap } from '../ui/scroll';
 import { Button, dialog, panel, toast } from '../ui/widgets';
+import { openBackupMenu } from '../ui/backupCode';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
@@ -1053,7 +1053,7 @@ export class MorningScene extends Phaser.Scene {
     }
 
     y += 50;
-    L.add(new Button(this, W / 2, y, { w: 220, h: 42, label: '💾 Mã sao lưu', color: C.woodDark, onTap: () => this.backupMenu() }));
+    L.add(new Button(this, W / 2, y, { w: 220, h: 42, label: '💾 Mã sao lưu', color: C.woodDark, onTap: () => openBackupMenu(this, () => this.scene.start(sceneForPhase())) }));
 
     y += 52;
     L.add(
@@ -1081,42 +1081,6 @@ export class MorningScene extends Phaser.Scene {
     );
 
     this.pauseLayer = L;
-  }
-
-  /** Xuất / nhập mã sao lưu: phương án chuyển máy khi không đăng nhập Google. */
-  private backupMenu(): void {
-    dialog(this, { icon: '💾', title: 'Mã sao lưu', body: 'Xuất mã để chép tiến trình sang máy khác, hoặc dán mã từ máy cũ.', buttons: [
-      { label: '📤 Xuất mã', color: C.green, onTap: () => { void this.exportCode(); } },
-      { label: '📥 Nhập mã', color: C.blue, onTap: () => this.importCode() },
-      { label: 'Đóng', color: C.grey },
-    ] });
-  }
-
-  private async exportCode(): Promise<void> {
-    persist();
-    const code = await exportBackupCode(G.state);
-    try {
-      await navigator.clipboard.writeText(code);
-      toast(this, `Đã sao chép mã (${code.length} ký tự).\nDán vào ô "Nhập mã" trên máy mới.`, H * 0.3, C.greenDark);
-    } catch {
-      window.prompt('Sao chép mã sao lưu này:', code);
-    }
-  }
-
-  private importCode(): void {
-    const code = window.prompt('Dán mã sao lưu vào đây:');
-    if (!code) return;
-    void importBackupCode(code).then((state) => {
-      dialog(this, { icon: '⚠️', title: 'Ghi đè tiến trình?', body: `Mã: Ngày ${state.day} · Lv ${state.level} · ${formatMoney(state.money)}.\nTiến trình hiện tại (Ngày ${G.state.day}, Lv ${G.state.level}) sẽ bị thay.`, buttons: [
-        { label: 'Hủy', color: C.grey },
-        { label: 'Ghi đè', color: C.red, onTap: () => {
-          state.sync = { ...G.state.sync, dirty: true };
-          G.state = state;
-          persist();
-          this.scene.start(sceneForPhase());
-        } },
-      ] });
-    }).catch((error: unknown) => toast(this, error instanceof Error ? error.message : 'Mã không hợp lệ.', H * 0.3, C.red));
   }
 
   private resume(): void {

@@ -19,6 +19,7 @@ import { formatMoney } from '../core/state';
 import { getServerNow } from '../services/serverTime';
 import { cacheGoogleAvatar } from '../ui/avatar';
 import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
+import { openBackupMenu } from '../ui/backupCode';
 
 const INTRO = [
   { icon: '👵', text: 'Cháu ơi, bà già rồi, đứng tiệm không nổi nữa...' },
@@ -94,6 +95,15 @@ export class TitleScene extends Phaser.Scene {
         if (this.scene.isActive()) toast(this, manualCheckMessage(result));
       });
     });
+
+    // Nút Mã sao lưu (xuất / nhập tiến trình để chuyển máy) cạnh nút cập nhật
+    const backupBtnG = this.add.graphics();
+    backupBtnG.fillStyle(0x000000, 0.25).fillCircle(104, 23, 16);
+    backupBtnG.fillStyle(0x3e2314, 1).fillCircle(104, 22, 16);
+    backupBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(104, 22, 16);
+    txt(this, 104, 22, '💾', { size: 14, emoji: true, origin: [0.5, 0.5] });
+    const backupZone = this.add.zone(104, 22, 34, 34).setInteractive({ useHandCursor: true });
+    backupZone.on('pointerup', () => openBackupMenu(this, () => this.scene.restart()));
 
     // Pill tài khoản Google góc trên bên phải
     if (!isMaxLevelSimulation && cloudSaveEnabled()) {

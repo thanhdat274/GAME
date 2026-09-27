@@ -979,8 +979,10 @@ export class LiveMap {
     const queued = this.session.queue.length + this.session.ready.length + this.session.lanes.reduce((n, l) => n + l.queue.length, 0);
     const counts = `🛒 ${shopping} đang chọn · 🧾 ${queued} chờ tính tiền · 👥 ${this.session.presentStaff().length} NV`;
     if (this.mode === 'play') {
-      L.add(txt(s, 8, this.infoY, this.noteLeft > 0 ? this.note : this.playerStatus(), { size: 11, bold: true, color: HEX.cream, wrap: W - 96 }));
-      L.add(txt(s, 8, this.infoY + 18, counts, { size: 10, color: HEX.cream }));
+      const head = txt(s, 8, this.infoY, this.noteLeft > 0 ? this.note : this.playerStatus(), { size: 11, bold: true, color: HEX.cream, wrap: W - 96 });
+      L.add(head);
+      // Dải trạng thái chỉ đủ chỗ ~2 dòng: dòng thông báo dài bị xuống dòng thì tạm ẩn dòng đếm để không đè chữ.
+      if (head.getWrappedText().length <= 1) L.add(txt(s, 8, this.infoY + 18, counts, { size: 10, color: HEX.cream }));
       return;
     }
     L.add(txt(s, 18, this.infoY, counts, { size: 11, bold: true }));
