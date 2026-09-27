@@ -31,6 +31,17 @@ export const W = 360;
 export const H = computeGameHeight();
 export const ZOOM = 2;
 
+export let SAFE_TOP = 0;
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const div = document.createElement('div');
+  div.style.paddingTop = 'env(safe-area-inset-top, 0px)';
+  document.body.appendChild(div);
+  const realTop = parseFloat(getComputedStyle(div).paddingTop) || 0;
+  document.body.removeChild(div);
+  const w = window.innerWidth || W;
+  SAFE_TOP = Math.round(realTop * (W / w));
+}
+
 export const C = {
   bg: 0x2b1d14,
   hud: 0x3b2618,
@@ -79,7 +90,7 @@ export const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Em
 
 /** Đặt camera để hệ tọa độ luôn là 360x640 dù canvas thật lớn gấp đôi. */
 export function setupCamera(scene: Phaser.Scene): void {
-  scene.cameras.main.setZoom(ZOOM).centerOn(W / 2, H / 2).setBackgroundColor(C.bg);
+  scene.cameras.main.setZoom(ZOOM).centerOn(W / 2, H / 2 - SAFE_TOP).setBackgroundColor(C.bg);
 }
 
 export interface TextOpts {

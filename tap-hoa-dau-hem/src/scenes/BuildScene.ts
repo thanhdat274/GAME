@@ -239,6 +239,9 @@ export class BuildScene extends Phaser.Scene {
       L.add(new Button(this, 322, PANEL_Y + 48, { w: 68, h: 36, label: 'Bỏ chọn', size: 10, color: C.grey, onTap: () => { this.selected = null; this.redraw(); } }));
     } else {
       L.add(txt(this, 12, PANEL_Y + 6, this.placing ? '📍 Đang đặt · chạm lại thẻ để bỏ' : '🛒 Mua thêm', { size: 13, bold: true, color: HEX.cream }));
+      L.add(txt(this, 145, PANEL_Y + 8, `💰 ${formatMoney(s.money)}`, {
+        size: 11, bold: true, color: '#ffe082', origin: [0, 0],
+      }));
       if (this.placing && !DATA.decor.some((d) => d.id === this.placing)) {
         const def = furniture(this.placing);
         L.add(new Button(this, W - 50, PANEL_Y + 20, {
