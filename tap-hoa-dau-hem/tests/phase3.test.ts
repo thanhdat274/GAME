@@ -315,6 +315,14 @@ describe('chỉ số và tâm trạng nhân viên', () => {
     expect(lan.stats.accuracy).toBe(7);
     expect(lan.wage).toBe(27_000);
   });
+
+  it('chỉ số chính đã 10 thì lên cấp +1 vào chỉ số thấp nhất', () => {
+    const s = shop(10);
+    const a = addStaff(s, 'cashier', { speed: 7, accuracy: 10, friendly: 6, stamina: 5 });
+    addStaffExp(a, 40);
+    expect(a.level).toBe(2);
+    expect(a.stats).toEqual({ speed: 7, accuracy: 10, friendly: 6, stamina: 6 });
+  });
 });
 
 describe('lương', () => {

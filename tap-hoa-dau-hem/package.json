@@ -19,7 +19,8 @@
     "deploy:rules": "firebase deploy --only firestore:rules --project tap-hoa-dau-hem",
     "deploy:live": "firebase deploy --only functions,firestore:rules --project tap-hoa-dau-hem",
     "emulators": "firebase emulators:start --only auth,firestore,functions --project demo-tap-hoa-dau-hem",
-    "compare:views": "vite-node scripts/compare-views.ts"
+    "compare:views": "vite-node scripts/compare-views.ts",
+    "test:emulator": "npm run functions:build && firebase emulators:exec --only auth,firestore,functions --project demo-tap-hoa-dau-hem \"vitest run -c vitest.rules.config.ts\""
   },
   "dependencies": {
     "firebase": "^12.19.0",
@@ -27,6 +28,7 @@
     "phaser": "^3.90.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^26.6.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.1",
