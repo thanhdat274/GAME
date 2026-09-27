@@ -319,7 +319,9 @@ export class TitleScene extends Phaser.Scene {
     });
 
     if (G.loadError) {
-      toast(this, 'Bản lưu bị lỗi nên không đọc được.\nĐã giữ bản sao lưu, bạn có thể chơi mới.', H * 0.3, C.red);
+      // Bản lưu từ phiên bản mới hơn: nhắc cập nhật thay vì gợi ý chơi mới (chơi mới sẽ ghi đè).
+      const msg = G.loadError.includes('mới hơn') ? G.loadError : 'Bản lưu bị lỗi nên không đọc được.\nĐã giữ bản sao lưu, bạn có thể chơi mới.';
+      toast(this, msg, H * 0.3, C.red);
       G.loadError = null;
     }
     if (data?.login && !isMaxLevelSimulation && cloudSaveEnabled()) this.time.delayedCall(150, () => { void this.openAccount(); });
