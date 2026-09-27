@@ -31,21 +31,6 @@ export const W = 360;
 export const H = computeGameHeight();
 export const ZOOM = 2;
 
-export let SAFE_TOP = 0;
-export let SAFE_BOTTOM = 0;
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  const div = document.createElement('div');
-  div.style.paddingTop = 'env(safe-area-inset-top, 0px)';
-  div.style.paddingBottom = 'env(safe-area-inset-bottom, 0px)';
-  document.body.appendChild(div);
-  const realTop = parseFloat(getComputedStyle(div).paddingTop) || 0;
-  const realBottom = parseFloat(getComputedStyle(div).paddingBottom) || 0;
-  document.body.removeChild(div);
-  const h = window.innerHeight || H;
-  SAFE_TOP = Math.round(realTop * (H / h));
-  SAFE_BOTTOM = Math.round(realBottom * (H / h));
-}
-
 export const C = {
   bg: 0x2b1d14,
   hud: 0x3b2618,

@@ -21,7 +21,7 @@ import { play, setSoundEnabled, stopMusic, vibrate } from '../ui/sound';
 import { Culler, KineticScroll, clipInteractive, snap } from '../ui/scroll';
 import { Button, dialog, panel, toast } from '../ui/widgets';
 import { openBackupMenu } from '../ui/backupCode';
-import { C, H, HEX, W, setupCamera, txt, SAFE_BOTTOM } from '../ui/theme';
+import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
 import { scheduleEvents } from '../core/eventScheduler';
@@ -525,7 +525,7 @@ export class MorningScene extends Phaser.Scene {
 
     this.cartText = txt(this, 12, FOOT_Y + 9, '', { size: 12.5, bold: true, color: HEX.cream });
     this.cartWarn = txt(this, 12, FOOT_Y + 28, '', { size: 10.5, color: '#ffb4a8', wrap: W - 24 });
-    const suggest = new Button(this, 49, H - 28 - SAFE_BOTTOM, {
+    const suggest = new Button(this, 49, H - 28, {
       w: 78,
       h: 38,
       radius: 5,
@@ -538,8 +538,8 @@ export class MorningScene extends Phaser.Scene {
         this.refresh();
       },
     });
-    const clear = new Button(this, 126, H - 28 - SAFE_BOTTOM, { w: 64, h: 38, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11.5, onTap: () => this.clearCart() });
-    this.buyBtn = new Button(this, 256, H - 28 - SAFE_BOTTOM, { w: 172, h: 40, radius: 5, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => this.buy() });
+    const clear = new Button(this, 126, H - 28, { w: 64, h: 38, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11.5, onTap: () => this.clearCart() });
+    this.buyBtn = new Button(this, 256, H - 28, { w: 172, h: 40, radius: 5, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => this.buy() });
     this.buyLayer.add([foot, this.cartText, this.cartWarn, suggest, clear, this.buyBtn]);
   }
 
@@ -694,7 +694,7 @@ export class MorningScene extends Phaser.Scene {
     foot.fillStyle(C.woodLight, 1).fillRect(0, LIST_BOTTOM + 4, W, 4);
     foot.fillStyle(0x1a120b, 0.4).fillRect(0, LIST_BOTTOM + 8, W, 2);
 
-    const auto = new Button(this, 86, H - 38 - SAFE_BOTTOM, {
+    const auto = new Button(this, 86, H - 38, {
       w: 148,
       h: 46,
       radius: 5,
@@ -713,7 +713,7 @@ export class MorningScene extends Phaser.Scene {
         }
       },
     });
-    const open = new Button(this, 264, H - 38 - SAFE_BOTTOM, { w: 172, h: 48, radius: 5, label: 'Mở cửa ▶', color: C.red, size: 16.5, onTap: () => this.tryOpen() });
+    const open = new Button(this, 264, H - 38, { w: 172, h: 48, radius: 5, label: 'Mở cửa ▶', color: C.red, size: 16.5, onTap: () => this.tryOpen() });
     this.xoiPanel = this.add.container(0, 0);
     this.shelves.setVisible(!this.counterShop);
     this.arrangeLayer.add([this.shelves, this.xoiPanel, g, this.whLabel, this.hint, this.counterTabBtn, this.counterPanel, this.chips, foot, auto, open]);
