@@ -4,7 +4,7 @@ import { questDef, questDone } from '../core/quests';
 import { startNextDay } from '../core/day';
 import { formatClock, formatMoney, formatNumber, type JournalEntry } from '../core/state';
 import { G, persist } from '../game';
-import { card } from '../ui/page';
+import { ScrollArea, card } from '../ui/page';
 import { dispatchLiveCommand } from '../services/liveShop';
 import { play } from '../ui/sound';
 import { Button, panel } from '../ui/widgets';
@@ -37,8 +37,8 @@ export class SummaryScene extends Phaser.Scene {
 
     const hasLevelUp = sum.levelUps.length > 0;
     const top = 58;
-    // Khung vẽ sau khi biết chiều cao nội dung, đặt dưới chữ.
-    const card = this.add.container(0, 0).setDepth(-1);
+    // Mọi thứ tạo từ đây tới hết khung lên cấp được gom vào vùng cuộn phía trên cụm nút (xem cuối hàm).
+    const before = new Set(this.children.list);
     const rows: [string, string, string?][] = [
       ['Doanh thu', formatMoney(sum.revenue)],
       ['Tiền vốn hàng đã bán', `-${formatMoney(sum.cogs)}`, HEX.muted],
@@ -134,18 +134,21 @@ export class SummaryScene extends Phaser.Scene {
       y += tip.height + 10;
     }
     const h = y - top + 12;
-    card.add(panel(this, 16, top, W - 32, h));
+    panel(this, 16, top, W - 32, h);
+    let end = top + h;
 
     if (hasLevelUp) {
       const lv = sum.levelUps[sum.levelUps.length - 1];
       const labels = sum.levelUps.map((l) => `• ${DATA.levels.levels[l - 1].label}`).join('\n');
       const t = txt(this, W / 2, top + h + 36, `🎉 Lên cấp! Level ${lv}`, { size: 22, bold: true, color: '#b7411f', origin: [0.5, 0.5] });
       const list = txt(this, W / 2, top + h + 60, labels, { size: 14, origin: [0.5, 0], align: 'center', wrap: 280 });
-      panel(this, 16, top + h + 12, W - 32, 62 + list.height, 0xfff1c1).setDepth(-1);
+      panel(this, 16, top + h + 12, W - 32, 62 + list.height, 0xfff1c1);
+      end += 12 + 62 + list.height;
       this.tweens.add({ targets: t, scale: 1.12, yoyo: true, repeat: 3, duration: 260 });
       play('levelup');
     } else if (sum.capReached) {
       panel(this, 16, top + h + 12, W - 32, 90, 0xe6f0ff);
+      end += 12 + 90;
       txt(this, W / 2, top + h + 56, `🚧 ${DATA.levels.nextTeaser}\nEXP vẫn được cộng dồn cho bản cập nhật sau!`, {
         size: 14,
         origin: [0.5, 0.5],
@@ -156,6 +159,28 @@ export class SummaryScene extends Phaser.Scene {
 
     const unclaimed = (s.quests?.list ?? []).filter((q) => !q.claimed && questDone(s, questDef(q.id))).length;
     const fresh = s.reviews.filter((r) => r.day === sum.day);
+
+    // Mép trên của cụm nút dưới đáy (Ngày mới, nhiệm vụ, đánh giá); nội dung dài hơn thì cuộn thay vì đè lên nút.
+    const buttonsTop = fresh.length ? H - (unclaimed ? 146 : 100) - 19 : unclaimed ? H - 120 : H - 70;
+    const made = this.children.list.filter((o) => !before.has(o));
+    const area = new ScrollArea(this, top - 4, buttonsTop - 8);
+    // Khung nền vẽ sau chữ nên đưa lên trước để nằm dưới chữ.
+    const ordered = [...made.filter((o) => o instanceof Phaser.GameObjects.Graphics), ...made.filter((o) => !(o instanceof Phaser.GameObjects.Graphics))];
+    for (const o of ordered) (o as unknown as Phaser.GameObjects.Components.Transform).y -= area.top;
+    area.add(ordered);
+    area.setHeight(end - area.top + 8);
+    const overflow = end + 8 - area.bottom;
+    if (overflow > 0) {
+      // Còn nội dung bên dưới: mũi tên gợi ý kéo, và tự cuộn xuống để thấy khung lên cấp.
+      const hint = txt(this, W / 2, area.bottom - 4, '▼', { size: 12, bold: true, color: HEX.muted, origin: [0.5, 1] });
+      this.tweens.add({ targets: hint, y: hint.y + 3, yoyo: true, repeat: -1, duration: 500 });
+      this.events.on('update', () => hint.setVisible(area.content.y > area.top - overflow + 4));
+      if (hasLevelUp || sum.capReached) {
+        const pos = { v: 0 };
+        const auto = this.tweens.add({ targets: pos, v: overflow, delay: 700, duration: 600, ease: 'Sine.easeInOut', onUpdate: () => area.setScroll(pos.v) });
+        this.input.once('pointerdown', () => auto.stop());
+      }
+    }
     if (fresh.length) {
       const bad = fresh.filter((r) => r.stars <= 2).length;
       new Button(this, W / 2, H - (unclaimed ? 146 : 100), {
