@@ -52,6 +52,7 @@ export type LiveShopCommand =
   | { type: 'autoChange' }
   | { type: 'giveChange' }
   | { type: 'setPreference'; key: 'autoScan' | 'autoChange'; value: boolean }
+  | { type: 'closeEarly' }
   | { type: 'nextDay' };
 
 export interface LiveCommandEnvelope {
@@ -130,7 +131,8 @@ export function applyLiveShopCommand(
     case 'autoChange':
     case 'resolveBargain':
     case 'resolveCredit':
-    case 'giveChange': {
+    case 'giveChange':
+    case 'closeEarly': {
       const runtime = requireDayRuntime(aggregate);
       const session = DaySession.restore(state, runtime);
       switch (command.type) {
@@ -145,6 +147,7 @@ export function applyLiveShopCommand(
         case 'giveChange': result = session.giveChange(); break;
         case 'resolveBargain': result = session.resolveBargain(command.accept); break;
         case 'resolveCredit': result = session.resolveCredit(command.grant); break;
+        case 'closeEarly': result = session.closeEarly(); break;
       }
       aggregate.dayRuntime = session.snapshot();
       break;
@@ -226,6 +229,7 @@ function validateLiveShopCommand(command: LiveShopCommand): void {
     case 'undoBill':
     case 'autoChange':
     case 'giveChange':
+    case 'closeEarly':
     case 'nextDay':
       return;
     case 'setPreference':

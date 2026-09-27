@@ -219,6 +219,10 @@ export interface DayStats {
   managerDay: boolean;
   /** Nhân viên lên cấp hôm nay. */
   staffLevelUps: string[];
+  /** Giờ game (phút) chủ tiệm chủ động đóng cửa sớm; không có = mở tới giờ đóng cửa thường. */
+  closedEarlyAt?: number;
+  /** Số khách đang lựa hàng / chờ vào mà chưa lấy gì, được mời về khi đóng cửa sớm. */
+  sentHome?: number;
 }
 
 export interface DaySummary {
@@ -256,6 +260,9 @@ export interface DaySummary {
   /** Nhân viên lên cấp trong ngày (tên). */
   staffLevelUps?: string[];
   journal?: JournalEntry[];
+  /** Đóng cửa sớm lúc (phút trong ngày). */
+  closedEarlyAt?: number;
+  sentHome?: number;
 }
 
 /** Hiệu quả những ngày quản lý gần nhất (cho thu nhập offline). */

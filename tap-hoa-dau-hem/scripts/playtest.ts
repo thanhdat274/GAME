@@ -145,7 +145,7 @@ function playDay(s: GameState, bot: Bot, rng: Rng, stats: RunStats): void {
 function run(bot: Bot, days: number, seed: number): RunStats {
   const rng = new Rng(seed);
   const s = createNewGame();
-  const stats: RunStats = { levelDay: {}, expByDay: [], profits: [], served: 0, left: { patience: 0, nothing: 0, thief: 0 }, grandma: 0, finalMoney: 0, tips: 0, freshSold: 0, freshSpoiled: 0, netProfits: [] };
+  const stats: RunStats = { levelDay: {}, expByDay: [], profits: [], served: 0, left: { patience: 0, nothing: 0, thief: 0, closed: 0 }, grandma: 0, finalMoney: 0, tips: 0, freshSold: 0, freshSpoiled: 0, netProfits: [] };
   for (let i = 0; i < days; i++) {
     const before = s.money;
     stowHolding(s);

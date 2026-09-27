@@ -62,6 +62,9 @@ export class SummaryScene extends Phaser.Scene {
     if (sum.netProfit !== undefined && (sum.spoiledCost || sum.electricity || sum.debtCollectedAmount || sum.wages || sum.theftCost)) {
       rows.push(['Lãi ròng', formatMoney(sum.netProfit), sum.netProfit >= 0 ? HEX.green : HEX.red]);
     }
+    if (sum.closedEarlyAt !== undefined) {
+      rows.push([`🚪 Đóng cửa sớm${sum.sentHome ? ` · mời về ${sum.sentHome} khách` : ''}`, formatClock(sum.closedEarlyAt), '#b7791f']);
+    }
     rows.push(
       ['Khách hài lòng', `${sum.happy} / ${sum.served + sum.left}`],
       ['Khách bỏ về', String(sum.left), sum.left > 0 ? HEX.red : HEX.ink],

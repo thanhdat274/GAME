@@ -29,6 +29,7 @@ import {
   emptyStats, fixtureOfShelf, formatMoney, shelfKind, unlockedProducts, usableShelves, warehouseQty, warehouseTotals,
   type DaySummary, type GameState, type JournalEntry, type Staff, type StaffDayPerf,
   type DiningTableState,
+  formatClock,
 } from './state';
 import {
   assignSlot, canRefill, electricityCost, expireLots, putIntoSlot, receiveDeliveries, refillSlot, shelfCapacity, slotUnitPrice, stowHolding,
@@ -37,7 +38,8 @@ import {
 } from './stock';
 import { PLAYER, ROLE_TASKS, TaskQueue, type Task } from './tasks';
 
-export type LeaveReason = 'served' | 'patience' | 'nothing' | 'thief';
+/** 'closed' = tiệm đóng cửa sớm, khách chưa lấy gì được mời về (không chấm sao). */
+export type LeaveReason = 'served' | 'patience' | 'nothing' | 'thief' | 'closed';
 
 /** Quầy do nhân viên thu ngân đứng (quầy của người chơi là `DaySession.queue`). */
 export interface Lane {
@@ -204,7 +206,7 @@ export class DaySession {
 
   constructor(readonly state: GameState, seed?: number) {
     this.rng = new Rng(seed ?? daySeed(state.day, Math.floor(state.clock)));
-    this.closed = state.clock >= DATA.balance.closeMinute;
+    this.closed = state.clock >= DATA.balance.closeMinute || state.today.closedEarlyAt !== undefined;
   }
 
   /** Restore the exact simulation runtime from a server snapshot. */
@@ -419,8 +421,37 @@ export class DaySession {
     }
   }
 
+  /**
+   * Chủ tiệm đóng cửa sớm (có việc đột xuất): không đón khách mới, không nhận cuộc gọi mới.
+   * Khách đang lựa hàng ra quầy tính tiền với những gì đã lấy; khách chưa lấy gì thì được mời về.
+   * Khách đang xếp hàng vẫn được phục vụ nốt. Trả về false nếu tiệm đã đóng.
+   */
+  closeEarly(): boolean {
+    if (this.closed || this.ended) return false;
+    this.closed = true;
+    this.state.today.closedEarlyAt = Math.floor(this.state.clock);
+    this.log(`🚪 Đóng cửa sớm lúc ${formatClock(this.state.clock)}`);
+    this.events.emit('closing', undefined);
+    for (const c of [...this.entrants]) this.sendHome(c);
+    for (const c of [...this.shoppers]) this.tickBrowse(c, 0);
+    return true;
+  }
+
+  /** Mời khách chưa mua gì ra về khi đóng cửa sớm: không bị tính là khách bỏ về, không chấm sao. */
+  private sendHome(c: Customer): void {
+    for (const line of c.order) this.returnLine(line);
+    this.state.today.sentHome = (this.state.today.sentHome ?? 0) + 1;
+    this.finish(c, 'closed', 0);
+  }
+
   private tickBrowse(c: Customer, dt: number): void {
     if (c.status !== 'browsing') return;
+    if (this.state.today.closedEarlyAt !== undefined && !c.thief) {
+      // Đóng cửa sớm: thôi lựa, ra quầy với những gì đã lấy (chưa lấy gì thì về).
+      if (!c.order.some((line) => line.picked > 0) && !c.order.some((line) => line.counterLine)) this.sendHome(c);
+      else this.finishBrowsing(c);
+      return;
+    }
     const lines = c.order.filter((line) => !line.counterLine);
     if (c.browseIndex >= lines.length || c.shopBudget <= 0) {
       this.finishBrowsing(c);
@@ -1047,9 +1078,11 @@ export class DaySession {
   private finish(c: Customer, reason: LeaveReason, stars: number): void {
     const wasFront = this.front === c;
     c.status = 'done';
-    recordRating(this.state, stars);
-    this.state.today.ratingSum += stars;
-    this.state.today.ratingCount++;
+    if (reason !== 'closed') {
+      recordRating(this.state, stars);
+      this.state.today.ratingSum += stars;
+      this.state.today.ratingCount++;
+    }
     this.removeFrom(this.queue, c);
     this.removeFrom(this.shoppers, c);
     this.removeFrom(this.entrants, c);
@@ -1785,6 +1818,8 @@ export function endDay(state: GameState): DaySummary {
     deliveryFees: t.deliveryFees,
     staffLevelUps: [...t.staffLevelUps],
     journal: [...t.journal],
+    closedEarlyAt: t.closedEarlyAt,
+    sentHome: t.sentHome,
   };
   recordDay(state, summary);
   if (t.managerDay) {
