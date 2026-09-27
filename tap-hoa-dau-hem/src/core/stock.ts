@@ -510,6 +510,12 @@ export function counterFreeForNew(state: GameState, slot: number, productId: str
   return !!s && s.qty === 0 && s.productId !== productId;
 }
 
+/** Khu này đã có kệ khác cùng loại tủ nhận chưa (tự bày: mỗi khu chỉ một kệ). */
+function zoneTakenElsewhere(state: GameState, shelf: number, zone: ShelfZone, zoneAt: (r: number) => ShelfZone = (r) => zoneOf(state, r)): boolean {
+  const kind = shelfKind(state, shelf);
+  return usableShelves(state).some((r) => r !== shelf && zoneAt(r) === zone && shelfKind(state, r) === kind);
+}
+
 /**
  * Giữa giờ bán: mỗi món trong kho chưa có ô nào trên kệ được xếp vào một ô trống hợp lệ.
  * Không nạp thêm ô đang bày (việc đó dùng nút + có thời gian nạp ở màn bán).
@@ -520,22 +526,28 @@ export function planNewProducts(state: GameState): { placements: { shelf: number
   const zones = new Map(rows.map((r) => [r, zoneOf(state, r)]));
   const placements: { shelf: number; slot: number; productId: string }[] = [];
   const unplaced: string[] = [];
-  const ids = Object.entries(warehouseTotals(state)).filter(([id, q]) => q > 0 && !product(id).behindCounter).map(([id]) => id);
-  for (const id of ids) {
-    if (rows.some((r) => state.shelves[r].some((s) => s.productId === id))) continue;
+  const ids = Object.entries(warehouseTotals(state))
+    .filter(([id, q]) => q > 0 && !product(id).behindCounter && !rows.some((r) => state.shelves[r].some((s) => s.productId === id)))
+    .map(([id]) => id);
+  const place = (id: string, spill: boolean): boolean => {
     const p = product(id);
-    let spot: { shelf: number; slot: number } | null = null;
     for (const r of rows) {
       if (kindAccepts(state, r, p)) continue;
       const zone = zones.get(r);
       if (zone && zone !== p.category) continue;
+      if (!zone && !spill && zoneTakenElsewhere(state, r, p.category as ShelfZone, (o) => zones.get(o) ?? null)) continue;
       const c = state.shelves[r].findIndex((s, i) => !s.productId && !taken.has(`${r}:${i}`));
-      if (c >= 0) { spot = { shelf: r, slot: c }; if (!zone) zones.set(r, p.category as ShelfZone); break; }
+      if (c < 0) continue;
+      if (!zone) zones.set(r, p.category as ShelfZone);
+      taken.add(`${r}:${c}`);
+      placements.push({ shelf: r, slot: c, productId: id });
+      return true;
     }
-    if (!spot) { unplaced.push(id); continue; }
-    taken.add(`${spot.shelf}:${spot.slot}`);
-    placements.push({ ...spot, productId: id });
-  }
+    return false;
+  };
+  // Lượt 1: mỗi kệ một khu. Lượt 2: món dư của khu đã kín mới tràn sang kệ còn trống.
+  const left = ids.filter((id) => !place(id, false));
+  for (const id of left) if (!place(id, true)) unplaced.push(id);
   return { placements, unplaced };
 }
 
@@ -552,7 +564,13 @@ export function autoArrange(state: GameState): string[] {
   const at = (p: { r: number; c: number }) => state.shelves[p.r][p.c];
   const demand = (id: string) => (state.yesterdaySold[id] ?? 0) + (state.yesterdayMissed[id] ?? 0);
   const has = (id: string) => state.warehouse.some((lot) => lot.productId === id && lot.qty > 0);
-  const fits = (r: number, id: string) => !kindAccepts(state, r, product(id)) && (zoneOf(state, r) === null || zoneOf(state, r) === product(id).category);
+  // Kệ trống chỉ nhận khu chưa có kệ nào cùng loại tủ nhận: mỗi kệ một khu khác nhau.
+  const fits = (r: number, id: string) => {
+    if (kindAccepts(state, r, product(id))) return false;
+    const zone = zoneOf(state, r);
+    const category = product(id).category as ShelfZone;
+    return zone === category || (zone === null && !zoneTakenElsewhere(state, r, category));
+  };
 
   // Save/test state created before zones existed: infer a zone from the category occupying most slots.
   for (const r of rows) {
@@ -585,6 +603,32 @@ export function autoArrange(state: GameState): string[] {
       clearSlot(state, p.r, p.c);
     }
   }
+
+  // Mỗi khu chỉ một kệ (cùng loại tủ): kệ trùng khu dồn món sang kệ chính của khu nếu còn ô trống,
+  // phần còn lại về kho (nếu kho còn chỗ), rồi bỏ khu để nhường kệ cho nhóm hàng khác.
+  const filled = (r: number) => state.shelves[r].filter((s) => s.productId).length;
+  for (const r of rows) {
+    const zone = zoneOf(state, r);
+    if (!zone) continue;
+    const main = rows
+      .filter((o) => zoneOf(state, o) === zone && shelfKind(state, o) === shelfKind(state, r))
+      .sort((a, b) => filled(b) - filled(a) || a - b)[0];
+    if (main === r || state.shelves[r].some((s) => s.clearance !== undefined)) continue;
+    const onMain = new Set(state.shelves[main].map((s) => s.productId));
+    let free = state.shelves[main].filter((s) => !s.productId).length;
+    const after = warehouseTotals(state);
+    const moves: string[] = [];
+    for (const s of state.shelves[r]) {
+      if (!s.productId) continue;
+      after[s.productId] = (after[s.productId] ?? 0) + s.qty;
+      if (!onMain.has(s.productId) && free > 0) { free--; onMain.add(s.productId); moves.push(s.productId); }
+    }
+    for (const id of moves) after[id] = Math.max(0, after[id] - shelfCapacity(state, main));
+    if (warehouseCellsUsed(after) > capacity) continue;
+    for (let c = 0; c < state.shelves[r].length; c++) clearSlot(state, r, c);
+    state.zones[r] = null;
+    for (const id of moves) assignSlot(state, main, state.shelves[main].findIndex((s) => !s.productId), id);
+  }
   for (const p of slots) refillSlot(state, p.r, p.c);
 
   const inWarehouse = () => {
@@ -612,7 +656,7 @@ export function autoArrange(state: GameState): string[] {
         .filter((p) => zoneOf(state, p.r) === category && !kindAccepts(state, p.r, product(id)) && (counts.get(at(p).productId!) ?? 0) >= 2)
         .sort((a, b) => (counts.get(at(b).productId!)! - counts.get(at(a).productId!)!) || at(a).qty - at(b).qty)[0];
     }
-    if (!target) {
+    if (!target && !rows.some((r) => zoneOf(state, r) === category && !kindAccepts(state, r, product(id)))) {
       // No shelf has this zone yet: reassign the least useful compatible shelf and return its stock to warehouse.
       const donor = rows
         .filter((r) => !claimed.has(r) && zoneOf(state, r) !== category && !kindAccepts(state, r, product(id)))
@@ -647,6 +691,16 @@ export function autoArrange(state: GameState): string[] {
       .sort((a, b) => demand(b) - demand(a))[0];
     if (!next) continue;
     assignSlot(state, p.r, p.c, next);
+  }
+
+  // 3) Món dư của khu đã kín (khu có nhiều món hơn số ô một kệ) tràn sang kệ còn trống,
+  // chỉ sau khi mọi nhóm khác đã có kệ; kệ tràn ưu tiên kệ cùng khu đã tràn trước đó.
+  for (const id of inWarehouse()) {
+    if (slotsOf(id).length > 0) continue;
+    const category = product(id).category;
+    const open = slots.filter((p) => !at(p).productId && !kindAccepts(state, p.r, product(id)));
+    const target = open.find((p) => zoneOf(state, p.r) === category) ?? open.find((p) => zoneOf(state, p.r) === null);
+    if (target) assignSlot(state, target.r, target.c, id);
   }
   return inWarehouse().filter((id) => slotsOf(id).length === 0);
 }
