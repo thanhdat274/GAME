@@ -480,6 +480,10 @@ export class ShopScene extends Phaser.Scene {
       this.sideFloat(x, 266, `+${formatMoney(amount)}`, HEX.green, 17);
       if (tip > 0) this.time.delayedCall(250, () => this.sideFloat(x + 40, 248, `+${formatMoney(tip)} tip`, '#b7791f', 14));
     });
+    e.on('invoice', ({ customer, issued }) => {
+      const v = this.views.get(customer.id);
+      this.sideFloat(v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 90, issued ? '🧾 Xuất hóa đơn' : '🧾 Không có hóa đơn!', issued ? HEX.green : HEX.red, 13);
+    });
     e.on('customerLeft', ({ customer, reason, stars }) => this.removeCustomer(customer, reason, stars));
     e.on('refillDone', () => play('pick'));
     e.on('closing', () => {

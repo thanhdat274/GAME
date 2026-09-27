@@ -3,6 +3,8 @@ import type { GameState } from './state';
 
 export function chapterAvailable(state: GameState, chapter: StoryChapter): boolean {
   const index = DATA.story.findIndex((item) => item.id === chapter.id);
+  // Chương đã bắt đầu (kể cả từ bản cũ trước khi chèn chương mới vào giữa) vẫn tiếp tục được.
+  if (chapterStarted(state, chapter.id)) return true;
   return state.level >= chapter.unlockLevel && (index === 0 || state.storyProgress.includes(DATA.story[index - 1].id));
 }
 
@@ -36,6 +38,7 @@ export function chapterComplete(state: GameState, chapter: StoryChapter): boolea
     const meals = new Set(DATA.recipes.filter((recipe) => recipe.category === 'food').map((recipe) => recipe.output));
     return state.analytics.reduce((total, record) => total + Object.entries(record.sold).reduce((n, [id, qty]) => n + (meals.has(id) ? qty : 0), 0), 0) >= 10;
   }
+  if (chapter.id === 'tax_officer') return state.tax.bestOnTimeStreak >= 3;
   if (chapter.id === 'open_chain') return state.stores.some((store) => store.kind !== 'main');
   return false;
 }

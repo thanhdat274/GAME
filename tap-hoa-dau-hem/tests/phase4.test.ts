@@ -169,7 +169,7 @@ describe('nền tảng phase 4a', () => {
     const { beginChapter, chapterComplete } = await import('../src/core/story');
     const state = createNewGame();
     state.level = 24;
-    state.storyProgress = ['homecoming', 'growing_shop', 'first_helper'];
+    state.storyProgress = ['homecoming', 'growing_shop', 'first_helper', 'tax_officer'];
     expect(beginChapter(state, 'rival_supermarket')).toBe(true);
     expect(state.activeEvents.find((event) => event.id === 'supermarket_rival')?.endsDay).toBe(10);
     state.day = 10;

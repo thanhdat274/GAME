@@ -2,6 +2,7 @@ import { DATA, type Category, type CustomerType } from './data';
 import type { Rng } from './rng';
 import { priceOf, unlockedCategories, unlockedProducts, usableShelves, type GameState } from './state';
 import { EffectStack } from './effects';
+import { customerWantsInvoice } from './tax';
 
 export interface OrderLine {
   productId: string;
@@ -58,6 +59,8 @@ export interface Customer {
   bargainResolved?: boolean;
   /** Khách xin ghi sổ thay vì trả tiền. */
   wantsCredit?: boolean;
+  /** Khách công ty xin xuất hóa đơn khi tính tiền. */
+  wantsInvoice?: boolean;
   creditResolved?: boolean;
   /** Giảm giá đã đồng ý (%). */
   discountPct?: number;
@@ -207,6 +210,7 @@ export function createCustomer(id: number, level: number, rng: Rng, state?: Game
   if (cart) customer.cart = true;
   if (bargainPct) customer.bargainPct = bargainPct;
   if (wantsCredit) customer.wantsCredit = true;
+  if (customerWantsInvoice(state, type.id, id)) customer.wantsInvoice = true;
   return customer;
 }
 

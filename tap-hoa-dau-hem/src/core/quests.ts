@@ -100,6 +100,7 @@ export function rerollQuest(state: GameState, index: number): boolean {
 // ---------- Thành tựu ----------
 
 export function achievementProgress(state: GameState, a: AchievementDef): number {
+  if (a.metric === 'taxOnTime') return state.tax?.bestOnTimeStreak ?? 0;
   return state.lifetime[a.metric] ?? 0;
 }
 

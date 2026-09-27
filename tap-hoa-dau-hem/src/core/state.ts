@@ -1,5 +1,5 @@
 import {
-  DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type StaffRole, type StaffStats,
+  DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type StaffRole, type StaffStats, type TaxKind,
 } from './data';
 import type { Review } from './reviews';
 
@@ -224,6 +224,8 @@ export interface DayStats {
   closedEarlyAt?: number;
   /** Số khách đang lựa hàng / chờ vào mà chưa lấy gì, được mời về khi đóng cửa sớm. */
   sentHome?: number;
+  /** Thuế phát sinh trên doanh thu hôm nay (nộp gộp cuối tháng). */
+  taxAccrued: number;
 }
 
 export interface DaySummary {
@@ -264,6 +266,12 @@ export interface DaySummary {
   /** Đóng cửa sớm lúc (phút trong ngày). */
   closedEarlyAt?: number;
   sentHome?: number;
+  /** Thuế phát sinh hôm nay (VAT + TNCN/TNDN), nộp gộp theo tháng. */
+  tax?: number;
+  /** TNCN khấu trừ từ lương nhân viên hôm nay (nộp thay, không phải chi phí). */
+  staffPit?: number;
+  /** Tiền chuyển vào quỹ thuế hôm nay. */
+  taxReserved?: number;
 }
 
 /** Hiệu quả những ngày quản lý gần nhất (cho thu nhập offline). */
@@ -331,6 +339,113 @@ export interface BranchShipment {
   sentDay: number;
   arriveDay: number;
   fee: number;
+}
+
+/** Tờ thuế một tháng (hoặc tờ truy thu sau thanh tra): nộp trước hạn để khỏi bị tính tiền chậm nộp. */
+export interface TaxBill {
+  id: number;
+  year: number;
+  month: number;
+  /** 'month': thuế tháng; 'audit': truy thu + phạt sau thanh tra. */
+  kind?: 'month' | 'audit';
+  /** Hình thức lúc lập tờ: hộ kinh doanh (VAT + TNCN) hay doanh nghiệp (VAT + TNDN). */
+  mode?: TaxMode;
+  /** Doanh thu tháng theo nhóm ngành (kể cả phần dưới ngưỡng miễn thuế). */
+  revenue: Record<TaxKind, number>;
+  vat: number;
+  /** Hộ kinh doanh: thuế TNCN của chủ hộ; doanh nghiệp: thuế TNDN. */
+  pit: number;
+  /** Thuế TNCN đã khấu trừ từ lương nhân viên, nộp thay. */
+  staffPit?: number;
+  /** Số thuế còn phải nộp (chưa gồm tiền chậm nộp tính từ `interestFrom`). */
+  amount: number;
+  /** Hạn nộp: hết ngày này. */
+  dueDay: number;
+  /** Tiền chậm nộp tính từ sau ngày này. */
+  interestFrom: number;
+  status: 'open' | 'paid' | 'enforced';
+  /** Đã bị phạt khi cưỡng chế. */
+  fined?: boolean;
+  paidDay?: number;
+  /** Tổng tiền đã nộp cho tờ này (thuế + chậm nộp + phạt). */
+  paidTotal?: number;
+  /** Khai bớt doanh thu: số thuế đã giấu (thanh tra phát hiện sẽ truy thu + phạt). */
+  hidden?: number;
+  /** Đã qua thanh tra (không truy thu lại). */
+  audited?: boolean;
+  /** Tờ truy thu: nội dung vi phạm. */
+  note?: string;
+}
+
+export type TaxMode = 'household' | 'company';
+
+export interface TaxAudit {
+  day: number;
+  /** Tổng truy thu + phạt (0: không vi phạm). */
+  total: number;
+  findings: string[];
+}
+
+export interface TaxYear {
+  year: number;
+  revenue: number;
+  paid: number;
+  late: number;
+  evasion: boolean;
+  /** Được khen hộ/doanh nghiệp gương mẫu. */
+  exemplary: boolean;
+}
+
+export interface TaxState {
+  /** Đã đăng ký hộ kinh doanh (mở ở level có tính năng `tax`). */
+  registered: boolean;
+  registeredDay: number;
+  /** Năm lịch đang tính ngưỡng. */
+  year: number;
+  /** Tháng đang cộng dồn, dạng năm·12 + (tháng − 1). */
+  month: number;
+  /** Doanh thu cả năm đã ghi nhận (để so với ngưỡng miễn thuế). */
+  yearRevenue: number;
+  monthRevenue: Record<TaxKind, number>;
+  /** VAT phải nộp của tháng (doanh nghiệp: đầu ra − đầu vào, có thể âm = được khấu trừ chuyển kỳ sau). */
+  monthVat: number;
+  /** Hộ: TNCN; doanh nghiệp: TNDN tạm tính (âm = lỗ, trừ vào tháng sau trong năm). */
+  monthPit: number;
+  /** TNCN khấu trừ từ lương nhân viên trong tháng. */
+  monthStaffPit: number;
+  bills: TaxBill[];
+  nextBillId: number;
+  /** Tổng tiền đã nộp thuế từ trước tới nay. */
+  lifetimePaid: number;
+  mode: TaxMode;
+  companyDay: number;
+  /** Quỹ thuế: tự để riêng thuế tạm tính mỗi ngày. */
+  reserveOn: boolean;
+  reserve: number;
+  /** Đã lắp máy tính tiền xuất hóa đơn điện tử. */
+  invoiceMachine: boolean;
+  /** Giá trị hàng nhập không hóa đơn chưa qua thanh tra. */
+  unauditedMarket: number;
+  /** Số tháng liên tiếp nộp thuế đúng hạn và kỷ lục. */
+  onTimeStreak: number;
+  bestOnTimeStreak: number;
+  /** Trong năm đang tính: số tờ nộp trễ / bị cưỡng chế, có bị truy thu trốn thuế không, đã nộp bao nhiêu. */
+  yearLate: number;
+  yearEvasion: boolean;
+  yearPaid: number;
+  audits: TaxAudit[];
+  years: TaxYear[];
+  /** Năm đã nhắc bắt buộc lắp máy tính tiền. */
+  machineWarnedYear: number;
+}
+
+export function emptyTaxState(): TaxState {
+  return {
+    registered: false, registeredDay: 0, year: 0, month: 0, yearRevenue: 0,
+    monthRevenue: { goods: 0, food: 0, service: 0 }, monthVat: 0, monthPit: 0, monthStaffPit: 0, bills: [], nextBillId: 1, lifetimePaid: 0,
+    mode: 'household', companyDay: 0, reserveOn: false, reserve: 0, invoiceMachine: false, unauditedMarket: 0,
+    onTimeStreak: 0, bestOnTimeStreak: 0, yearLate: 0, yearEvasion: false, yearPaid: 0, audits: [], years: [], machineWarnedYear: 0,
+  };
 }
 
 export interface ActiveEvent {
@@ -440,6 +555,8 @@ export interface GameState {
   branchShipments: BranchShipment[];
   storyProgress: string[];
   storyStarted: Record<string, number>;
+  /** Thuế hộ kinh doanh: dùng chung cho cả chuỗi tiệm (một hộ, một ngưỡng miễn thuế). */
+  tax: TaxState;
 }
 
 /** Số kệ gốc của giai đoạn 1 (vẫn khóa theo level). */
@@ -453,6 +570,7 @@ export function emptyStats(): DayStats {
     badDebt: 0, bargainDiscount: 0, questMoney: 0,
     wages: 0, bonuses: 0, theftCost: 0, thefts: 0, thievesCaught: 0, fines: 0, deliveryFees: 0, deliveries: 0, lateDeliveries: 0,
     complaints: 0, staffExp: 0, hourly: Array.from({ length: Math.ceil((DATA.balance.closeMinute - DATA.balance.openMinute) / 60) }, () => 0), staffPerf: {}, journal: [], managerDay: false, staffLevelUps: [],
+    taxAccrued: 0,
   };
 }
 
@@ -539,6 +657,7 @@ export function createNewGame(): GameState {
     branchShipments: [],
     storyProgress: [],
     storyStarted: {},
+    tax: emptyTaxState(),
   };
   state.stores = [{ id: 'main', name: 'Tiệm chính', kind: 'main', data: storeData(state) }];
   return state;

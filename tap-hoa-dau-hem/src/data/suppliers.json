@@ -1,4 +1,5 @@
 [
-  { "id": "co_tu", "name": "Cô Tư", "icon": "👩", "unlockLevel": 1, "discount": 0, "delayDays": 0, "deliverMinute": 0, "minOrder": 0, "note": "Giao ngay · giá chuẩn" },
-  { "id": "anh_ba", "name": "Đại lý Anh Ba", "icon": "🚚", "unlockLevel": 6, "discount": 0.1, "delayDays": 1, "deliverMinute": 900, "minOrder": 200000, "note": "Rẻ hơn 10% · giao 15:00 hôm sau · tối thiểu 200.000đ" }
+  {"id": "co_tu", "name": "Cô Tư", "icon": "👩", "unlockLevel": 1, "discount": 0, "delayDays": 0, "deliverMinute": 0, "minOrder": 0, "note": "Giao ngay · giá chuẩn", "invoice": true},
+  {"id": "anh_ba", "name": "Đại lý Anh Ba", "icon": "🚚", "unlockLevel": 6, "discount": 0.1, "delayDays": 1, "deliverMinute": 900, "minOrder": 200000, "note": "Rẻ hơn 10% · giao 15:00 hôm sau · tối thiểu 200.000đ", "invoice": true},
+  {"id": "cho_dau_moi", "name": "Chợ đầu mối", "icon": "🧺", "unlockLevel": 10, "discount": 0.15, "delayDays": 0, "deliverMinute": 0, "minOrder": 100000, "note": "Rẻ hơn 15% · giao ngay · tối thiểu 100.000đ · KHÔNG có hóa đơn", "invoice": false}
 ]
