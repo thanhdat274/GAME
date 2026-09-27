@@ -43,6 +43,7 @@ export class RestockScene extends Phaser.Scene {
   private list!: ScrollArea;
   private chips!: ScrollArea;
   private supplierBtns: Record<string, Button> = {};
+  private supplierNote: Phaser.GameObjects.Text | null = null;
   private cartText!: Phaser.GameObjects.Text;
   private cartWarn!: Phaser.GameObjects.Text;
   private buyBtn!: Button;
@@ -60,6 +61,7 @@ export class RestockScene extends Phaser.Scene {
     this.busy = false;
     this.selected = null;
     this.supplierBtns = {};
+    this.supplierNote = null;
     if (!supplierUnlocked(G.state, this.supplierId)) this.supplierId = 'co_tu';
     pageFrame(this, '📦 Nhập & bày hàng', () => this.close(), '⏸ Tiệm đang tạm dừng');
     this.tabBtns = {
@@ -107,10 +109,12 @@ export class RestockScene extends Phaser.Scene {
         this.supplierBtns[sp.id] = b;
         this.buyLayer.add(b);
       });
+      this.supplierNote = txt(this, 14, top + 23, '', { size: 10, color: HEX.muted });
+      this.buyLayer.add(this.supplierNote);
     } else {
       this.buyLayer.add(txt(this, 14, top + 3, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay vào kho', { size: 12, color: HEX.muted }));
     }
-    this.list = new ScrollArea(this, top + 24, FOOT_Y - 4);
+    this.list = new ScrollArea(this, top + (this.supplierNote ? 38 : 24), FOOT_Y - 4);
 
     const foot = this.add.graphics();
     foot.fillStyle(C.hud, 1).fillRect(0, FOOT_Y, W, H - FOOT_Y);
@@ -133,6 +137,7 @@ export class RestockScene extends Phaser.Scene {
   private renderBuy(): void {
     const s = G.state;
     for (const [id, b] of Object.entries(this.supplierBtns)) b.setColor(id === this.supplierId ? C.red : C.wood);
+    this.supplierNote?.setText(supplier(this.supplierId).note);
     this.list.clear();
     // Món khách hỏi mà hết hàng hôm nay lên đầu danh sách.
     const items = this.products().sort((a, b) => (s.today.missed[b.id] ?? 0) - (s.today.missed[a.id] ?? 0));
