@@ -25,7 +25,7 @@
 - [x] 3.6 Bàn ghế ở tiệm xôi: `dineInChance`, đồ uống kèm (trà đá, sữa đậu nành trong `products.json`), khách chọn ngồi/mang đi, bàn bẩn và dọn bàn dùng `dining.ts`; hết bàn thì đổi sang mang đi; test — đồ uống kèm lấy thẳng từ kho khi khách vừa ngồi; tạp hóa giữ tỉ lệ ngồi 100% như cũ
 - [x] 3.7 Khu Tiệm xôi trên `BranchesScene`; Bản đồ mở từ `shop_xoi` hoặc `branches` và chỉ hiện khu đủ level + hướng dẫn ngâm nếp một lần vào sáng hôm sau khi mở; nút "Ngâm cho mai" ở tổng kết — Bản đồ ở L29 chỉ hiện Tiệm chính + Tiệm xôi; mẻ ngâm khởi đầu 3 kg + ghi chú buổi sáng; hướng dẫn ngâm/hấp khi mở Bếp xôi lần đầu; nút "Ngâm N kg cho mai" ở tổng kết
 - [x] 3.8 `KitchenScene` lọc menu theo loại tiệm: tạp hóa không có món xôi và hiện gợi ý đặt từ tiệm xôi; test
-- [ ] 3.9 Chơi thử một ngày tiệm xôi trên màn hình điện thoại 375x812 (ngâm → hấp → bán cao điểm, có khách ngồi ăn và dọn bàn → tổng kết); đo FPS lúc cao điểm — luồng một ngày headless đã có test, viewport/FPS điện thoại chưa đo
+- [x] 3.9 Chơi thử một ngày tiệm xôi trên màn hình điện thoại 375x812 (ngâm → hấp → bán cao điểm, có khách ngồi ăn và dọn bàn → tổng kết); đo FPS lúc cao điểm — trình duyệt giả lập 375×812 trên máy tính, 3 ngày L29 với 1 thợ: ngâm ở Bếp và "Ngâm cho mai", hấp (giữ lửa: Ngon 1,16), làm món, bán, khách ngồi ăn gọi thêm và dọn bàn, tổng kết. FPS cao điểm 8h–10h trung bình ~63 (64–75, một lần tụt 18–36 trong vài giây); chưa đo trên điện thoại thật (6.4). Sửa kèm: ghi chú "thợ đã ngâm" bị mất, báo "nếp nguội" sai, lời nhắc/tổng kết kiểu tạp hóa ở tiệm xôi, nút Về bếp đè nút lửa
 
 ## 4. Đợt C - Đặt hàng nội bộ
 

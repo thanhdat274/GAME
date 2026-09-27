@@ -223,6 +223,8 @@ export class CookScene extends Phaser.Scene {
   private inZone = 0;
   private holding = false;
   private flameMarker?: Phaser.GameObjects.Rectangle;
+  /** Nút GIỮ LỬA và nhãn của nó, ẩn khi hấp xong để không bị nút quay về đè lên. */
+  private fireControls: Phaser.GameObjects.GameObject[] = [];
   /** Bước gói: các hướng cần vuốt. */
   private folds: ('←' | '→' | '↑')[] = [];
   constructor() { super('Cook'); }
@@ -412,10 +414,16 @@ export class CookScene extends Phaser.Scene {
     this.finished = true;
     this.clearControls();
     if (this.mode === 'steam') {
+      this.holding = false;
+      this.fireControls.forEach((item) => item.destroy());
+      this.fireControls = [];
       this.prompt.setText(`♨️ ${finishSteam(this.steamBatchId, quality)}`);
     } else {
+      // Mẻ nếp chín cũ nhất được dùng trước: xem nó còn nóng không trước khi lấy.
+      const oldest = [...G.state.cookedRice].sort((a, b) => a.cookedDay - b.cookedDay || a.cookedMinute - b.cookedMinute)[0];
+      const coldRice = !!oldest && !isWarm(oldest, G.state.day, G.state.clock);
       const made = prepareRecipe(G.state, this.recipeId, quality, this.variantId);
-      const riceNote = made.ok && made.quality < quality - 0.05 ? ' (nếp đã nguội · Tạm được)' : '';
+      const riceNote = !made.ok || made.quality >= quality - 0.05 ? '' : coldRice ? ' (nếp đã nguội · Tạm được)' : ' (mẻ nếp hấp chưa đều · kém ngon hơn)';
       this.prompt.setText(made.ok ? `${product(made.output).icon} ${result}${riceNote}. Đã đưa vào quầy.` : made.reason === 'space' ? 'Quầy đã đầy.' : 'Thiếu nguyên liệu hoặc thiết bị.');
       persist();
     }
@@ -443,7 +451,8 @@ export class CookScene extends Phaser.Scene {
     this.meterFill = this.add.rectangle(this.meterX, H * 0.72, 1, 18, 0xffe082).setOrigin(0, 0.5).setDepth(2);
     txt(this, W / 2, H * 0.72 + 22, 'Độ chín', { size: 10, color: HEX.muted, origin: [0.5, 0.5] });
     const fire = this.add.rectangle(W / 2, H * 0.86, 200, 60, C.red).setStrokeStyle(3, 0x24160d).setInteractive({ useHandCursor: true });
-    txt(this, W / 2, H * 0.86, '🔥 GIỮ LỬA', { size: 16, bold: true, color: HEX.white, origin: [0.5, 0.5] }).setDepth(1);
+    const fireLabel = txt(this, W / 2, H * 0.86, '🔥 GIỮ LỬA', { size: 16, bold: true, color: HEX.white, origin: [0.5, 0.5] }).setDepth(1);
+    this.fireControls = [fire, fireLabel];
     fire.on('pointerdown', () => { this.holding = true; });
     fire.on('pointerup', () => { this.holding = false; });
     fire.on('pointerout', () => { this.holding = false; });

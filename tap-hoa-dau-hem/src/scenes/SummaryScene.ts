@@ -90,7 +90,10 @@ export class SummaryScene extends Phaser.Scene {
       y += t.height + 8;
     }
     if (sum.spoiledCost) {
-      const t = txt(this, W / 2, y + 2, 'Mẹo: nhập ít hàng tươi hơn, hoặc bán xả hàng hết hạn trong ngày.', { size: 11, color: HEX.muted, origin: [0.5, 0], align: 'center', wrap: 290 });
+      const tip = activeShopType(G.state).def.service === 'counter'
+        ? 'Mẹo: nếp chín thừa bỏ cuối ngày · hấp từng mẻ vừa đủ bán.'
+        : 'Mẹo: nhập ít hàng tươi hơn, hoặc bán xả hàng hết hạn trong ngày.';
+      const t = txt(this, W / 2, y + 2, tip, { size: 11, color: HEX.muted, origin: [0.5, 0], align: 'center', wrap: 290 });
       y += t.height + 6;
     }
     if (sum.staffLevelUps?.length) {
@@ -121,7 +124,11 @@ export class SummaryScene extends Phaser.Scene {
         byZone.set(zone, (byZone.get(zone) ?? 0) + m.qty);
       }
       const busiestZone = [...byZone.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-      const t = txt(this, W / 2, y + 6, `📦 Khách hỏi mà hết hàng: ${list}\nNhập thêm những món này nhé!`, {
+      // Tiệm chỉ bán ở quầy (tiệm xôi) làm món chứ không nhập, và không có khu kệ.
+      const counterShop = activeShopType(G.state).def.service === 'counter';
+      const t = txt(this, W / 2, y + 6, counterShop
+        ? `🍙 Khách gọi mà quầy hết món: ${list}\nNgâm thêm nếp và làm sẵn trước giờ cao điểm nhé!`
+        : `📦 Khách hỏi mà hết hàng: ${list}\nNhập thêm những món này nhé!`, {
         size: 13,
         bold: true,
         color: HEX.red,
@@ -130,12 +137,14 @@ export class SummaryScene extends Phaser.Scene {
         wrap: 290,
       });
       y += t.height + 10;
-      if (busiestZone) {
+      if (busiestZone && !counterShop) {
         const zoneTip = txt(this, W / 2, y, `Khu hay hết nhất: ${busiestZone}`, { size: 12, bold: true, color: HEX.red, origin: [0.5, 0] });
         y += zoneTip.height + 8;
       }
     } else if (sum.left > sum.served && sum.served + sum.left > 0) {
-      const tip = txt(this, W / 2, y + 6, 'Mẹo: khách bỏ về nhiều? Nhập đủ các món và nạp kệ thường xuyên.', { size: 12, color: HEX.muted, origin: [0.5, 0], align: 'center', wrap: 280 });
+      const tip = txt(this, W / 2, y + 6, activeShopType(G.state).def.service === 'counter'
+        ? 'Mẹo: khách bỏ về nhiều? Làm sẵn món trước giờ cao điểm và thuê thêm thợ nấu.'
+        : 'Mẹo: khách bỏ về nhiều? Nhập đủ các món và nạp kệ thường xuyên.', { size: 12, color: HEX.muted, origin: [0.5, 0], align: 'center', wrap: 280 });
       y += tip.height + 10;
     }
     const h = y - top + 12;

@@ -317,6 +317,8 @@ describe('Thợ nấu xôi khi đứng chơi', () => {
     expect(retail).toBeGreaterThan(0);
     endDay(state);
     expect(state.soakBatches.length).toBeGreaterThan(0);
+    // Ghi chú buổi sáng không bị ghi đè bởi ghi chú tâm trạng nhân viên cuối ngày.
+    expect(state.morningNotes.some((n) => n.includes('Thợ nấu xôi đã ngâm'))).toBe(true);
     startNextDay(state);
     expect(order.order.status).toBe('delivered');
     expect(storeView(state, 'main').counter.find((s) => s.productId === 'xoi_dau_xanh_goi')?.qty).toBe(3);

@@ -877,9 +877,12 @@ export class ShopScene extends Phaser.Scene {
     }
     if (!c) {
       const staffed = this.session.lanes.length > 0;
+      // Tiệm chỉ bán ở quầy (tiệm xôi) không có kệ: nhắc làm sẵn món thay vì nạp kệ.
+      const counterShop = activeShopType(G.state).def.service === 'counter';
       const msg = this.session.closed
         ? '🌙 Đã đóng cửa. Đang dọn tiệm...'
-        : staffed ? '⏳ Quầy bạn đang trống.\nThu ngân lo quầy bên phải, bạn tranh thủ nạp kệ nhé!' : '⏳ Đang chờ khách...\nTranh thủ nạp kệ bằng nút + xanh nhé!';
+        : counterShop ? '⏳ Đang chờ khách...\nTranh thủ vào Bếp làm sẵn vài phần nhé!'
+          : staffed ? '⏳ Quầy bạn đang trống.\nThu ngân lo quầy bên phải, bạn tranh thủ nạp kệ nhé!' : '⏳ Đang chờ khách...\nTranh thủ nạp kệ bằng nút + xanh nhé!';
       this.panelLayer.add(txt(this, W / 2, PANEL_Y + 100, msg, { size: 15, origin: [0.5, 0.5], align: 'center', color: HEX.muted, wrap: W - 40 }));
       const managerBtn = !this.session.closed && staffed && G.state.manager.enabled && hasFeature(G.state.level, 'manager') && !G.state.today.managerDay;
       if (managerBtn) {
@@ -889,7 +892,7 @@ export class ShopScene extends Phaser.Scene {
         } }));
       }
       if (!this.session.closed) {
-        this.panelLayer.add(new Button(this, W / 2, PANEL_Y + (managerBtn ? 210 : 184), { w: 240, h: 40, label: '📦 Tạm dừng · nhập & bày hàng', size: 13, color: C.wood, onTap: () => this.openRestock() }));
+        this.panelLayer.add(new Button(this, W / 2, PANEL_Y + (managerBtn ? 210 : 184), { w: 240, h: 40, label: counterShop ? '🍙 Vào bếp làm món' : '📦 Tạm dừng · nhập & bày hàng', size: 13, color: C.wood, onTap: () => (counterShop ? this.openKitchen() : this.openRestock()) }));
       }
       return;
     }

@@ -2003,9 +2003,10 @@ export function endDay(state: GameState): DaySummary {
   expireLots(state, state.day);
   // Tiệm xôi: nếp chín thừa và mẻ ngâm quá hạn bị bỏ cuối ngày; có thợ thì thợ tự ngâm cho mai.
   spoilRiceEndOfDay(state, state);
+  let soakNote: string | null = null;
   if (state.staff.some((st) => st.role === 'xoi_cook' && !st.quitting)) {
     const kg = suggestSoakKg(state);
-    if (kg > 0 && startSoak(state, state, kg).ok) state.morningNotes.push(`🪣 Thợ nấu xôi đã ngâm ${kg} kg nếp cho hôm nay.`);
+    if (kg > 0 && startSoak(state, state, kg).ok) soakNote = `🪣 Thợ nấu xôi đã ngâm ${kg} kg nếp cho hôm nay.`;
   }
   const power = electricityCost(state);
   state.money -= power;
@@ -2013,6 +2014,7 @@ export function endDay(state: GameState): DaySummary {
   // Lương cuối ngày cho người có ca; thiếu tiền thành nợ lương.
   const pay = payroll(state);
   state.morningNotes = updateMoods(state).map((n) => n.text);
+  if (soakNote) state.morningNotes.push(soakNote);
   if (pay.debt > 0) state.morningNotes.push(`Còn nợ lương nhân viên ${formatMoney(pay.debt)}`);
   markBadDebts(state);
   const avg = t.ratingCount ? t.ratingSum / t.ratingCount : 0;

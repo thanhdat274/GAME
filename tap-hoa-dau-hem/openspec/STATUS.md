@@ -11,10 +11,10 @@
 | `phase-2-shop-expansion` | 41 | 1 | 8.2 điện thoại thật. |
 | `phase-3-staff-and-manager` | 39 | 2 | 9.3 điện thoại thật, 9.4 deploy. |
 | `topdown-store-view` | 15 | 7 | 4.2–4.4 điện thoại/người chơi/deploy; 5.1–5.4 để cho change sau. |
-| `sticky-rice-shop` | 33 | 4 | Còn playtest viewport 375×812 (3.9, 4.7, 5.6), điện thoại thật và deploy (6.4). |
+| `sticky-rice-shop` | 34 | 3 | Còn playtest viewport 375×812 (4.7, 5.6), điện thoại thật và deploy (6.4). |
 | `phase-4-events-food-branches` | — | — | Đã lưu trữ (`archive/2026-09-27-…`). |
 
-Tổng còn mở: 33 task (27/09/2026).
+Tổng còn mở: 32 task (27/09/2026).
 
 ## Kiểm tra trong repo
 
@@ -112,3 +112,11 @@ Không đánh dấu hoàn thành các task yêu cầu thiết bị thật, Conso
 - Kết quả (3 và 6 seed): lãi xôi ≈ 62% lãi Chợ ước tính (1 thợ ≈ 20%, 3 thợ ≈ 105%), xôi gói tăng lãi tạp hóa 6–8% (đã trừ gói bỏ và phí xe), hỏng/bỏ 6%, đủ tiền mở Chợ với vốn giả định 3.000.000đ. Các bot thường không đổi.
 - Lỗi tìm ra khi đo và đã sửa: mô phỏng cho một thợ làm ~75 phần/ngày trong khi đứng chơi chỉ ~15 (`cookPortionsPerHour` 6 → 1,2); thợ vắng chủ ngâm nếp theo số đã bán nên sản lượng tự giảm dần, và mức ngâm tối thiểu 20 phần vượt năng lực 1 thợ; mô phỏng bán theo giá niêm yết còn đứng chơi bán theo chất lượng; khách tạp hóa hầu như không hỏi xôi gói (thêm `sourcedRequestChance` = 0,1 cho `grocery`).
 - Test benchmark 100 ngày × 6 tiệm lấy lần nhanh nhất trong 3 lần chạy (trước đó chập chờn cả ở HEAD khi cả bộ test chạy song song).
+
+## Tiệm xôi — chơi thử 3.9 (27/09/2026)
+
+- Trình duyệt tích hợp, khung 375×812 giả lập trên máy tính, bản lưu L29 đứng ở tiệm xôi, 1 Thợ nấu xôi, bàn 2 chỗ; chơi 3 ngày game: ngâm ở Bếp xôi và bằng nút "Ngâm N kg cho mai" ở tổng kết, hấp (giữ lửa trong vùng xanh ra "Ngon", chất lượng 1,16; không giữ lửa ra "Tạm được" 0,75), làm món bằng mini-game chạm nguyên liệu, mở cửa (cảnh báo quầy chưa có xôi), bán, khách ngồi ăn gọi thêm và dọn bàn, tổng kết.
+- FPS lúc cao điểm 8h–10h: trung bình ~63, phần lớn 64–75, một lần tụt 18–36 trong vài giây rồi hồi. Chưa đo trên điện thoại thật.
+- Lỗi đã sửa: ghi chú "Thợ nấu xôi đã ngâm N kg" bị ghi đè ở `endDay`; thông báo "nếp đã nguội" hiện cả khi nếp còn nóng (nay phân biệt nếp nguội và mẻ hấp chưa đều); tiệm xôi dùng lời nhắc tạp hóa ("nạp kệ", "nhập & bày hàng", "Nhập thêm những món này", "Khu hay hết nhất", mẹo hàng tươi); nút "Về bếp" đè nút "GIỮ LỬA" sau khi hấp.
+- Cần quyết định cân bằng: khách tới tiệm xôi đứng chơi (~97/ngày) vượt xa số phần 1 thợ + người chơi làm kịp (~45–50). Không làm sẵn trước giờ mở thì chỉ ~41% khách được phục vụ và sao tụt từ 3,3 xuống 1,0 trong một ngày; làm sẵn 8 phần thì cao điểm phục vụ ~72%.
+- Còn thấy nhưng chưa sửa: tab "Bày kệ" buổi sáng và nút "Nhập & bày hàng" trong bảng tạm dừng vẫn hiện ở tiệm xôi (không có kệ).
