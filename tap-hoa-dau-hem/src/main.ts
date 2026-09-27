@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { registerSW } from 'virtual:pwa-register';
 import { G, persist, sceneForPhase } from './game';
 import { isMaxLevelSimulation } from './core/simulationMode';
 import { BootScene } from './scenes/BootScene';
@@ -28,6 +27,7 @@ import { PrestigeScene } from './scenes/PrestigeScene';
 import { DiningScene } from './scenes/DiningScene';
 import { RestockScene } from './scenes/RestockScene';
 import { installRoundedRectFix } from './ui/roundrect';
+import { installUpdateBanner } from './ui/updateBanner';
 import { H, W, ZOOM } from './ui/theme';
 import { applyPendingCloud, configureCloudApplyGuard, enableOnlineRetry } from './services/sync';
 
@@ -82,7 +82,8 @@ landscape.addEventListener('change', (e) => {
 // Chặn cử chỉ zoom của iOS Safari.
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 
-if (import.meta.env.PROD) registerSW({ immediate: true });
+// Có bản mới: hiện nút "Cập nhật" (lưu game rồi tải lại để lấy giao diện mới).
+if (import.meta.env.PROD) installUpdateBanner(() => { if (inGame()) persist(); });
 
 // Để debug trên điện thoại qua console.
 (window as unknown as { thdh: unknown }).thdh = { game, G };

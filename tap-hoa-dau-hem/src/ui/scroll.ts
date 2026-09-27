@@ -84,6 +84,23 @@ function eventTime(p: Phaser.Input.Pointer, kind: 'down' | 'move' | 'up'): numbe
   return t > 0 ? t : performance.now();
 }
 
+/**
+ * Cho đối tượng (Container đã setSize) nhận chạm, nhưng chỉ phần nằm trong khung nhìn `inView` (tọa độ Y thế giới).
+ * Mask chỉ che hình chứ không che vùng chạm: không cắt thì món đã cuộn ra ngoài khung vẫn nuốt chạm
+ * của nút nằm cùng chỗ (vd. tab Nhập hàng / Bày kệ / Tiệm phía trên kệ).
+ */
+export function clipInteractive(obj: Phaser.GameObjects.Container, inView: (worldY: number) => boolean): void {
+  obj.setInteractive({
+    hitArea: new Phaser.Geom.Rectangle(0, 0, obj.width, obj.height),
+    hitAreaCallback: (area: Phaser.Geom.Rectangle, x: number, y: number) => {
+      if (!Phaser.Geom.Rectangle.Contains(area, x, y)) return false;
+      const m = obj.getWorldTransformMatrix();
+      return inView(m.ty + (y - obj.displayOriginY) * m.scaleY);
+    },
+    useHandCursor: true,
+  });
+}
+
 /** Làm tròn vị trí theo điểm ảnh thật của canvas (tránh chữ rung khi cuộn). */
 export function snap(y: number): number {
   return Math.round(y * ZOOM) / ZOOM;

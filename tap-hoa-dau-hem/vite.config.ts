@@ -12,7 +12,8 @@ export default defineConfig({
   },
   plugins: [
     VitePWA({
-      registerType: 'autoUpdate',
+      // Bản mới chờ người chơi bấm "Cập nhật" (xem src/ui/updateBanner.ts) thay vì tự thay giữa chừng.
+      registerType: 'prompt',
       includeAssets: ['icons/*.png'],
       manifest: {
         name: 'Tạp Hóa Đầu Hẻm',
