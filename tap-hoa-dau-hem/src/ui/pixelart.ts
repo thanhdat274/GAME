@@ -1784,3 +1784,145 @@ for (const [id, source] of Object.entries({
   food_grill: 'counter', hot_kettle: 'storage_rack', bread_case: 'shelf', food_table_2: 'storage_rack', food_table_4: 'counter',
   drink_counter: 'counter', blender: 'storage_rack', sugarcane_press: 'counter', drink_table_2: 'storage_rack', generator: 'counter',
 })) FURNITURE_SPRITES[id] = FURNITURE_SPRITES[source];
+
+// Hàng bổ sung (vẽ từ các khuôn chai / lon / hộp / gói / túi dùng chung).
+Object.assign(PRODUCT_SPRITES, {
+  tra_o_long: [
+    '......kkkk......', '......krrk......', '......krrk......', '.....kYYYYk.....',
+    '....kYYYYYYk....', '....kYwYYYYk....', '....knnnnnnk....', '....knwwwwnk....',
+    '....knnnnnnk....', '....kYYYYYYk....', '....kYYYYYYk....', '....kYYYYYYk....',
+    '....kYYYYYYk....', '....kYYYYYYk....', '.....kkkkkk.....', '................',
+  ],
+  sua_lua_mach: [
+    '................', '................', '...kkkkkkkkkk...', '...knnnnnnnnk...',
+    '...knnnnnnnnk...', '...knwnnnnnnk...', '...knnnnnnnnk...', '...kBBBBBBBBk...',
+    '...kBwwwwwwBk...', '...kBBBBBBBBk...', '...knnnnnnnnk...', '...knnnnnnnnk...',
+    '...knnnnnnnnk...', '...kkkkkkkkkk...', '................', '................',
+  ],
+  nuoc_dien_giai: [
+    '......kkkk......', '......kwwk......', '......kwwk......', '.....kllllk.....',
+    '....kllllllk....', '....klwllllk....', '....kLLLLLLk....', '....kLwwwwLk....',
+    '....kLLLLLLk....', '....kllllllk....', '....kllllllk....', '....kllllllk....',
+    '....kllllllk....', '....kllllllk....', '.....kkkkkk.....', '................',
+  ],
+  nuoc_dua_hop: [
+    '................', '................', '...kkkkkkkkkk...', '...kNNNNNNNNk...',
+    '...knnnnnnnnk...', '...knwnnnnnnk...', '...knnnnnnnnk...', '...kwwwwwwwwk...',
+    '...kwwwwwwwwk...', '...kwwwwwwwwk...', '...knnnnnnnnk...', '...knnnnnnnnk...',
+    '...knnnnnnnnk...', '...kkkkkkkkkk...', '................', '................',
+  ],
+  soda_chanh: [
+    '................', '................', '.....kkkkkk.....', '....kssssssk....',
+    '....kyyyyyyk....', '....kywyyyyk....', '....knnnnnnk....', '....knwwnnnk....',
+    '....knnnnnnk....', '....kyyyyyyk....', '....kyyyyyyk....', '....kyyyyyyk....',
+    '....kssssssk....', '.....kkkkkk.....', '................', '................',
+  ],
+  bim_bim_tom: [
+    '................', '.kkkkkkkkkkkkkk.', 'kyyyyyyyyyyyyyyk', 'koowoooooooooook',
+    'kooooooooooooook', 'koorrrrrrrrrrook', 'koorwwrrrwwrrook', 'koorrrrrrrrrrook',
+    'kooooooooooooook', 'kooooooooooooook', 'kooowwwwwwoooook', 'kooooooooooooook',
+    'kyyyyyyyyyyyyyyk', '.kkkkkkkkkkkkkk.', '................', '................',
+  ],
+  keo_deo: [
+    '................', '................', '....kkkkkkkk....', '...kppppppppk...',
+    '...kvvvvvvvvk...', '..kvvwvvvvvvvk..', '..kvvvvvvvvvvk..', '..kvqqqqqqqqvk..',
+    '..kvqwwqqwwqvk..', '..kvqqqqqqqqvk..', '..kvvvvvvvvvvk..', '..kvvvvvvvvvvk..',
+    '..kvvvvvvvvvvk..', '...kkkkkkkkkk...', '................', '................',
+  ],
+  banh_que: [
+    '................', '................', '...kkkkkkkkkk...', '...kyyyyyyyyk...',
+    '...kttttttttk...', '...ktwttttttk...', '...kttttttttk...', '...krrrrrrrrk...',
+    '...krwwwwwwrk...', '...krrrrrrrrk...', '...kttttttttk...', '...kttttttttk...',
+    '...kttttttttk...', '...kkkkkkkkkk...', '................', '................',
+  ],
+  mit_say: [
+    '................', '................', '....kkkkkkkk....', '...kNNNNNNNNk...',
+    '...kyyyyyyyyk...', '..kyywyyyyyyyk..', '..kyyyyyyyyyyk..', '..kynnnnnnnnyk..',
+    '..kynwwnnwwnyk..', '..kynnnnnnnnyk..', '..kyyyyyyyyyyk..', '..kyyyyyyyyyyk..',
+    '..kyyyyyyyyyyk..', '...kkkkkkkkkk...', '................', '................',
+  ],
+  pho_goi: [
+    '................', '.kkkkkkkkkkkkkk.', 'kRRRRRRRRRRRRRRk', 'kccwccccccccccck',
+    'kcccccccccccccck', 'kccrrrrrrrrrrcck', 'kccrwwrrrwwrrcck', 'kccrrrrrrrrrrcck',
+    'kcccccccccccccck', 'kcccccccccccccck', 'kcccwwwwwwccccck', 'kcccccccccccccck',
+    'kRRRRRRRRRRRRRRk', '.kkkkkkkkkkkkkk.', '................', '................',
+  ],
+  mien_goi: [
+    '................', '.kkkkkkkkkkkkkk.', 'kLLLLLLLLLLLLLLk', 'kWWwWWWWWWWWWWWk',
+    'kWWWWWWWWWWWWWWk', 'kWWLLLLLLLLLLWWk', 'kWWLwwLLLwwLLWWk', 'kWWLLLLLLLLLLWWk',
+    'kWWWWWWWWWWWWWWk', 'kWWWWWWWWWWWWWWk', 'kWWWwwwwwwWWWWWk', 'kWWWWWWWWWWWWWWk',
+    'kLLLLLLLLLLLLLLk', '.kkkkkkkkkkkkkk.', '................', '................',
+  ],
+  bot_mi: [
+    '................', '................', '....kkkkkkkk....', '...kyyyyyyyyk...',
+    '...kwwwwwwwwk...', '..kwwwwwwwwwwk..', '..kwwwwwwwwwwk..', '..kwYYYYYYYYwk..',
+    '..kwYwwYYwwYwk..', '..kwYYYYYYYYwk..', '..kwwwwwwwwwwk..', '..kwwwwwwwwwwk..',
+    '..kwwwwwwwwwwk..', '...kkkkkkkkkk...', '................', '................',
+  ],
+  sua_tam: [
+    '................', '.......kkk......', '.......kLLk.....', '......kllllkkk..',
+    '.....kllllllklk.', '.....klwllllklk.', '.....kllllllklk.', '.....kwwwwwwkk..',
+    '.....kwwwwwwk...', '.....kwwwwwwk...', '.....kllllllk...', '.....kllllllk...',
+    '.....kllllllk...', '.....kllllllk...', '......kkkkkk....', '................',
+  ],
+  nuoc_giat: [
+    '................', '.......kkk......', '.......krrk.....', '......kLLLLkkk..',
+    '.....kLLLLLLkLk.', '.....kLwLLLLkLk.', '.....kLLLLLLkLk.', '.....kwwwwwwkk..',
+    '.....kwwwwwwk...', '.....kwwwwwwk...', '.....kLLLLLLk...', '.....kLLLLLLk...',
+    '.....kLLLLLLk...', '.....kLLLLLLk...', '......kkkkkk....', '................',
+  ],
+  nuoc_xa_vai: [
+    '................', '.......kkk......', '.......kvvk.....', '......kppppkkk..',
+    '.....kppppppkpk.', '.....kpwppppkpk.', '.....kppppppkpk.', '.....kwwwwwwkk..',
+    '.....kwwwwwwk...', '.....kwwwwwwk...', '.....kppppppk...', '.....kppppppk...',
+    '.....kppppppk...', '.....kppppppk...', '......kkkkkk....', '................',
+  ],
+  dao_cao: [
+    '................', '................', '...kkkkkkkkkk...', '...kSSSSSSSSk...',
+    '...kssssssssk...', '...kswssssssk...', '...kssssssssk...', '...kLLLLLLLLk...',
+    '...kLwwwwwwLk...', '...kLLLLLLLLk...', '...kssssssssk...', '...kssssssssk...',
+    '...kssssssssk...', '...kkkkkkkkkk...', '................', '................',
+  ],
+  kem_chong_nang: [
+    '................', '................', '................', '..kkkkkkkkkk....',
+    '.kooooooooookkk.', '.kowooooooookyyk', '.kowwwwwwwwokyyk', '.kowwwwwwwwokyyk',
+    '.kowwwwwwwwokyyk', '.kooooooooookkk.', '..kkkkkkkkkk....', '................',
+    '................', '................', '................', '................',
+  ],
+  rau_cai: [
+    '................', '......k..k......', '.....knk.knk....', '....knnnknnnk...',
+    '...knnwnnnnnk...', '...knnnnnnnnnk..', '..knnnnnnnnnnk..', '...knnnnnnnnk...',
+    '....knnnnnnk....', '.....kcccck.....', '.....kNNNNk.....', '.....kcccck.....',
+    '......kcck......', '......kcck......', '.......kk.......', '................',
+  ],
+  trung_vit: [
+    '................', '................', '................', '....kkk..kkk....',
+    '...kWWWk.kWWWk..', '..kWwWWWkWwWWk..', '..kWWWWWkWWWWk..', '..kWWWWkkkWWWk..',
+    '.kkkWWkWWWkWkkk.', '.kttkkWwWWWkttk.', '.ktttkWWWWktttk.', '.kttttkkkkttttk.',
+    '.kttttttttttttk.', '..kkkkkkkkkkkk..', '................', '................',
+  ],
+  gia_do: [
+    '................', '................', '................', '................',
+    '..kkkkkkkkkkkk..', '.kiiiiiiiiiiiik.', '.kiccccccccccik.', '.kicwccccccccik.',
+    '.kicncncncnccik.', '.kiccccccccccik.', '.kinnnnnnnnnnik.', '.kiiiiiiiiiiiik.',
+    '..kkkkkkkkkkkk..', '................', '................', '................',
+  ],
+  kem_oc_que: [
+    '................', '.....kkkkk......', '....kqqqqqk.....', '...kqwqqqqqk....',
+    '...kqqqqpqqk....', '...kqqqqqqqk....', '...kkkkkkkkk....', '....kptptpk.....',
+    '....ktptptk.....', '.....kptpk......', '.....ktptk......', '......kpk.......',
+    '......ktk.......', '.......k........', '................', '................',
+  ],
+  banh_bao: [
+    '................', '................', '................', '.......kk.......',
+    '......krrk......', '....kkwwwwkk....', '...kwwwwwwwwk...', '..kwwwwwwwwwwk..',
+    '..kwwwwwwwwwwk..', '..kwwwwwwwwwwk..', '..kwwwwwwwwwwk..', '...kWWWWWWWWk...',
+    '....kkkkkkkk....', '................', '................', '................',
+  ],
+  ca_basa: [
+    '................', '................', '................', '................',
+    '..kkkkkkkkkkkk..', '.kiiiiiiiiiiiik.', '.kiqqqqqqqqqqik.', '.kiqwqqqqqqqqik.',
+    '.kiqWqWqWqWqqik.', '.kiqqqqqqqqqqik.', '.kiWWWWWWWWWWik.', '.kiiiiiiiiiiiik.',
+    '..kkkkkkkkkkkk..', '................', '................', '................',
+  ],
+} satisfies Record<string, Sprite>);

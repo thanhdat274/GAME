@@ -426,7 +426,7 @@ describe('mini-mart, nhiều quầy, xe đẩy', () => {
     expect(choose()).toBe(0);
   });
 
-  it('có Đất D: khoảng 40% bà nội trợ lấy xe đẩy và mua 3–6 món', () => {
+  it('có Đất D: khoảng 40% khách đi chợ (nội trợ, mẹ bỉm, bán hàng rong) lấy xe đẩy và mua 3–6 món', () => {
     const s = shop(15);
     unlockPlot(s, 'D');
     const rng = new Rng(42);
@@ -434,7 +434,7 @@ describe('mini-mart, nhiều quầy, xe đẩy', () => {
     let carts = 0;
     for (let i = 0; i < 3000; i++) {
       const c = createCustomer(i, s.level, rng, s);
-      if (c.type.id !== 'noi_tro') { expect(c.cart).toBeUndefined(); continue; }
+      if (!DATA.balance.cart.types.includes(c.type.id)) { expect(c.cart).toBeUndefined(); continue; }
       housewives++;
       if (!c.cart) continue;
       carts++;

@@ -56,9 +56,9 @@ function tickUntil(d: DaySession, predicate: () => boolean, max = 4000): void {
 }
 
 describe('dữ liệu giai đoạn 2', () => {
-  it('có 34 món uống / tươi / đông với trường hạn dùng / lạnh hợp lệ', () => {
+  it('có 45 món uống / tươi / đông với trường hạn dùng / lạnh hợp lệ', () => {
     const fresh = DATA.products.filter((p) => p.unlockLevel <= 20 && ['drink', 'fresh', 'frozen'].includes(p.category));
-    expect(fresh).toHaveLength(34);
+    expect(fresh).toHaveLength(45);
     expect(DATA.products.filter((p) => p.requiresCold === 'freezer').every((p) => p.unlockLevel >= 9)).toBe(true);
     expect(DATA.levels.maxLevel).toBe(35);
     expect(DATA.levels.levels.slice(0, 9).map((l) => l.exp)).toEqual([0, 80, 200, 360, 560, 800, 1080, 1400, 1780]);

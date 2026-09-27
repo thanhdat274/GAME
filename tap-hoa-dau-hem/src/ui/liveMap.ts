@@ -10,7 +10,7 @@ import { formatClock, formatMoney, type Fixture } from '../core/state';
 import { prepareRecipe, recipeIngredients } from '../core/recipes';
 import { assignSlot, canRefill, placeError, setClearance, shelfCapacity, slotFreshness, warehouseCapacity, warehouseCellsUsed } from '../core/stock';
 import { fixtureInfo, fixtureStockLevel, sellsGoods, storeView, warehouseLines } from '../core/storeMap';
-import { customerLook, customerSprite, productIcon, setWalkFrame, staffType } from './art';
+import { customerLook, customerSprite, productIcon, productName, setWalkFrame, staffType } from './art';
 import { cellAt, drawFixture, drawFloor, type FloorGeom } from './floorPlan';
 import { ZONE_NAMES } from './shelves';
 import { play } from './sound';
@@ -801,7 +801,7 @@ export class LiveMap {
     const slots = state.shelves[r] ?? [];
     const perRow = Math.min(6, Math.max(1, slots.length));
     const sw = 46;
-    const sh = 54;
+    const sh = 66;
     const rows = Math.ceil(slots.length / perRow);
     const h = 32 + rows * (sh + 6) + 4;
     const w = Math.max(250, perRow * (sw + 4) + 12);
@@ -820,9 +820,11 @@ export class LiveMap {
       const hit = s.add.rectangle(x + sw / 2, y + sh / 2, sw, sh, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
       hit.on('pointerup', (p: Phaser.Input.Pointer) => { if (p.getDistance() < 10) this.onSlotTap(f, i); });
       this.sheet.add([g, hit]);
-      if (slot.productId) this.sheet.add(productIcon(s, x + sw / 2, y + 20, product(slot.productId), 26));
-      else this.sheet.add(txt(s, x + sw / 2, y + 20, '＋\nbày món', { size: 8, color: HEX.muted, origin: [0.5, 0.5], align: 'center' }));
-      const qty = txt(s, x + sw / 2, y + sh - 8, '', { size: 9, bold: true, origin: [0.5, 0.5] });
+      if (slot.productId) {
+        const p = product(slot.productId);
+        this.sheet.add([productIcon(s, x + sw / 2, y + 18, p, 24), productName(s, x + sw / 2, y + 31, p, sw - 2, { size: 7 })]);
+      } else this.sheet.add(txt(s, x + sw / 2, y + 24,'＋\nbày món', { size: 8, color: HEX.muted, origin: [0.5, 0.5], align: 'center' }));
+      const qty = txt(s, x + sw / 2, y + sh - 7, '', { size: 9, bold: true, origin: [0.5, 0.5] });
       const tag = txt(s, x + 2, y + 2, '', { size: 8, bold: true, color: HEX.white }).setPadding(2, 0, 2, 0);
       const bar = s.add.graphics();
       const plus = new Button(s, x + sw - 8, y + 8, { w: 20, h: 20, label: '+', size: 13, color: C.green, radius: 10, onTap: () => {
@@ -953,8 +955,8 @@ export class LiveMap {
       else v.tag.setVisible(false);
       v.bar.clear();
       if (prog !== null) {
-        v.bar.fillStyle(0x000000, 0.3).fillRoundedRect(v.x + 4, v.y + 36, 38, 5, 2);
-        v.bar.fillStyle(C.green, 1).fillRoundedRect(v.x + 4, v.y + 36, 38 * prog, 5, 2);
+        v.bar.fillStyle(0x000000, 0.3).fillRoundedRect(v.x + 4, v.y + 29, 38, 4, 2);
+        v.bar.fillStyle(C.green, 1).fillRoundedRect(v.x + 4, v.y + 29, 38 * prog, 4, 2);
       }
     }
   }

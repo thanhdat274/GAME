@@ -4,11 +4,11 @@ import type { LiveShopCommand } from '../core/liveSession';
 import { formatMoney, priceOf, shelfQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
 import {
   assignCounterSlot, assignSlot, buyStock, checkCart, clearSlot, counterFreeForNew, hasPlaceFor, planNewProducts, slotFreeForNew,
-  suggestCart, supplierUnlocked, unitCost, warehouseCapacity, warehouseCellsUsed, type Cart,
+  suggestRestockCart, supplierUnlocked, unitCost, warehouseCapacity, warehouseCellsUsed, type Cart,
 } from '../core/stock';
 import { G, persist } from '../game';
 import { dispatchLiveCommand } from '../services/liveShop';
-import { productIcon } from '../ui/art';
+import { productIcon, productName } from '../ui/art';
 import { PAGE_TOP, ScrollArea, card, pageFrame } from '../ui/page';
 import { ShelfView, ZONE_NAMES, placeErrorText } from '../ui/shelves';
 import { play } from '../ui/sound';
@@ -34,6 +34,8 @@ const CHIP_H = 58;
 export class RestockScene extends Phaser.Scene {
   private tab: Tab = 'buy';
   private cart: Cart = {};
+  /** Món vừa được gợi ý (xếp lên đầu danh sách, giữ thứ tự khi bấm +/−). */
+  private suggested = new Set<string>();
   private supplierId = 'co_tu';
   private busy = false;
   private selected: string | null = null;
@@ -121,8 +123,17 @@ export class RestockScene extends Phaser.Scene {
     this.cartText = txt(this, 12, FOOT_Y + 8, '', { size: 12, bold: true, color: HEX.cream });
     this.cartWarn = txt(this, 12, FOOT_Y + 26, '', { size: 11, color: '#ffb4a8', wrap: W - 24 });
     const suggest = new Button(this, 60, H - 24, { w: 100, h: 36, label: '🪄 Gợi ý', color: C.blue, size: 13, onTap: () => {
-      this.cart = suggestCart(G.state, this.supplierId);
+      const sug = suggestRestockCart(G.state, this.supplierId);
+      this.cart = sug.cart;
+      this.suggested = new Set(Object.keys(sug.cart));
       if (!Object.keys(this.cart).length) toast(this, 'Hàng còn đủ, hoặc hết tiền/chỗ kho rồi!', H * 0.5);
+      else {
+        const parts = [
+          sug.outOfStock.length ? `${sug.outOfStock.length} món đang hết` : '',
+          sug.bestSellers.length ? `${sug.bestSellers.length} món bán chạy` : '',
+        ].filter(Boolean);
+        toast(this, `🪄 Gợi ý: ${parts.join(' + ')}`, H * 0.5, C.greenDark);
+      }
       this.renderBuy();
     } });
     const clear = new Button(this, 150, H - 24, { w: 68, h: 36, label: 'Xóa giỏ', color: C.grey, size: 12, onTap: () => { this.cart = {}; this.renderBuy(); } });
@@ -139,8 +150,8 @@ export class RestockScene extends Phaser.Scene {
     for (const [id, b] of Object.entries(this.supplierBtns)) b.setColor(id === this.supplierId ? C.red : C.wood);
     this.supplierNote?.setText(supplier(this.supplierId).note);
     this.list.clear();
-    // Món khách hỏi mà hết hàng hôm nay lên đầu danh sách.
-    const items = this.products().sort((a, b) => (s.today.missed[b.id] ?? 0) - (s.today.missed[a.id] ?? 0));
+    // Món vừa gợi ý lên đầu, rồi tới món khách hỏi mà hết hàng hôm nay.
+    const items = this.products().sort((a, b) => (this.suggested.has(b.id) ? 1 : 0) - (this.suggested.has(a.id) ? 1 : 0) || (s.today.missed[b.id] ?? 0) - (s.today.missed[a.id] ?? 0));
     items.forEach((p, i) => {
       const y = i * ROW_H;
       const missed = s.today.missed[p.id] ?? 0;
@@ -264,7 +275,12 @@ export class RestockScene extends Phaser.Scene {
       const bg = this.add.graphics();
       bg.fillStyle(sel ? C.yellow : C.slot, 1).fillRoundedRect(-CHIP_W / 2, -CHIP_H / 2, CHIP_W, CHIP_H, 10);
       bg.lineStyle(sel ? 3 : 2, sel ? C.red : C.slotEdge, 1).strokeRoundedRect(-CHIP_W / 2, -CHIP_H / 2, CHIP_W, CHIP_H, 10);
-      const parts: Phaser.GameObjects.GameObject[] = [bg, productIcon(this, 0, -8, p, 32), txt(this, 0, CHIP_H / 2 - 10, `x${q}`, { size: 12, bold: true, origin: [0.5, 0.5] })];
+      const parts: Phaser.GameObjects.GameObject[] = [
+        bg,
+        productIcon(this, 0, -CHIP_H / 2 + 16, p, 26),
+        productName(this, 0, CHIP_H / 2 - 1, p, CHIP_W - 4, { origin: [0.5, 1] }),
+        txt(this, CHIP_W / 2 - 3, -CHIP_H / 2 + 29, `x${q}`, { size: 10, bold: true, color: HEX.white, origin: [1, 1] }).setBackgroundColor('#3b2618cc').setPadding(3, 0, 3, 0),
+      ];
       if (p.behindCounter) parts.push(txt(this, -CHIP_W / 2 + 3, -CHIP_H / 2 + 2, '🔐', { size: 10, emoji: true }));
       const chip = this.add.container(x, y, parts).setSize(CHIP_W, CHIP_H).setInteractive({ useHandCursor: true });
       chip.on('pointerup', (ptr: Phaser.Input.Pointer) => {

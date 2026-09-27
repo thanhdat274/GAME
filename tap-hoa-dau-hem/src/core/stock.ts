@@ -788,3 +788,91 @@ export function suggestCart(state: GameState, supplierId = 'co_tu'): Cart {
   }
   return cart;
 }
+
+/** Số ngày lịch sử dùng để tìm món bán chạy khi nhập giữa giờ. */
+const BEST_SELLER_DAYS = 7;
+
+/** Bán trung bình mỗi ngày của từng món: các ngày gần nhất trong analytics cộng hôm nay (tính như một ngày). */
+export function recentDailySales(state: GameState, days = BEST_SELLER_DAYS): Record<string, number> {
+  const records = state.analytics.slice(-days);
+  const total: Record<string, number> = {};
+  for (const rec of records) for (const [id, q] of Object.entries(rec.sold)) total[id] = (total[id] ?? 0) + q;
+  for (const [id, q] of Object.entries(state.today.sold)) total[id] = (total[id] ?? 0) + q;
+  const n = records.length + 1;
+  for (const id of Object.keys(total)) total[id] /= n;
+  return total;
+}
+
+export interface RestockSuggestion {
+  cart: Cart;
+  /** Món đang hết / sắp hết trên kệ (hoặc khách hỏi mà không có). */
+  outOfStock: string[];
+  /** Món bán chạy nhất được nhập thêm. */
+  bestSellers: string[];
+}
+
+/**
+ * Gợi ý nhập giữa giờ bán: ưu tiên bù đầy các món đang hết trên kệ (và món khách hỏi mà không có),
+ * sau đó nhập thêm `topN` món bán chạy nhất gần đây cho đủ một ô kệ / đủ bán. Thiếu tiền hoặc chỗ kho
+ * thì nhóm hết hàng được mua trước, trong nhóm ưu tiên món sẽ bán hết sớm nhất.
+ */
+export function suggestRestockCart(state: GameState, supplierId = 'co_tu', topN = 5): RestockSuggestion {
+  const cfg = DATA.balance.suggest;
+  const daily = recentDailySales(state);
+  const candidates = unlockedProducts(state.level, state).filter((p) => !p.behindCounter && hasPlaceFor(state, p));
+  const slotCap = new Map<string, number>();
+  for (const r of usableShelves(state)) {
+    for (const s of state.shelves[r]) if (s.productId) slotCap.set(s.productId, (slotCap.get(s.productId) ?? 0) + shelfCapacity(state, r));
+  }
+  const freshTarget = (p: Product, extra = 0) => Math.max(cfg.newFresh, Math.ceil((daily[p.id] ?? 0) * cfg.freshFactor) + extra);
+
+  const out: { p: Product; target: number }[] = [];
+  for (const p of candidates) {
+    const cap = slotCap.get(p.id);
+    const have = totalQty(state, p.id);
+    const missed = state.today.missed[p.id] ?? 0;
+    // Sắp hết: tổng trên kệ + kho chưa tới nửa ô.
+    const low = cap !== undefined && have < DATA.balance.slotCapacity / 2;
+    if (!low && missed === 0) continue;
+    const target = isPerishable(p) ? freshTarget(p, missed) : Math.max(cap ?? DATA.balance.slotCapacity, missed * 2);
+    if (target > have) out.push({ p, target });
+  }
+  const outIds = new Set(out.map((it) => it.p.id));
+  const best = candidates
+    .filter((p) => !outIds.has(p.id) && (daily[p.id] ?? 0) > 0)
+    .sort((a, b) => daily[b.id] - daily[a.id])
+    .slice(0, topN)
+    .map((p) => ({ p, target: isPerishable(p) ? freshTarget(p) : Math.max(DATA.balance.slotCapacity, Math.ceil(daily[p.id] * cfg.buffer)) }))
+    .filter((it) => it.target > totalQty(state, it.p.id));
+
+  const cart: Cart = {};
+  for (const group of [out, best]) {
+    const items = group.map(({ p, target }) => {
+      const have = totalQty(state, p.id);
+      // Món chưa có số liệu bán coi như bán chậm, để món bán chạy được mua trước khi thiếu tiền.
+      return { p, have, rate: Math.max(daily[p.id] ?? 0, 0.3), want: target - have, blocked: false };
+    });
+    // Mỗi lần thêm 1 món cho món sẽ bán hết sớm nhất (số ngày còn đủ bán ít nhất).
+    const cover = (it: (typeof items)[number]) => (it.have + (cart[it.p.id] ?? 0)) / it.rate;
+    for (;;) {
+      let pick: (typeof items)[number] | null = null;
+      for (const it of items) {
+        if (it.blocked || it.want <= (cart[it.p.id] ?? 0)) continue;
+        if (!pick || cover(it) < cover(pick)) pick = it;
+      }
+      if (!pick) break;
+      cart[pick.p.id] = (cart[pick.p.id] ?? 0) + 1;
+      const check = checkCart(state, cart, supplierId);
+      if (!check.ok && check.reason !== 'min-order') {
+        cart[pick.p.id]--;
+        if (cart[pick.p.id] === 0) delete cart[pick.p.id];
+        pick.blocked = true;
+      }
+    }
+  }
+  return {
+    cart,
+    outOfStock: out.map((it) => it.p.id).filter((id) => cart[id]),
+    bestSellers: best.map((it) => it.p.id).filter((id) => cart[id]),
+  };
+}
