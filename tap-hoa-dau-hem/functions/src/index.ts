@@ -1,7 +1,9 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { logger, setGlobalOptions } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { createNewGame } from '../../src/core/state';
 import { migrate } from '../../src/core/save';
 import {
@@ -127,6 +129,30 @@ export const pulseSharedShop = onCall(async (request) => {
       });
     }
     return { sequence: advanced.sequence, serverNowMs: now, deviceId };
+  });
+});
+
+// Bảng xếp hạng phản ánh đúng bản lưu cloud (đã qua kiểm tra revision trong
+// firestore.rules), nên không cần thêm endpoint riêng mà client có thể giả mạo số liệu.
+export const syncLeaderboardEntry = onDocumentWritten('users/{uid}/saves/main', async (event) => {
+  const uid = event.params.uid;
+  const after = event.data?.after;
+  const leaderboardRef = db.collection('leaderboards').doc(uid);
+  if (!after?.exists) {
+    await leaderboardRef.delete().catch(() => {});
+    return;
+  }
+  const summary = after.data()?.summary as { level?: number; day?: number; money?: number; playSeconds?: number } | undefined;
+  if (!summary || typeof summary.money !== 'number') return;
+  const user = await getAuth().getUser(uid).catch(() => null);
+  await leaderboardRef.set({
+    uid,
+    displayName: user?.displayName ?? 'Ẩn danh',
+    photoURL: user?.photoURL ?? null,
+    level: Number(summary.level) || 1,
+    day: Number(summary.day) || 1,
+    money: Number(summary.money) || 0,
+    updatedAt: FieldValue.serverTimestamp(),
   });
 });
 

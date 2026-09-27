@@ -37,5 +37,11 @@ service cloud.firestore {
     match /users/{uid}/{document=**} {
       allow read, write, delete: if false;
     }
+
+    // Bảng xếp hạng: chỉ Cloud Function (Admin SDK) mới ghi được, đọc cần đăng nhập.
+    match /leaderboards/{uid} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
   }
 }
