@@ -155,6 +155,15 @@ export class SummaryScene extends Phaser.Scene {
     }
 
     const unclaimed = (s.quests?.list ?? []).filter((q) => !q.claimed && questDone(s, questDef(q.id))).length;
+    const fresh = s.reviews.filter((r) => r.day === sum.day);
+    if (fresh.length) {
+      const bad = fresh.filter((r) => r.stars <= 2).length;
+      new Button(this, W / 2, H - (unclaimed ? 146 : 100), {
+        w: 220, h: 38, size: 13, color: bad ? C.redDark : C.blue,
+        label: `✍️ ${fresh.length} đánh giá mới${bad ? ` · ${bad} chê` : ''}`,
+        onTap: () => this.scene.start('Reviews', { back: 'Summary' }),
+      });
+    }
     if (unclaimed) {
       new Button(this, W / 2, H - 100, { w: 220, h: 40, label: `🎯 Nhận ${unclaimed} thưởng nhiệm vụ`, color: C.green, size: 13, onTap: () => this.scene.start('Quests', { back: 'Summary' }) });
     }

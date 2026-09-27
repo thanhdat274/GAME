@@ -1,6 +1,7 @@
 import {
   DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type StaffRole, type StaffStats,
 } from './data';
+import type { Review } from './reviews';
 
 export type Phase = 'morning' | 'open' | 'summary';
 
@@ -380,6 +381,8 @@ export interface GameState {
   /** Hướng dẫn tính năng mới đã xem. */
   tutorialsSeen: string[];
   ratings: number[];
+  /** Đánh giá khách viết (mới nhất trước) và phản hồi của chủ tiệm. */
+  reviews: Review[];
   yesterdaySold: Record<string, number>;
   yesterdayMissed: Record<string, number>;
   /** Số lần khách chê giá hôm qua theo món (để gợi ý ở màn Giá bán). */
@@ -494,6 +497,7 @@ export function createNewGame(): GameState {
     lifetime: { sold: 0, served: 0, debtsCollected: 0, landsOpened: 0, loveStreak: 0 },
     tutorialsSeen: [],
     ratings: [],
+    reviews: [],
     yesterdaySold: {},
     yesterdayMissed: {},
     today: emptyStats(),
@@ -540,7 +544,7 @@ export function createNewGame(): GameState {
 
 const STORE_KEYS = [
   'warehouse', 'holding', 'shelves', 'zones', 'counter', 'fixtures', 'diningTables', 'nextUid', 'land', 'warehouseTier', 'prices',
-  'deliveries', 'ledger', 'regulars', 'quests', 'weeklyQuests', 'partyOrder', 'partyOrderWeek', 'decorOwned', 'lifetime', 'tutorialsSeen', 'ratings', 'yesterdaySold', 'yesterdayMissed',
+  'deliveries', 'ledger', 'regulars', 'quests', 'weeklyQuests', 'partyOrder', 'partyOrderWeek', 'decorOwned', 'lifetime', 'tutorialsSeen', 'ratings', 'reviews', 'yesterdaySold', 'yesterdayMissed',
   'yesterdayComplaints', 'today', 'lastGrandmaDay', 'seenIntro', 'lastSummary', 'announcedLevel', 'staff', 'staffBoard',
   'fixedCandidateUsed', 'schedule', 'scheduleReady', 'rules', 'planogram', 'analytics', 'managerStats', 'manager', 'wageDebt',
   'camera', 'morningNotes', 'activeEvents', 'eventProgress', 'eventHistory', 'eventRollDay', 'eventRewards',
@@ -579,6 +583,7 @@ export function activateStore(state: GameState, id: string): boolean {
     else if (key === 'weeklyQuests') state.weeklyQuests = null;
     else if (key === 'partyOrder') state.partyOrder = null;
     else if (key === 'partyOrderWeek') state.partyOrderWeek = -1;
+    else if (key === 'reviews') state.reviews = [];
   }
   return true;
 }

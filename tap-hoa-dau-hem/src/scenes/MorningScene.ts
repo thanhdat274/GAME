@@ -10,6 +10,7 @@ import {
   refillSlot, setClearance, slotFreshness, suggestCart, clearSlot, supplierUnlocked, unitCost, warehouseCapacity,
   warehouseCellsUsed, type Cart,
 } from '../core/stock';
+import { unrepliedCount } from '../core/reviews';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand } from '../services/liveShop';
 import { suspendLiveShop } from '../services/liveShop';
@@ -256,6 +257,8 @@ export class MorningScene extends Phaser.Scene {
     if (hasFeature(s.level, 'land')) items.push({ label: '🏗️ Sắp xếp', color: C.green, onTap: go('Build') });
     items.push({ label: '🗺️ Sơ đồ tiệm', color: C.wood, onTap: go('StoreMap') });
     items.push({ label: '📦 Kho hàng', color: C.wood, onTap: go('Warehouse') });
+    const unreplied = unrepliedCount(s);
+    items.push({ label: `⭐ Đánh giá${unreplied ? ` (${unreplied})` : ''}`, color: C.wood, onTap: go('Reviews') });
     if (hasFeature(s.level, 'quests')) items.push({ label: '🎯 Nhiệm vụ', color: C.wood, onTap: go('Quests') });
     if (hasFeature(s.level, 'pricing')) items.push({ label: '💲 Giá bán', color: C.wood, onTap: go('Prices') });
     if (hasFeature(s.level, 'credit')) items.push({ label: '📒 Sổ nợ', color: C.wood, onTap: go('Ledger') });

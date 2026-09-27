@@ -18,6 +18,7 @@ import { TitleScene } from './scenes/TitleScene';
 import { StaffScene } from './scenes/StaffScene';
 import { ScheduleScene } from './scenes/ScheduleScene';
 import { RulesScene } from './scenes/RulesScene';
+import { ReviewsScene } from './scenes/ReviewsScene';
 import { AnalyticsScene } from './scenes/AnalyticsScene';
 import { CalendarScene } from './scenes/CalendarScene';
 import { CookScene, KitchenScene } from './scenes/KitchenScene';
@@ -42,7 +43,7 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   render: { antialias: true, roundPixels: false },
   input: { activePointers: 2 },
-  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, StoreMapScene, PricesScene, LedgerScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene, RestockScene],
+  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, StoreMapScene, PricesScene, LedgerScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene, RestockScene, ReviewsScene],
 });
 
 // Chỉ bản dev: đo FPS khi kiểm thử hiệu năng trên trình duyệt.

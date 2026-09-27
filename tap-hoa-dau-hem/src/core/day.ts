@@ -20,6 +20,7 @@ import { applyLevelUps, averageRating, isAtCap, ratingSpawnMultiplier, recordRat
 import { checkAchievements, claimAllDone, ensureDailyQuests } from './quests';
 import { ensureWeeklyQuests, updateWeeklyQuestProgress } from './weeklyQuests';
 import { refreshPartyOrder } from './partyOrders';
+import { maybeCustomerReview, maybeDeliveryReview, type Review } from './reviews';
 import { Rng, daySeed } from './rng';
 import { ensureScheduleReady, shiftAt, worksShift } from './schedule';
 import {
@@ -82,6 +83,8 @@ export interface DayEvents {
   customerBrowse: { customer: Customer; zone: Category; shelf: number | null; tiles: number };
   customerFront: Customer;
   customerLeft: { customer: Customer; reason: LeaveReason; stars: number };
+  /** Khách vừa để lại đánh giá. */
+  review: Review;
   itemTaken: { customer: Customer; productId: string; shelf: number; slot: number };
   itemMissing: { customer: Customer; productId: string };
   basketReady: Customer;
@@ -1082,6 +1085,10 @@ export class DaySession {
       recordRating(this.state, stars);
       this.state.today.ratingSum += stars;
       this.state.today.ratingCount++;
+      if (reason !== 'thief') {
+        const review = maybeCustomerReview(this.state, c, reason, stars);
+        if (review) this.events.emit('review', review);
+      }
     }
     this.removeFrom(this.queue, c);
     this.removeFrom(this.shoppers, c);
@@ -1471,6 +1478,7 @@ export class DaySession {
         this.events.emit('staffMistake', { staff: s, kind: 'over', amount });
       } else {
         c.penalty = Math.min(2, c.penalty + 1);
+        c.shortChanged = true;
         this.state.today.complaints++;
         this.log(`Khách phàn nàn ${s.name} thối thiếu ${formatMoney(amount)}`);
         this.events.emit('staffMistake', { staff: s, kind: 'short', amount });
@@ -1697,6 +1705,8 @@ export class DaySession {
     else t.lateDeliveries++;
     const stars = o.onTime ? b.delivery.onTimeStars : b.delivery.lateStars;
     recordRating(this.state, stars);
+    const review = maybeDeliveryReview(this.state, o.id, !!o.onTime, stars);
+    if (review) this.events.emit('review', review);
     t.ratingSum += stars;
     t.ratingCount++;
     let exp = units * b.expPerItem + (stars >= 3 ? b.expPerHappy : 0);

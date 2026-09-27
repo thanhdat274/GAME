@@ -40,6 +40,7 @@ export function openBranch(state: GameState, id: string): OpenBranchResult {
   state.lifetime = { sold: 0, served: 0, debtsCollected: 0, landsOpened: 0, loveStreak: 0 };
   state.tutorialsSeen = [];
   state.ratings = [];
+  state.reviews = [];
   state.yesterdaySold = {};
   state.yesterdayMissed = {};
   state.today = emptyStats();
