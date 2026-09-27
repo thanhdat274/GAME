@@ -42,6 +42,19 @@ describe('lưu game', () => {
     expect(store.getItem(BACKUP_KEY)).toBe('{không phải json');
   });
 
+  it('bản lưu có mặt hàng lạ (từ bản game mới hơn): báo cập nhật, giữ nguyên bản lưu', () => {
+    const store = new MemoryStore();
+    const s = createNewGame();
+    s.warehouse = lotsFrom({ mi_goi: 2, mat_hang_tuong_lai: 3 });
+    saveGame(s, store);
+    const raw = store.getItem(SAVE_KEY);
+    const res = loadGame(store);
+    expect(res.status).toBe('corrupt');
+    if (res.status === 'corrupt') expect(res.error).toContain('mat_hang_tuong_lai');
+    expect(store.getItem(SAVE_KEY)).toBe(raw);
+    expect(store.getItem(BACKUP_KEY)).toBe(raw);
+  });
+
   it('bổ sung trường mới còn thiếu bằng giá trị mặc định', () => {
     const old = createNewGame() as unknown as Record<string, unknown>;
     delete old.announcedLevel;

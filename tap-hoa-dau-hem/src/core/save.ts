@@ -151,9 +151,26 @@ function knownProduct(id: string): boolean {
   }
 }
 
+/** Các productId trong bản lưu mà bản game này không biết (bản lưu từ phiên bản mới hơn). */
+export function unknownProductIds(value: unknown, out = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) unknownProductIds(item, out);
+  } else if (value && typeof value === 'object') {
+    for (const [key, v] of Object.entries(value)) {
+      if (key === 'productId' && typeof v === 'string') {
+        if (!knownProduct(v)) out.add(v);
+      } else unknownProductIds(v, out);
+    }
+  }
+  return out;
+}
+
 export function migrate(file: { version: number; state: Record<string, unknown> }): GameState {
   let { version, state } = file;
   if (version > CURRENT_VERSION) throw new Error(`Bản lưu version ${version} mới hơn game (${CURRENT_VERSION})`);
+  // Mặt hàng không bao giờ bị xóa khỏi products.json, nên id lạ nghĩa là game đang chạy bản cũ (cache PWA).
+  const unknown = [...unknownProductIds(state)];
+  if (unknown.length) throw new Error(`Bản lưu đến từ phiên bản game mới hơn (có mặt hàng ${unknown.slice(0, 3).join(', ')}). Hãy cập nhật game rồi tải lại.`);
   while (version < CURRENT_VERSION) {
     const step = migrations[version];
     if (!step) throw new Error(`Không có migrate từ version ${version}`);
