@@ -5,6 +5,11 @@ import { C, HEX, W, setupCamera, txt } from '../ui/theme';
 
 const PAGES = [
   {
+    icon: '🏪',
+    title: 'Tiệm Tạp Hóa Đầu Hẻm',
+    body: 'Bà giao lại tiệm tạp hóa nhỏ đầu hẻm, cùng 500 nghìn làm vốn. Nhập hàng, bày kệ, bán hàng, thối tiền mỗi ngày để tiệm ngày càng đông khách.\n\nLên level mở khóa nhân viên, chi nhánh, nấu ăn, nhiệm vụ tuần và thăng cấp. Đăng nhập Google để lưu cloud và so tài trên bảng xếp hạng.',
+  },
+  {
     icon: '🛒',
     title: '1. Nhập hàng buổi sáng',
     body: 'Mỗi sáng mua hàng từ mối sỉ Cô Tư. Xem "Hôm qua bán" và "thiếu" (khách hỏi mà hết) để nhập vừa đủ, hoặc bấm 🪄 Gợi ý để game tự tính. Kho có 30 ô.',
