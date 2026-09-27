@@ -14,6 +14,7 @@
   "topDown": { "playerTilesPerSecond": 4, "awayPatienceRate": 0.6 },
   "zoneWalkSeconds": 1.2,
   "pickSeconds": 0.8,
+  "askStockSeconds": 4,
   "shopBudgetFactor": 1.8,
   "zoneLowThreshold": 0.4,
   "zoneCriticalThreshold": 0.15,

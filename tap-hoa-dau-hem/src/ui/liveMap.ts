@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { Customer } from '../core/customers';
+import { askable, type Customer } from '../core/customers';
 import { DATA, furniture, product, type CustomerType } from '../core/data';
 import type { DaySession } from '../core/day';
 import { findPath, fixtureCells, walkableGrid, type Cell } from '../core/layout';
@@ -57,6 +57,8 @@ interface Agent {
   jitter: { x: number; y: number };
   /** Khách đã rời phiên: đi ra cửa rồi xóa. */
   leaving: boolean;
+  /** Đã rời phiên khi còn đang đi ra quầy: tới quầy trước rồi mới ra cửa. */
+  viaCounter?: boolean;
   hidden: boolean;
   /** Đang quay lưng (đi lên / đứng nhìn vào kệ phía trên). */
   back: boolean;
@@ -79,7 +81,7 @@ interface SlotView {
 
 /**
  * Sơ đồ trực tiếp trong giờ bán: mặt bằng từ trên xuống, khách đi từ cửa tới kệ theo đường tìm được trên lưới,
- * ra quầy xếp hàng rồi về; nhân viên đi bày hàng, nấu, đứng quầy.
+ * ra quầy xếp hàng (hỏi món hết, tính tiền) rồi mới ra cửa; nhân viên đi bày hàng, nấu, đứng quầy.
  * Chế độ 'play': người chơi chạm ô để đi, phải tới sát kệ mới nạp được và đứng ở quầy mới tính tiền được.
  */
 export class LiveMap {
@@ -204,6 +206,21 @@ export class LiveMap {
     this.unsub.push(
       ev.on('itemTaken', ({ customer, productId }) => this.popIcon(`c${customer.id}`, productId)),
       ev.on('itemMissing', ({ customer }) => this.popText(`c${customer.id}`, '❓')),
+      ev.on('stockAsking', (customer) => {
+        this.popText(`c${customer.id}`, '🙋');
+        const names = customer.order.filter(askable).map((l) => product(l.productId).name.toLowerCase()).join(', ');
+        if (this.mode === 'play') this.say(`🙋 Khách hỏi còn ${names} không · đang kiểm kho…`);
+      }),
+      ev.on('stockAsked', ({ customer, productId, found, missing }) => {
+        const name = product(productId).name.toLowerCase();
+        if (found > 0) this.popIcon(`c${customer.id}`, productId);
+        else this.popText(`c${customer.id}`, '🙁');
+        if (this.mode === 'play') {
+          this.say(found > 0
+            ? `📦 Kho còn ${name}: đưa khách ${found}${missing > 0 ? ` (vẫn thiếu ${missing})` : ''} và bày thêm lên kệ`
+            : `🙁 Hết ${name} cả kho · tính tiền phần còn lại`);
+        }
+      }),
       ev.on('priceComplaint', ({ customer }) => this.popText(`c${customer.id}`, '💸')),
       ev.on('notCold', ({ customer }) => this.popText(`c${customer.id}`, '🥵')),
       ev.on('sale', ({ customer, amount }) => this.popText(`c${customer.id}`, `+${formatMoney(amount)}`, HEX.green)),
@@ -349,10 +366,18 @@ export class LiveMap {
       if (!seen.has(a.id) && !a.leaving) {
         a.leaving = true;
         a.tag?.setText('');
-        this.setGoal(a, { kind: 'door' }, snap);
+        // Khách còn đang đi ra quầy (mô phỏng đã tính tiền / hỏi kho xong): đi hết tới quầy rồi mới ra cửa,
+        // không cắt ngang từ kệ ra cửa như chưa trả tiền.
+        if (!snap && a.goal.kind === 'queue' && a.path.length) a.viaCounter = true;
+        else this.setGoal(a, { kind: 'door' }, snap);
       }
       this.step(a, dt);
-      if (a.leaving && !a.path.length) this.removeAgent(a);
+      if (a.leaving && !a.path.length) {
+        if (a.viaCounter) {
+          a.viaCounter = false;
+          this.setGoal(a, { kind: 'door' }, false);
+        } else this.removeAgent(a);
+      }
     }
     this.spreadIdle();
     for (const a of this.agents.values()) this.place(a);
@@ -1027,7 +1052,8 @@ export class LiveMap {
     if (a.leaving) return `${c.name ?? c.type.name}: đang về.`;
     const who = c.name ? `${c.name} (${c.type.name})` : c.type.name;
     const list = c.order.map((l) => `${product(l.productId).name} ${l.counterLine ? '(ở quầy)' : `${l.picked}/${l.qty}`}`).join(', ');
-    const status = c.status === 'browsing' ? 'đang chọn hàng' : c.status === 'entering' ? 'đang chờ vào' : c.status === 'fleeing' ? 'đang bỏ chạy!' : 'đang chờ tính tiền';
+    const status = c.status === 'browsing' ? 'đang chọn hàng' : c.status === 'entering' ? 'đang chờ vào' : c.status === 'fleeing' ? 'đang bỏ chạy!'
+      : c.status === 'waiting' && c.askLeft !== undefined && c.order.some(askable) ? 'đang hỏi món hết, chờ kiểm kho' : 'đang chờ tính tiền';
     return `🧍 ${who}: ${status}.\nGiỏ: ${list || 'chưa có gì'}`;
   }
 }

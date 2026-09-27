@@ -109,6 +109,8 @@ export interface Balance {
   };
   zoneWalkSeconds: number;
   pickSeconds: number;
+  /** Giây người đứng quầy kiểm kho khi khách hỏi món hết trên kệ. */
+  askStockSeconds: number;
   shopBudgetFactor: number;
   zoneLowThreshold: number;
   zoneCriticalThreshold: number;
