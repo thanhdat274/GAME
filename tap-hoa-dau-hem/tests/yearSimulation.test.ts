@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { visitStore } from '../src/core/branches';
 import { DaySession, endDay, openShop, runDayHeadless, startNextDay } from '../src/core/day';
 import { createMaxLevelSimulation } from '../src/core/simulation';
+import { CURRENT_VERSION } from '../src/core/save';
 import { syncActiveStore, unlockedProducts, warehouseQty, type GameState } from '../src/core/state';
 import { autoArrange, buyStock, checkCart } from '../src/core/stock';
 
@@ -27,7 +28,7 @@ function restock(state: GameState): void {
 
 function saveBytes(state: GameState): number {
   syncActiveStore(state);
-  return new TextEncoder().encode(JSON.stringify({ version: 5, savedAt: 0, state })).length;
+  return new TextEncoder().encode(JSON.stringify({ version: CURRENT_VERSION, savedAt: 0, state })).length;
 }
 
 describe('7.1 mô phỏng 1 năm game với 4 tiệm', () => {

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { openBranch, sendBranchShipment, visitStore } from '../core/branches';
+import { branchAvailable, maxStores, openBranch, sendBranchShipment, visitStore } from '../core/branches';
 import { DATA, product } from '../core/data';
 import { formatMoney, warehouseTotals } from '../core/state';
 import { G, persist } from '../game';
@@ -21,7 +21,9 @@ export class BranchesScene extends Phaser.Scene {
     const s = G.state;
     let y = 6;
     this.list.add(txt(this, 14, y, `Đang ghé: ${s.stores.find((store) => store.id === s.activeStoreId)?.name ?? 'Tiệm chính'}`, { size: 13, bold: true })); y += 28;
-    const defs = [{ id: 'main', name: 'Tiệm chính', icon: '🏪', unlockLevel: 1, cost: 0, description: 'Cửa hàng gốc của bạn.' }, ...DATA.branches];
+    // Khu cần tính năng riêng (vd. Tiệm xôi cần `shop_xoi`) chỉ hiện khi đã mở tính năng đó hoặc đã có tiệm.
+    const branches = DATA.branches.filter((def) => !def.feature || branchAvailable(s, def) || s.stores.some((store) => store.id === def.id));
+    const defs = [{ id: 'main', name: 'Tiệm chính', icon: '🏪', unlockLevel: 1, cost: 0, description: 'Cửa hàng gốc của bạn.' }, ...branches];
     for (const def of defs) {
       const store = s.stores.find((item) => item.id === def.id);
       const current = s.activeStoreId === def.id;
@@ -36,7 +38,7 @@ export class BranchesScene extends Phaser.Scene {
         if (store) visitStore(s, def.id);
         else {
           const result = openBranch(s, def.id);
-          if (!result.ok) { toast(this, result.reason === 'money' ? 'Chưa đủ tiền mở chi nhánh' : result.reason === 'limit' ? 'Đã đạt giới hạn 4 cửa hàng' : 'Chưa mở chi nhánh này'); return; }
+          if (!result.ok) { toast(this, result.reason === 'money' ? 'Chưa đủ tiền mở chi nhánh' : result.reason === 'limit' ? `Đã đạt giới hạn ${maxStores()} cửa hàng` : 'Chưa mở chi nhánh này'); return; }
         }
         persist(); this.scene.start('Morning');
       }) }).setEnabled(!locked));

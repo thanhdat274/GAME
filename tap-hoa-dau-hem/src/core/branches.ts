@@ -1,4 +1,5 @@
-import { DATA, type BranchDef } from './data';
+import { DATA, hasFeature, type BranchDef } from './data';
+import { ensureDiningTables } from './dining';
 import { addStoreSnapshot, activateStore, createNewGame, emptyStats, syncActiveStore, type GameState, type StoreSnapshot } from './state';
 import { takeLots } from './stock';
 
@@ -8,14 +9,24 @@ export function branchDefinition(id: string): BranchDef | undefined {
   return DATA.branches.find((branch) => branch.id === id);
 }
 
+/** Số cửa hàng tối đa trong chuỗi, tính cả tiệm chính (balance.json › chain.maxStores). */
+export function maxStores(): number {
+  return DATA.balance.chain.maxStores;
+}
+
+/** Khu hiện trên Bản đồ: đã tới level mở và (nếu cần) đã có tính năng riêng, vd. `shop_xoi`. */
+export function branchAvailable(state: GameState, branch: BranchDef): boolean {
+  return state.level >= branch.unlockLevel && (!branch.feature || hasFeature(state.level, branch.feature));
+}
+
 export function openBranch(state: GameState, id: string): OpenBranchResult {
   const branch = branchDefinition(id);
-  if (!branch || state.level < branch.unlockLevel) return { ok: false, reason: 'locked' };
+  if (!branch || !branchAvailable(state, branch)) return { ok: false, reason: 'locked' };
   if (state.stores.some((store) => store.id === id)) return { ok: false, reason: 'exists' };
-  if (state.stores.length >= 4) return { ok: false, reason: 'limit' };
+  if (state.stores.length >= maxStores()) return { ok: false, reason: 'limit' };
   if (state.money < branch.cost) return { ok: false, reason: 'money' };
   state.money -= branch.cost;
-  const ok = addStoreSnapshot(state, { id, name: branch.name, kind: branch.kind });
+  const ok = addStoreSnapshot(state, { id, name: branch.name, kind: branch.kind, shopType: branch.shopType ?? 'grocery' });
   if (!ok) { state.money += branch.cost; return { ok: false, reason: 'exists' }; }
   activateStore(state, id);
   const blank = createNewGame();
@@ -26,6 +37,8 @@ export function openBranch(state: GameState, id: string): OpenBranchResult {
   state.counter = blank.counter;
   state.fixtures = branch.defaultLayout.map((fixture, index) => ({ uid: index + 1, ...fixture, rot: (fixture.rot ?? 0) as 0 | 1 }));
   state.nextUid = state.fixtures.length + 1;
+  state.diningTables = [];
+  ensureDiningTables(state);
   state.land = [];
   state.warehouseTier = 0;
   state.prices = {};
@@ -62,6 +75,8 @@ export function openBranch(state: GameState, id: string): OpenBranchResult {
   state.eventHistory = [];
   state.eventRewards = [];
   state.activeRecipes = [];
+  state.soakBatches = [];
+  state.cookedRice = [];
   state.branchLastSimDay[id] = state.day - 1;
   const saved = state.stores.find((store) => store.id === id)!;
   saved.simDay = state.day - 1;

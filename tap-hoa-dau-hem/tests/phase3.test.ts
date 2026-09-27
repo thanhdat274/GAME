@@ -9,7 +9,7 @@ import { buyFixture, placeAnywhere, plot, plotCells, plotStatus, unlockPlot } fr
 import { applyOfflineIncome, offlineElapsed } from '../src/core/offline';
 import { levelForExp } from '../src/core/progression';
 import { Rng } from '../src/core/rng';
-import { BACKUP_KEY, PRE_MIGRATE_KEY, SAVE_KEY, loadGame, migrate, saveGame, type KeyValueStore } from '../src/core/save';
+import { BACKUP_KEY, CURRENT_VERSION, PRE_MIGRATE_KEY, SAVE_KEY, loadGame, migrate, saveGame, type KeyValueStore } from '../src/core/save';
 import {
   autoSchedule, doubleShift, scheduleGrid, setShift, shiftsWithoutCashier, weekday, worksShift,
 } from '../src/core/schedule';
@@ -133,7 +133,7 @@ describe('dữ liệu giai đoạn 3', () => {
 describe('bản lưu v4', () => {
   it('migrate v3 → v4 giữ khu, kho lô, hàng sau quầy; thêm trường nhân viên; lên level theo EXP dư', () => {
     const s = migrate(structuredClone(saveV3) as unknown as { version: number; state: Record<string, unknown> });
-    expect(s.version).toBe(5);
+    expect(s.version).toBe(CURRENT_VERSION);
     expect(s.level).toBe(16);
     expect(s.staff).toEqual([]);
     expect(s.schedule).toEqual({});

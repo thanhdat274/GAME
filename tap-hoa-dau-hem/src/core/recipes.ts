@@ -1,5 +1,5 @@
 import { DATA, product, type RecipeDef } from './data';
-import { formatMoney, type GameState } from './state';
+import { formatMoney, type GameState, type StoreData } from './state';
 
 export type CookResult = { ok: true; cost: number; output: string } | { ok: false; reason: 'locked' | 'station' | 'ingredients' | 'space' | 'menu' };
 
@@ -32,7 +32,7 @@ export function validateRecipes(recipes: RecipeDef[] = DATA.recipes): string[] {
   return errors;
 }
 
-function hasStation(state: GameState, station: string): boolean {
+function hasStation(state: StoreData, station: string): boolean {
   return state.fixtures.some((f) => f.type === station);
 }
 
@@ -40,7 +40,7 @@ export function recipeIngredients(recipe: RecipeDef): Record<string, number> {
   return { ...recipe.ingredients };
 }
 
-function consumeWarehouse(state: GameState, requirements: Record<string, number>): boolean {
+function consumeWarehouse(state: StoreData, requirements: Record<string, number>): boolean {
   if (Object.entries(requirements).some(([id, qty]) => state.warehouse.reduce((n, lot) => n + (lot.productId === id ? lot.qty : 0), 0) < qty)) return false;
   for (const [id, required] of Object.entries(requirements)) {
     let left = required;
@@ -56,29 +56,33 @@ function consumeWarehouse(state: GameState, requirements: Record<string, number>
   return true;
 }
 
-/** Prepare one serving from real warehouse stock and place it in counter inventory. */
-export function prepareRecipe(state: GameState, id: string, quality = 1, variantId?: string): CookResult {
+/**
+ * Prepare one serving from real warehouse stock and place it in counter inventory.
+ * `store` mặc định là tiệm đang đứng; truyền `storeView(state, id)` để chế biến ở tiệm khác
+ * (level, ngày, giờ vẫn lấy từ phần chung của `state`).
+ */
+export function prepareRecipe(state: GameState, id: string, quality = 1, variantId?: string, store: StoreData = state): CookResult {
   const recipe = DATA.recipes.find((r) => r.id === id);
   if (!recipe || recipe.unlockLevel > state.level) return { ok: false, reason: 'locked' };
-  if (!hasStation(state, recipe.station)) return { ok: false, reason: 'station' };
-  if (!state.activeRecipes.includes(id)) return { ok: false, reason: 'menu' };
+  if (!hasStation(store, recipe.station)) return { ok: false, reason: 'station' };
+  if (!store.activeRecipes.includes(id)) return { ok: false, reason: 'menu' };
   const variant = variantId ? recipe.variants?.find((item) => item.id === variantId) : undefined;
   if (variantId && !variant) return { ok: false, reason: 'menu' };
   const requirements = recipeIngredients(recipe);
-  const slots = state.counter;
+  const slots = store.counter;
   let outputSlot = slots.find((s) => s.productId === recipe.output);
   if (!outputSlot) outputSlot = slots.find((s) => s.productId === null || s.qty <= 0);
   if (!outputSlot) return { ok: false, reason: 'space' };
-  if (Object.entries(requirements).some(([item, qty]) => state.warehouse.reduce((n, l) => n + (l.productId === item ? l.qty : 0), 0) < qty)) return { ok: false, reason: 'ingredients' };
-  consumeWarehouse(state, requirements);
+  if (Object.entries(requirements).some(([item, qty]) => store.warehouse.reduce((n, l) => n + (l.productId === item ? l.qty : 0), 0) < qty)) return { ok: false, reason: 'ingredients' };
+  consumeWarehouse(store, requirements);
   const output = product(recipe.output);
   outputSlot.productId = output.id;
   outputSlot.qty++;
   outputSlot.lots = [{ qty: outputSlot.qty, exp: state.day + recipe.shelfLifeDays - 1 }];
   const qualityFactor = Math.max(0.75, Math.min(1.25, quality + (variant?.qualityDelta ?? 0)));
-  state.prices[output.id] = Math.max(output.cost, Math.round((output.price * qualityFactor + (variant?.priceDelta ?? 0)) / 500) * 500);
+  store.prices[output.id] = Math.max(output.cost, Math.round((output.price * qualityFactor + (variant?.priceDelta ?? 0)) / 500) * 500);
   const variantNote = variant ? ` (${variant.name})` : '';
-  state.today.journal.push({ m: state.clock, t: `Đã chế biến ${output.name}${variantNote}; nguyên liệu ${formatMoney(Object.entries(requirements).reduce((sum, [item, qty]) => sum + product(item).cost * qty, 0))}` });
+  store.today.journal.push({ m: state.clock, t: `Đã chế biến ${output.name}${variantNote}; nguyên liệu ${formatMoney(Object.entries(requirements).reduce((sum, [item, qty]) => sum + product(item).cost * qty, 0))}` });
   return { ok: true, cost: Object.entries(requirements).reduce((sum, [item, qty]) => sum + product(item).cost * qty, 0), output: output.id };
 }
 
@@ -91,9 +95,9 @@ export function setRecipeActive(state: GameState, id: string, active: boolean): 
   return true;
 }
 
-export function expirePreparedFood(state: GameState): number {
+export function expirePreparedFood(state: GameState, store: StoreData = state): number {
   let spoiled = 0;
-  for (const slot of state.counter) {
+  for (const slot of store.counter) {
     if (!slot.productId || slot.qty <= 0) continue;
     const p = DATA.products.find((item) => item.id === slot.productId);
     if (!p?.recipeOnly) continue;

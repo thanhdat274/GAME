@@ -6,6 +6,7 @@ import {
   sellValue, unlockPlot, type PlaceError,
 } from '../core/layout';
 import { formatMoney, type Fixture, type GameState } from '../core/state';
+import { activeShopType } from '../core/shopTypes';
 import { sellFixture } from '../core/stock';
 import { G, persist } from '../game';
 import { play } from '../ui/sound';
@@ -48,7 +49,8 @@ const PLACE_TEXT: Record<PlaceError, string> = {
 
 /** Những gì có thể mua trong chế độ Sắp xếp (nội thất + đồ trang trí đặt sàn). */
 function catalog(state: GameState): { id: string; name: string; icon: string; cost: number; level: number; decor: boolean }[] {
-  const items = DATA.furniture.filter((f) => !f.fixed).map((f) => ({ id: f.id, name: f.name, icon: f.icon, cost: f.cost, level: f.unlockLevel, decor: false }));
+  const shop = activeShopType(state);
+  const items = DATA.furniture.filter((f) => !f.fixed && shop.allowsFixture(f.id)).map((f) => ({ id: f.id, name: f.name, icon: f.icon, cost: f.cost, level: f.unlockLevel, decor: false }));
   const floor = DATA.decor.filter((d) => d.slot === 'floor' && !d.exclusive).map((d) => ({ id: d.id, name: d.name, icon: d.icon, cost: d.cost, level: Math.max(d.unlockLevel, 8), decor: true }));
   return [...items, ...(hasFeature(state.level, 'decor') || state.level >= 5 ? floor : [])];
 }
@@ -374,6 +376,7 @@ export class BuildScene extends Phaser.Scene {
       const msg = result === 'money' ? 'Chưa đủ tiền'
         : result === 'level' ? 'Chưa mở khóa'
         : result === 'plot' ? 'Mở Đất D để mua món này'
+        : result === 'shop' ? 'Loại tiệm này không đặt được món này'
         : result === 'limit' ? `Đã đủ số lượng ${furniture(id).name}`
         : result in PLACE_TEXT ? PLACE_TEXT[result as PlaceError]
         : 'Không đặt được';

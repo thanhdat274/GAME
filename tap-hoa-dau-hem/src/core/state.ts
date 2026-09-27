@@ -2,6 +2,7 @@ import {
   DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type StaffRole, type StaffStats,
 } from './data';
 import type { Review } from './reviews';
+import { activeShopType } from './shopTypes';
 
 export type Phase = 'morning' | 'open' | 'summary';
 
@@ -313,13 +314,60 @@ export interface PartyOrder {
   status: 'offered' | 'accepted' | 'fulfilled' | 'declined' | 'expired';
 }
 
+/** Loại cửa hàng (id trong shopTypes.json), tách khỏi `kind` là khu vực. */
+export type ShopTypeId = 'grocery' | 'xoi';
+
 export interface StoreSnapshot {
   id: string;
   name: string;
-  kind: 'main' | 'market' | 'school' | 'industrial';
+  kind: 'main' | 'market' | 'school' | 'industrial' | 'xoi';
+  shopType: ShopTypeId;
   /** Per-store operational state. Shared money/level remain on GameState. */
   data: Record<string, unknown>;
   simDay?: number;
+}
+
+/** Mẻ nếp đang ngâm (đồng hồ theo phút game, không phải lô hàng). */
+export interface SoakBatch {
+  id: string;
+  kg: number;
+  startDay: number;
+  startMinute: number;
+}
+
+/** Nếp đã hấp chín, còn `portions` phần; nguội sau `stickyRice.warmMinutes`. */
+export interface CookedRice {
+  portions: number;
+  cookedDay: number;
+  cookedMinute: number;
+  quality: number;
+}
+
+export type InternalOrderStatus = 'pending' | 'made' | 'shipping' | 'delivered' | 'short' | 'cancelled';
+
+/** Đơn đặt hàng giữa hai tiệm trong chuỗi; nằm ở phần chung để cả hai tiệm cùng thấy. */
+export interface InternalOrder {
+  id: string;
+  fromStoreId: string;
+  toStoreId: string;
+  items: Record<string, number>;
+  filled: Record<string, number>;
+  createdDay: number;
+  dueDay: number;
+  dueMinute: number;
+  status: InternalOrderStatus;
+  shortReason?: string;
+  recurringId?: string;
+}
+
+/** Đơn định kỳ: mỗi sáng sinh một InternalOrder; tự tạm dừng sau nhiều lần giao thiếu liên tiếp. */
+export interface RecurringOrder {
+  id: string;
+  fromStoreId: string;
+  toStoreId: string;
+  items: Record<string, number>;
+  active: boolean;
+  shortStreak: number;
 }
 
 export interface BranchShipment {
@@ -342,7 +390,7 @@ export interface ActiveEvent {
 }
 
 export interface GameState {
-  version: 5;
+  version: 6;
   day: number;
   phase: Phase;
   /** Phút trong ngày (480 = 08:00) khi đang mở cửa. */
@@ -440,6 +488,13 @@ export interface GameState {
   branchShipments: BranchShipment[];
   storyProgress: string[];
   storyStarted: Record<string, number>;
+  // ---------- Version 6: tiệm xôi và chuỗi cung ứng nội bộ ----------
+  /** Dữ liệu riêng từng tiệm (nằm trong STORE_KEYS). */
+  soakBatches: SoakBatch[];
+  cookedRice: CookedRice[];
+  /** Dữ liệu chung của chuỗi. */
+  internalOrders: InternalOrder[];
+  recurringOrders: RecurringOrder[];
 }
 
 /** Số kệ gốc của giai đoạn 1 (vẫn khóa theo level). */
@@ -469,7 +524,7 @@ export function createNewGame(): GameState {
   const b = DATA.balance;
   const fixtures = defaultFixtures();
   const state: GameState = {
-    version: 5,
+    version: 6,
     day: 1,
     phase: 'morning',
     clock: b.openMinute,
@@ -539,8 +594,12 @@ export function createNewGame(): GameState {
     branchShipments: [],
     storyProgress: [],
     storyStarted: {},
+    soakBatches: [],
+    cookedRice: [],
+    internalOrders: [],
+    recurringOrders: [],
   };
-  state.stores = [{ id: 'main', name: 'Tiệm chính', kind: 'main', data: storeData(state) }];
+  state.stores = [{ id: 'main', name: 'Tiệm chính', kind: 'main', shopType: 'grocery', data: storeData(state) }];
   return state;
 }
 
@@ -550,8 +609,36 @@ const STORE_KEYS = [
   'yesterdayComplaints', 'today', 'lastGrandmaDay', 'seenIntro', 'lastSummary', 'announcedLevel', 'staff', 'staffBoard',
   'fixedCandidateUsed', 'schedule', 'scheduleReady', 'rules', 'planogram', 'analytics', 'managerStats', 'manager', 'wageDebt',
   'camera', 'morningNotes', 'activeEvents', 'eventProgress', 'eventHistory', 'eventRollDay', 'eventRewards',
-  'activeRecipes',
+  'activeRecipes', 'soakBatches', 'cookedRice',
 ] as const;
+
+export type StoreKey = (typeof STORE_KEYS)[number];
+/** Dữ liệu vận hành của một tiệm (kho, kệ, nhân viên…). GameState cũng là StoreData của tiệm đang đứng. */
+export type StoreData = Pick<GameState, StoreKey>;
+
+export function isStoreKey(key: string): key is StoreKey {
+  return (STORE_KEYS as readonly string[]).includes(key);
+}
+
+/**
+ * Truy cập dữ liệu tiệm bất kỳ mà không phải tráo tiệm: tiệm đang đứng trả chính `state`,
+ * tiệm khác trả snapshot `stores[i].data` (ghi vào đó được giữ lại khi `activateStore`).
+ */
+export function storeView(state: GameState, storeId: string): StoreData {
+  if (storeId === state.activeStoreId) return state;
+  const store = state.stores.find((item) => item.id === storeId);
+  if (!store) throw new Error(`Không có cửa hàng ${storeId}`);
+  const data = store.data as Partial<StoreData>;
+  data.warehouse ??= [];
+  data.holding ??= [];
+  data.counter ??= [];
+  data.soakBatches ??= [];
+  data.cookedRice ??= [];
+  data.activeRecipes ??= [];
+  data.analytics ??= [];
+  data.staff ??= [];
+  return data as StoreData;
+}
 
 function storeData(state: GameState): Record<string, unknown> {
   const data: Record<string, unknown> = {};
@@ -567,10 +654,10 @@ export function syncActiveStore(state: GameState): void {
 }
 
 /** Add a new shop copied from the current one; shared money/level stay on GameState. */
-export function addStoreSnapshot(state: GameState, store: Omit<StoreSnapshot, 'data'>): boolean {
+export function addStoreSnapshot(state: GameState, store: Omit<StoreSnapshot, 'data' | 'shopType'> & { shopType?: ShopTypeId }): boolean {
   if (state.stores.some((item) => item.id === store.id)) return false;
   syncActiveStore(state);
-  state.stores.push({ ...store, data: storeData(state) });
+  state.stores.push({ ...store, shopType: store.shopType ?? 'grocery', data: storeData(state) });
   return true;
 }
 
@@ -586,6 +673,8 @@ export function activateStore(state: GameState, id: string): boolean {
     else if (key === 'partyOrder') state.partyOrder = null;
     else if (key === 'partyOrderWeek') state.partyOrderWeek = -1;
     else if (key === 'reviews') state.reviews = [];
+    else if (key === 'soakBatches') state.soakBatches = [];
+    else if (key === 'cookedRice') state.cookedRice = [];
   }
   return true;
 }
@@ -609,8 +698,10 @@ export function unlockedCategories(level: number): Category[] {
 
 export function unlockedProducts(level: number, state?: GameState): Product[] {
   const cats = unlockedCategories(level);
+  const shop = state ? activeShopType(state) : null;
   return DATA.products.filter((p) => {
     if (p.recipeOnly) return false;
+    if (shop && !shop.allowsProduct(p.id)) return false;
     if (p.unlockLevel > level || !(p.behindCounter ? level >= 3 : cats.includes(p.category))) return false;
     if (!p.eventOnly) return true;
     if (!state) return false;
@@ -682,14 +773,14 @@ export function slotEarliestExp(slot: Slot): number | null {
 }
 
 /** Tồn trong kho của một món. */
-export function warehouseQty(state: GameState, productId: string): number {
+export function warehouseQty(state: StoreData, productId: string): number {
   let total = 0;
   for (const lot of state.warehouse) if (lot.productId === productId) total += lot.qty;
   return total;
 }
 
 /** Tổng số lượng theo món trong kho. */
-export function warehouseTotals(state: GameState): Record<string, number> {
+export function warehouseTotals(state: StoreData): Record<string, number> {
   const out: Record<string, number> = {};
   for (const lot of state.warehouse) if (lot.qty > 0) out[lot.productId] = (out[lot.productId] ?? 0) + lot.qty;
   return out;

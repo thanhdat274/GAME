@@ -1,0 +1,39 @@
+[
+  {
+    "id": "grocery",
+    "name": "Tạp hóa",
+    "icon": "🏪",
+    "categories": ["dry", "snack", "household", "drink", "fresh", "frozen", "counter"],
+    "ingredients": [],
+    "fixtures": ["shelf", "fridge", "freezer", "storage_rack", "shelf_double", "counter", "counter2", "food_grill", "hot_kettle", "bread_case", "food_table_2", "food_table_4", "drink_counter", "blender", "sugarcane_press", "drink_table_2", "generator"],
+    "customers": ["hoc_sinh", "noi_tro", "xe_om", "van_phong", "hang_xom", "sinh_vien", "cong_nhan", "ong_cu", "me_bim", "thanh_nien", "shipper", "ba_ban_hang", "khach_du_lich"],
+    "densityCurve": null,
+    "sim": "profit_average",
+    "recipes": ["xuc_xich_nuong", "mi_ly", "banh_mi_trung", "trung_luoc", "tra_tac", "ca_phe_sua", "nuoc_mia", "sinh_to", "tra_sua"],
+    "supplies": ["trung_ga"],
+    "sourcesFrom": [],
+    "dineInChance": 0,
+    "addOns": []
+  },
+  {
+    "id": "xoi",
+    "name": "Tiệm xôi",
+    "icon": "🍙",
+    "categories": [],
+    "ingredients": ["trung_ga"],
+    "fixtures": ["counter", "storage_rack", "food_table_2", "food_table_4", "generator"],
+    "customers": ["van_phong", "hoc_sinh", "cong_nhan", "sinh_vien", "xe_om", "shipper"],
+    "densityCurve": [
+      { "from": 480, "to": 600, "mul": 2.4 },
+      { "from": 600, "to": 720, "mul": 1 },
+      { "from": 720, "to": 1020, "mul": 0.45 },
+      { "from": 1020, "to": 1200, "mul": 0.7 }
+    ],
+    "sim": "production",
+    "recipes": [],
+    "supplies": [],
+    "sourcesFrom": ["trung_ga"],
+    "dineInChance": 0.4,
+    "addOns": []
+  }
+]

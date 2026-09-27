@@ -10,7 +10,7 @@ import { canGiveCredit, debtLimit, markBadDebts, recordDebt, remindDebt, repayme
 import { cheapSpawnMultiplier, clampPrice, keepChance, priceRange, setPrice } from '../src/core/pricing';
 import { checkAchievements, claimQuest, ensureDailyQuests, questDef, questDone, rerollQuest } from '../src/core/quests';
 import { Rng } from '../src/core/rng';
-import { exportBackupCode, importBackupCode, migrate } from '../src/core/save';
+import { CURRENT_VERSION, exportBackupCode, importBackupCode, migrate } from '../src/core/save';
 import {
   assignCounterSlot, assignSlot, buyStock, checkCart, discardLot, electricityCost, expireLots, lineCost, priceFactor, receiveDeliveries,
   refillSlot, sellFixture, setClearance, slotFreshness, stowHolding, unitCost, upgradeWarehouse, warehouseCapacity,
@@ -623,7 +623,7 @@ describe('bản lưu v3', () => {
   it('migrate v2: giữ dữ liệu và cập nhật level theo mốc EXP mới', () => {
     const v2 = (saveV2 as { state: Record<string, unknown> }).state;
     const s = migrate({ version: 2, state: structuredClone(v2) });
-    expect(s.version).toBe(5);
+    expect(s.version).toBe(CURRENT_VERSION);
     expect(s.warehouse).toEqual([{ productId: 'mi_goi', qty: 30, exp: null }, { productId: 'the_cao', qty: 4, exp: null }]);
     expect(s.money).toBe(432_100);
     expect(s.level).toBe(6);
