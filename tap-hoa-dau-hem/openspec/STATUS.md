@@ -1,20 +1,16 @@
-# Rà soát triển khai (cập nhật 27/09/2026)
+# Rà soát triển khai (26/09/2026, cập nhật sau khi làm phase 2)
 
 Đối chiếu `config.yaml`, toàn bộ `tasks.md` và các capability spec với mã hiện tại. Dấu `[x]` trong task là trạng thái ghi nhận của change, không tự động xác nhận kiểm thử trên thiết bị hay triển khai production.
 
 | Change | Đã đánh dấu | Chưa đánh dấu | Trạng thái tiếp theo |
 | --- | ---: | ---: | --- |
-| `phase-1-mvp-core-loop` | 45 | 1 | 11.3 deploy Vercel + thẻ cổng game. |
-| `self-service-shopping` | 42 | 3 | 8.8c, 9.1 điện thoại thật; 9.6b deploy. |
-| `add-google-login-cloud-save` | 33 | 12 | Rules đã test bằng Emulator, khách không tải Firebase đã kiểm; còn Console/OAuth (1.1–1.5), email thật (6.4a), đăng nhập/đổi máy/offline trên thiết bị thật (3.3a, 7.1–7.4), deploy (7.6). |
-| `realtime-shared-shop` | 14 | 3 | Emulator test callable đạt; còn 4.2 hai phiên trình duyệt + offline, 4.3 quota/latency, 4.4 deploy. |
-| `phase-2-shop-expansion` | 41 | 1 | 8.2 điện thoại thật. |
-| `phase-3-staff-and-manager` | 39 | 2 | 9.3 điện thoại thật, 9.4 deploy. |
-| `topdown-store-view` | 15 | 7 | 4.2–4.4 điện thoại/người chơi/deploy; 5.1–5.4 để cho change sau. |
-| `sticky-rice-shop` | 0 | 37 | Chưa bắt đầu triển khai (chưa có `shopTypes`/`stickyRice`). |
-| `phase-4-events-food-branches` | — | — | Đã lưu trữ (`archive/2026-09-27-…`). |
-
-Tổng còn mở: 66 task (27/09/2026).
+| `phase-1-mvp-core-loop` | 44 | 2 | Chưa deploy lên Vercel/cổng game và chưa có phản hồi 3–5 người chơi thật. |
+| `self-service-shopping` | 42 | 3 | Core/UI và test tự động đã có; còn kiểm thử trên điện thoại thật và deploy. |
+| `add-google-login-cloud-save` | 20 | 20 | Code đăng nhập, đồng bộ, xung đột, tài khoản, lời mời sau ngày 3 đã có; còn Firebase Console, Emulator (máy chưa có Java), đổi máy thật, email liên hệ thật cho `privacy.html`, deploy. |
+| `realtime-shared-shop` | 13 | 4 | Đã thêm lệnh phiên chung cho mối sỉ, bán xả, mặc cả, ghi sổ; còn emulator race test, hai phiên trình duyệt, đo quota/latency và deploy. |
+| `phase-2-shop-expansion` | 39 | 3 | Core, dữ liệu, UI, camera kệ + "Về quầy", RenderTexture (58–60 FPS với 7 khách trên trình duyệt giả lập), pixel art nội thất và mô phỏng 30 ngày xong. Còn 8.2–8.4 (điện thoại thật, bản lưu người chơi thật, deploy). |
+| `phase-3-staff-and-manager` | 38 | 3 | Core và UI đã làm; còn đo hiệu năng / chơi trên điện thoại thật và deploy, phản hồi production. |
+| `phase-4-events-food-branches` | 32 | 9 | Đang triển khai theo yêu cầu tiếp tục dù các kiểm thử thiết bị/deploy của phase 3 còn mở; core lịch, sự kiện, bếp, truyện, chi nhánh và danh hiệu đã có một phần. |
 
 ## Kiểm tra trong repo
 
@@ -71,10 +67,3 @@ Không đánh dấu hoàn thành các task yêu cầu thiết bị thật, Conso
   - Chơi thử bằng người thật để chỉnh tốc độ đi và hệ số kiên nhẫn.
   - Deploy.
   - Nhóm việc để lại cho change sau: sprite riêng, bản đồ lớn hơn, tránh va chạm, đồng bộ phiên chung.
-
-## Cập nhật kiểm thử Emulator (27/09/2026)
-
-- Thêm `npm run test:emulator` (`tests-emulator/`, cấu hình `vitest.rules.config.ts`): 12 test rules Firestore (save/meta/live/leaderboards) và 10 test callable phiên chung (chưa đăng nhập, mở phiên, lệnh hợp lệ, lệnh trùng, 6 lệnh đồng thời từ hai máy, sai phase, envelope sai, UID khác, pulse). Tất cả 22 test qua.
-- Test phát hiện hai lỗi khiến phiên chung không bao giờ mở được trên Firebase thật: GameState có trường `undefined` và mảng lồng mảng (kệ, lưới) mà Firestore từ chối. Sửa: `ignoreUndefinedProperties`, document `live/main` lưu `state`/`dayRuntime` trong chuỗi JSON `payload`, receipt lưu phản hồi dạng chuỗi JSON; client giải mã qua `decodeLiveShopDoc`.
-- Bản build production trên trình duyệt: khách ở màn tiêu đề và khi vào chơi chỉ tải `index`, `phaser`, `workbox`, không tải chunk Firebase.
-- Vitest 428/428, build web và Functions qua.

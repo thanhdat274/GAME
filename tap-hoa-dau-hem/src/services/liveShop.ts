@@ -1,4 +1,4 @@
-import { decodeLiveShopDoc, type LiveCommandEnvelope, type LiveShopAggregate, type LiveShopCommand } from '../core/liveSession';
+import type { LiveCommandEnvelope, LiveShopAggregate, LiveShopCommand } from '../core/liveSession';
 import { cloudSaveEnabled, getFirebase } from './firebase';
 import { G, setLiveSnapshot } from '../game';
 
@@ -127,9 +127,7 @@ export async function subscribeLiveShop(
       return;
     }
     try {
-      const data = snapshot.data();
-      const aggregate = decodeLiveShopDoc(data);
-      onSnapshot(parseSnapshot(aggregate ? { ...aggregate, simulatedAtMs: data.simulatedAtMs } : data));
+      onSnapshot(parseSnapshot(snapshot.data()));
     } catch (error) {
       onError(error instanceof Error ? error : new Error('Snapshot phiên chung không hợp lệ.'));
     }

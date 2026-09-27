@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DATA, product } from '../src/core/data';
-import {
-  advanceLiveShop,
-  applyLiveShopCommand,
-  createLiveShopAggregate,
-  decodeLiveShopDoc,
-  encodeLiveShopDoc,
-  validateLiveCommandEnvelope,
-} from '../src/core/liveSession';
+import { advanceLiveShop, applyLiveShopCommand, createLiveShopAggregate, validateLiveCommandEnvelope } from '../src/core/liveSession';
 import { createNewGame, warehouseQty } from '../src/core/state';
 import { addLot, planNewProducts } from '../src/core/stock';
 
@@ -22,19 +15,6 @@ describe('phiên tiệm dùng chung', () => {
     expect(placed.aggregate.sequence).toBe(2);
     expect(placed.aggregate.state.shelves[0][0]).toMatchObject({ productId: 'mi_goi', qty: 4 });
     expect(warehouseQty(placed.aggregate.state, 'mi_goi')).toBe(0);
-  });
-
-  it('document Firestore không chứa mảng lồng mảng và đọc lại đúng aggregate', () => {
-    const state = createNewGame();
-    const placed = applyLiveShopCommand(
-      applyLiveShopCommand(createLiveShopAggregate(state), { type: 'buyStock', cart: { mi_goi: 4 } }).aggregate,
-      { type: 'assignShelf', shelf: 0, slot: 0, productId: 'mi_goi' },
-    ).aggregate;
-    const fields = encodeLiveShopDoc(placed);
-    expect(Object.values(fields).some((v) => Array.isArray(v) || (typeof v === 'object' && v !== null))).toBe(false);
-    const decoded = decodeLiveShopDoc({ ...fields, simulatedAtMs: 1 });
-    expect(decoded).toEqual(JSON.parse(JSON.stringify(placed)));
-    expect(decodeLiveShopDoc({ schemaVersion: 1, sequence: 1 })).toBeNull();
   });
 
   it('chặn command không đúng pha', () => {

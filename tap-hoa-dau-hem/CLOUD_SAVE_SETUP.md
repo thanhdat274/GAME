@@ -43,7 +43,3 @@ Phiên dùng chung được lưu riêng tại `users/{uid}/live/main`; client ch
 Firebase Functions cần gói Blaze, nên trước khi deploy hãy kiểm tra billing và đặt budget alerts. Chạy `npm run functions:build` để biên dịch backend; dùng `npm run emulators` để chạy Auth/Firestore/Functions cục bộ. Khi môi trường đã sẵn sàng, `npm run deploy:live` deploy Functions cùng Firestore rules.
 
 Realtime là phiên chơi có server xử lý, khác với cloud save snapshot. Rules chặn client ghi thẳng trạng thái live; chỉ callable Functions dùng Admin SDK mới ghi được. Không deploy trước khi emulator test race-command và flow hai thiết bị đạt.
-
-### Test bằng Emulator
-
-`npm run test:emulator` build Functions rồi chạy `tests-emulator/` (rules Firestore + callable phiên chung) trong Auth/Firestore/Functions Emulator. Firebase CLI ≥ 14 cần JDK 21; nếu máy chỉ có JDK 11, dùng tạm `npx firebase-tools@13 emulators:exec --only auth,firestore,functions --project demo-tap-hoa-dau-hem "npx vitest run -c vitest.rules.config.ts"` với `java` của JDK 11 trong `PATH`.

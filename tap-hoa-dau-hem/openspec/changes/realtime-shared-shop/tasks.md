@@ -22,7 +22,7 @@
 
 ## 4. Kiểm thử và phát hành
 
-- [x] 4.1 Emulator test cho command hợp lệ, command trùng, race hai máy, sai phase và UID khác — `tests-emulator/liveShop.functions.ts`; phát hiện và sửa lỗi live doc chứa undefined/mảng lồng mảng (nay lưu `payload` JSON)
+- [ ] 4.1 Emulator test cho command hợp lệ, command trùng, race hai máy, sai phase và UID khác
 - [ ] 4.2 Browser test hai phiên thiết bị giả lập và offline/reconnect
 - [ ] 4.3 Kiểm tra latency, reads/writes, quota và đặt cảnh báo chi phí
 - [ ] 4.4 Deploy functions/rules/client rồi thử thực tế trên điện thoại và desktop
