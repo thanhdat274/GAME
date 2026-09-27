@@ -220,7 +220,8 @@ export class RestockScene extends Phaser.Scene {
         : !check.ok && check.reason === 'space' ? '⚠️ Kho đầy, không đủ chỗ chứa'
           : !check.ok && check.reason === 'min-order' ? `⚠️ Đơn tối thiểu ${formatMoney(sp.minOrder)} (thiếu ${formatMoney(check.missing)})`
             : sp.delayDays > 0 && Object.keys(this.cart).length ? `🚚 Giao 15:00 ngày ${s.day + sp.delayDays}`
-              : Object.keys(this.cart).length ? '✓ Hàng giao ngay vào kho' : '',
+              : sp.invoice === false ? '⚠️ Chợ không xuất hóa đơn: thanh tra thuế có thể phạt'
+                : Object.keys(this.cart).length ? '✓ Hàng giao ngay vào kho' : '',
     );
     this.buyBtn.setText(sp.delayDays > 0 ? 'Đặt hàng' : 'Nhập hàng');
     this.buyBtn.setEnabled(!this.busy);

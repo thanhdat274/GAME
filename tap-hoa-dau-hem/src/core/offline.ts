@@ -4,6 +4,7 @@ import { ensureDailyQuests } from './quests';
 import { payroll } from './staff';
 import { emptyStats, priceOf, usableShelves, type GameState } from './state';
 import { electricityCost, expireLots, receiveDeliveries, takeLots, takeOneFromSlot } from './stock';
+import { recordTaxableRevenue, updateTax } from './tax';
 
 export interface OfflineReport {
   /** Thời gian vắng được tính (giờ thật, đã giới hạn). */
@@ -96,6 +97,7 @@ export function applyOfflineIncome(state: GameState, elapsedMs: number): Offline
       report.revenue += revenue;
       report.cogs += sold * product(id).cost;
       state.money += revenue;
+      recordTaxableRevenue(state, 'goods', revenue);
       state.lifetime.sold += sold;
     }
     if (soldToday === 0 && wantToday > 0) {
@@ -111,6 +113,7 @@ export function applyOfflineIncome(state: GameState, elapsedMs: number): Offline
     for (const [id, q] of Object.entries(expireLots(state, state.day))) report.spoiled[id] = (report.spoiled[id] ?? 0) + q;
     state.day++;
     report.days++;
+    updateTax(state);
   }
   state.today = emptyStats();
   state.lastSummary = null;

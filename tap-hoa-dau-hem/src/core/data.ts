@@ -170,6 +170,52 @@ export interface Balance {
   dining: { mealSeconds: number; extraOrderSeconds: number; maxExtraOrders: number };
   /** Giới hạn số cửa hàng trong chuỗi (tính cả tiệm chính). */
   chain: { maxStores: number };
+  tax: TaxBalance;
+}
+
+export type TaxKind = 'goods' | 'food' | 'service';
+
+/** Thuế hộ kinh doanh: miễn dưới ngưỡng doanh thu năm, vượt ngưỡng thì nộp VAT + TNCN theo % doanh thu. */
+export interface TaxBalance {
+  /** Ngưỡng doanh thu mỗi năm game được miễn thuế. */
+  yearlyThreshold: number;
+  rates: Record<TaxKind, { vat: number; pit: number }>;
+  /** Hạn nộp: số ngày tính từ ngày đầu tháng mới. */
+  dueDays: number;
+  /** Nhắc trước hạn bao nhiêu ngày. */
+  remindDays: number;
+  /** Tiền chậm nộp mỗi ngày quá hạn (tỉ lệ trên số thuế còn nợ). */
+  lateInterestPerDay: number;
+  /** Quá hạn bấy nhiêu ngày thì bị cưỡng chế trừ thẳng vào tiền mặt. */
+  enforceAfterDays: number;
+  /** Tiền phạt khi bị cưỡng chế (tỉ lệ trên số thuế). */
+  enforceFine: number;
+  /** Số tờ thuế đã xong giữ lại để xem lịch sử. */
+  historyBills: number;
+  /** Khai bớt doanh thu: giảm bao nhiêu phần số thuế phải nộp (rủi ro bị thanh tra truy thu). */
+  underDeclarePct: number;
+  audit: {
+    /** Xác suất thanh tra mỗi lần chốt tháng. */
+    chance: number;
+    /** Cộng thêm khi doanh thu đã tới mức bắt buộc máy tính tiền mà chưa lắp. */
+    noMachineExtraChance: number;
+    /** Xác suất khi đã lắp máy tính tiền (sổ sách minh bạch). */
+    withMachineChance: number;
+    /** Phạt trốn thuế = số thuế khai thiếu × hệ số này (ngoài phần truy thu). */
+    evasionFineMul: number;
+    evasionStars: number;
+    /** Phạt hàng nhập không hóa đơn: tỉ lệ trên giá trị hàng. */
+    marketFineRate: number;
+    noMachineFine: number;
+    cleanStars: number;
+  };
+  invoiceMachine: { cost: number; requiredYearRevenue: number };
+  invoiceCustomer: { type: string; chance: number; companyChance: number; bonusExp: number; noInvoiceMaxStars: number };
+  /** Khấu trừ thuế TNCN của nhân viên có lương ngày vượt mức. */
+  staffPit: { dailyThreshold: number; rate: number };
+  company: { setupCost: number; vatRate: number; citRate: number; supplierDiscount: number; partyRewardMul: number };
+  /** EXP thưởng khi quyết toán năm không trễ hạn, không bị truy thu. */
+  settlementExp: number;
 }
 
 export interface StaffBalance {
@@ -288,6 +334,8 @@ export interface SupplierDef {
   deliverMinute: number;
   minOrder: number;
   note: string;
+  /** Mối có xuất hóa đơn (doanh nghiệp được khấu trừ VAT đầu vào; thanh tra không phạt). */
+  invoice?: boolean;
 }
 
 export type QuestMetric =
@@ -321,7 +369,7 @@ export interface AchievementDef {
   id: string;
   name: string;
   text: string;
-  metric: 'sold' | 'served' | 'landsOpened' | 'debtsCollected' | 'loveStreak';
+  metric: 'sold' | 'served' | 'landsOpened' | 'debtsCollected' | 'loveStreak' | 'taxOnTime';
   target: number;
   money?: number;
   decor?: string;

@@ -21,6 +21,7 @@
     {"id": "served_500", "name": "Tiệm quen của hẻm", "text": "Phục vụ 500 khách", "metric": "served", "target": 500, "money": 80000},
     {"id": "all_land", "name": "Tiệm lớn dần", "text": "Mở hết đất giai đoạn 2", "metric": "landsOpened", "target": 3, "money": 150000},
     {"id": "debts_10", "name": "Sổ nợ sòng phẳng", "text": "Thu đủ 10 khoản nợ", "metric": "debtsCollected", "target": 10, "decor": "tien_tai"},
-    {"id": "loved_7", "name": "Tiệm được yêu thích", "text": "7 ngày liền sao trung bình ≥ 4.8", "metric": "loveStreak", "target": 7, "decor": "meo_muop"}
+    {"id": "loved_7", "name": "Tiệm được yêu thích", "text": "7 ngày liền sao trung bình ≥ 4.8", "metric": "loveStreak", "target": 7, "decor": "meo_muop"},
+    {"id": "tax_model", "name": "Công dân gương mẫu", "text": "Nộp thuế đúng hạn 6 tháng liền", "metric": "taxOnTime", "target": 6, "decor": "bang_khen_thue"}
   ]
 }

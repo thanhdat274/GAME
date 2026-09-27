@@ -1,4 +1,5 @@
 import { DATA, furniture, hasFeature, product, supplier, type Product } from './data';
+import { recordPurchase, supplierTaxFactor } from './tax';
 import { Rng, daySeed } from './rng';
 import { EffectStack } from './effects';
 import {
@@ -121,7 +122,7 @@ export function unitCost(state: GameState | null, productId: string, supplierId 
   if (!state || !hasFeature(state.level, 'anh_ba')) return base;
   const s = supplier(supplierId);
   const effects = state ? EffectStack.forDay(state.day, state.calendarStartMonth, state.calendarStartYear, state.activeEvents) : null;
-  const raw = base * priceFactor(productId, day) * (1 - s.discount) * (effects?.multiply('wholesaleMul') ?? 1);
+  const raw = base * priceFactor(productId, day) * (1 - s.discount) * supplierTaxFactor(state, supplierId) * (effects?.multiply('wholesaleMul') ?? 1);
   return Math.max(100, Math.round(raw / 100) * 100);
 }
 
@@ -183,6 +184,7 @@ export function buyStock(state: GameState, cart: Cart, supplierId = 'co_tu'): Bu
   if (!check.ok) return check;
   const s = supplier(supplierId);
   state.money -= check.total;
+  recordPurchase(state, supplierId, check.total);
   const items: Cart = {};
   for (const [id, qty] of Object.entries(cart)) if (qty > 0) items[id] = qty;
   if (s.delayDays > 0) {

@@ -239,6 +239,13 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
     cookedRice: Array.isArray(loaded.cookedRice) ? loaded.cookedRice : [],
     internalOrders: Array.isArray(loaded.internalOrders) ? loaded.internalOrders : [],
     recurringOrders: Array.isArray(loaded.recurringOrders) ? loaded.recurringOrders : [],
+    tax: loaded.tax ? {
+      ...base.tax, ...loaded.tax,
+      monthRevenue: { ...base.tax.monthRevenue, ...loaded.tax.monthRevenue },
+      bills: Array.isArray(loaded.tax.bills) ? loaded.tax.bills : [],
+      audits: Array.isArray(loaded.tax.audits) ? loaded.tax.audits : [],
+      years: Array.isArray(loaded.tax.years) ? loaded.tax.years : [],
+    } : base.tax,
     version: CURRENT_VERSION,
   } as GameState;
   padShelves(result.shelves);

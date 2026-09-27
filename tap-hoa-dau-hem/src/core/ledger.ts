@@ -2,6 +2,7 @@ import { DATA, hasFeature } from './data';
 import { recordRating } from './progression';
 import type { Rng } from './rng';
 import type { Debt, GameState } from './state';
+import { recordTaxableRevenue } from './tax';
 
 export function openDebts(state: GameState): Debt[] {
   return state.ledger.filter((d) => d.status === 'open');
@@ -67,6 +68,7 @@ export function collectDebt(state: GameState, id: number): number {
   if (!debt) return 0;
   debt.status = 'paid';
   state.money += debt.amount;
+  recordTaxableRevenue(state, 'goods', debt.amount);
   state.today.debtCollected++;
   state.today.debtCollectedAmount += debt.amount;
   state.lifetime.debtsCollected++;
