@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { DATA, product } from '../core/data';
 import { questDef, questDone } from '../core/quests';
 import { startNextDay } from '../core/day';
-import { formatClock, formatMoney, type JournalEntry } from '../core/state';
+import { formatClock, formatMoney, formatNumber, type JournalEntry } from '../core/state';
 import { G, persist } from '../game';
 import { card } from '../ui/page';
 import { dispatchLiveCommand } from '../services/liveShop';
@@ -69,7 +69,7 @@ export class SummaryScene extends Phaser.Scene {
       ['Khách hài lòng', `${sum.happy} / ${sum.served + sum.left}`],
       ['Khách bỏ về', String(sum.left), sum.left > 0 ? HEX.red : HEX.ink],
       ['Sao trung bình', sum.avgRating ? `⭐ ${sum.avgRating.toFixed(1)}` : '–'],
-      ['EXP nhận được', `+${sum.expGained}`, HEX.green],
+      ['EXP nhận được', `+${formatNumber(sum.expGained)}`, HEX.green],
     );
     let y = top + 18;
     const pitch = rows.length > 15 ? 18 : rows.length > 10 ? 22 : 28;

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DATA } from '../core/data';
 import { currentTitle, PRESTIGE_EXP_PER_STAR, prestigeStars } from '../core/prestige';
+import { formatNumber } from '../core/state';
 import { G } from '../game';
 import { PAGE_TOP, ScrollArea, card, pageFrame } from '../ui/page';
 import { H, HEX, W, setupCamera, txt } from '../ui/theme';
@@ -18,7 +19,7 @@ export class PrestigeScene extends Phaser.Scene {
     list.add(txt(this, 18, 19, currentTitle(s), { size: 18, bold: true }));
     list.add(txt(this, 18, 51, s.level < 35 ? `Mở hệ danh hiệu khi đạt level 35 (${s.level}/35).` : `★ ${stars}/30 · Tăng ${stars}% doanh thu`, { size: 13, color: HEX.ink }));
     const progress = Math.max(0, s.exp - capExp) % PRESTIGE_EXP_PER_STAR;
-    list.add(txt(this, 18, 78, s.level < 35 ? `EXP ${s.exp}/${capExp}` : `${progress.toLocaleString()}/${PRESTIGE_EXP_PER_STAR.toLocaleString()} EXP tới sao tiếp theo`, { size: 11, color: HEX.muted, wrap: W - 36 }));
+    list.add(txt(this, 18, 78, s.level < 35 ? `EXP ${formatNumber(s.exp)}/${formatNumber(capExp)}` : `${formatNumber(progress)}/${formatNumber(PRESTIGE_EXP_PER_STAR)} EXP tới sao tiếp theo`, { size: 11, color: HEX.muted, wrap: W - 36 }));
     let y = 126;
     for (const title of DATA.titles) {
       const owned = stars >= title.stars;

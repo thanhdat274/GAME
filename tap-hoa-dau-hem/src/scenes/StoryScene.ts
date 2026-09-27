@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { beginChapter, chapterAvailable, chapterComplete, chapterStarted, claimChapter } from '../core/story';
 import { DATA } from '../core/data';
-import { formatMoney } from '../core/state';
+import { formatMoney, formatNumber } from '../core/state';
 import { G, persist } from '../game';
 import { PAGE_TOP, ScrollArea, card, pageFrame } from '../ui/page';
 import { Button, toast } from '../ui/widgets';
@@ -29,7 +29,7 @@ export class StoryScene extends Phaser.Scene {
       this.list.add(txt(this, 18, y + 9, `${chapter.portrait}  Chương ${chapter.chapter}: ${chapter.title}`, { size: 13, bold: true, wrap: W - 36 }));
       this.list.add(txt(this, 18, y + 39, chapter.dialog.join('\n'), { size: 10, color: HEX.muted, wrap: W - 38 }));
       this.list.add(txt(this, 18, y + 82, `Mục tiêu: ${chapter.goal}`, { size: 10, bold: true, color: available ? HEX.ink : HEX.muted, wrap: W - 38 }));
-      this.list.add(txt(this, 18, y + 105, `Thưởng ${formatMoney(chapter.rewardMoney)} · +${chapter.rewardExp} EXP`, { size: 10, color: HEX.muted }));
+      this.list.add(txt(this, 18, y + 105, `Thưởng ${formatMoney(chapter.rewardMoney)} · +${formatNumber(chapter.rewardExp)} EXP`, { size: 10, color: HEX.muted }));
       let label = done ? '✓ Xong' : !available ? `Cần L${chapter.unlockLevel}` : !started ? 'Bắt đầu' : complete ? 'Nhận thưởng' : 'Đang diễn ra';
       if (available && !done) this.list.add(new Button(this, W - 61, y + 120, { w: 78, h: 30, label, size: 10, color: complete ? C.green : C.blue, onTap: this.list.guard(() => {
         if (!started) { beginChapter(G.state, chapter.id); toast(this, chapter.dialog[0]); }

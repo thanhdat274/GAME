@@ -323,3 +323,18 @@ describe('định dạng', () => {
     expect(formatClock(17 * 60 + 5)).toBe('17:05');
   });
 });
+
+describe('tiến độ level hiển thị', () => {
+  it('số EXP trong level khớp với thanh; định dạng 2,200', async () => {
+    const { levelStatus, levelProgress } = await import('../src/core/progression');
+    const { formatNumber } = await import('../src/core/state');
+    // Lv 9 bắt đầu 1,780; Lv 10 ở 2,200: có 1,963 EXP → 183 / 420 (≈44%).
+    const st = levelStatus(1963, 9);
+    expect(st).toMatchObject({ next: 10, into: 183, span: 420, remaining: 237, nextExp: 2200 });
+    expect(st.pct).toBeCloseTo(levelProgress(1963, 9));
+    expect(levelStatus(99999, DATA.levels.maxLevel).next).toBeNull();
+    expect(formatNumber(2200)).toBe('2,200');
+    expect(formatNumber(1234567)).toBe('1,234,567');
+    expect(formatNumber(-980)).toBe('-980');
+  });
+});

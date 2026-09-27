@@ -715,6 +715,12 @@ export function priceOf(productId: string, state?: GameState): number {
   return state?.prices[productId] ?? refPrice(p);
 }
 
+/** Số nguyên có dấu phẩy ngăn hàng nghìn: 2200 → "2,200". */
+export function formatNumber(v: number): string {
+  const sign = v < 0 ? '-' : '';
+  return sign + Math.abs(Math.round(v)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 export function formatMoney(v: number): string {
   const sign = v < 0 ? '-' : '';
   return sign + Math.abs(Math.round(v)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ';

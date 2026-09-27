@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { DATA, decor, product } from '../core/data';
 import { achievementProgress, claimQuest, ensureDailyQuests, questDef, questDone, questProgress, questsUnlocked, rerollQuest } from '../core/quests';
-import { formatMoney } from '../core/state';
+import { formatMoney, formatNumber } from '../core/state';
 import { calendarDate } from '../core/calendar';
 import { eventDefinition } from '../core/eventScheduler';
 import { claimWeeklyQuest, ensureWeeklyQuests } from '../core/weeklyQuests';
@@ -79,7 +79,7 @@ export class QuestsScene extends Phaser.Scene {
         const h = 74;
         this.list.add(card(this, 8, y, W - 16, h - 6, entry.claimed ? 0xe3f3e6 : done ? 0xfff1c1 : C.panel));
         this.list.add(txt(this, 18, y + 8, q.text, { size: 14, bold: true }));
-        this.list.add(txt(this, 18, y + 28, `Thưởng ${formatMoney(q.money)} · +${q.exp} EXP`, { size: 11, color: HEX.muted }));
+        this.list.add(txt(this, 18, y + 28, `Thưởng ${formatMoney(q.money)} · +${formatNumber(q.exp)} EXP`, { size: 11, color: HEX.muted }));
         const bar = new Bar(this, 18, y + 48, 190, 9, done ? C.green : C.yellow, 0x000000);
         bar.set(progress / q.target);
         this.list.add(bar);
@@ -155,7 +155,7 @@ export class QuestsScene extends Phaser.Scene {
         bar.set(progress / quest.target);
         this.list.add(bar);
         this.list.add(txt(this, W - 46, y + 30, done ? '✓' : `${progress}/${quest.target}`, { size: 10, bold: true, color: done ? HEX.green : HEX.ink, origin: [0.5, 0.5] }));
-        this.list.add(txt(this, 18, y + 48, `Thưởng ${formatMoney(quest.rewardMoney)} · +${quest.rewardExp} EXP${done ? ' · Đã nhận tự động' : ''}`, { size: 9, color: HEX.muted }));
+        this.list.add(txt(this, 18, y + 48, `Thưởng ${formatMoney(quest.rewardMoney)} · +${formatNumber(quest.rewardExp)} EXP${done ? ' · Đã nhận tự động' : ''}`, { size: 9, color: HEX.muted }));
         y += 72;
       }
       if (def.rewardAt && def.rewardDecor) {
@@ -189,7 +189,7 @@ export class QuestsScene extends Phaser.Scene {
       const done = entry.progress >= q.target;
       this.list.add(card(this, 8, y, W - 16, 78, entry.claimed ? 0xe3f3e6 : done ? 0xfff1c1 : C.panel));
       this.list.add(txt(this, 18, y + 8, q.text, { size: 12, bold: true, wrap: W - 38 }));
-      this.list.add(txt(this, 18, y + 29, `Thưởng ${formatMoney(q.money)} · +${q.exp} EXP`, { size: 10, color: HEX.muted }));
+      this.list.add(txt(this, 18, y + 29, `Thưởng ${formatMoney(q.money)} · +${formatNumber(q.exp)} EXP`, { size: 10, color: HEX.muted }));
       const bar = new Bar(this, 18, y + 53, W - 118, 9, done ? C.green : C.yellow, 0x000000);
       bar.set(entry.progress / q.target);
       this.list.add(bar);

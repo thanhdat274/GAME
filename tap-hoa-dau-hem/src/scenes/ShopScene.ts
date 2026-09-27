@@ -134,7 +134,11 @@ export class ShopScene extends Phaser.Scene {
     this.mapBtn = new Button(this, 26, COUNTER_Y + 44, { w: 44, h: 40, label: '🗺️\nSơ đồ', size: 9, color: C.blue, onTap: () => this.liveMap.open() }).setDepth(260);
     this.drawCounter();
     this.addZoneRefillButtons();
-    this.hud = new Hud(this, s, { onPause: () => this.pause() });
+    this.hud = new Hud(this, s, {
+      onPause: () => this.pause(),
+      // Xem lộ trình level giữa giờ bán thì dừng giờ (trừ khi đang ở menu tạm dừng hoặc chơi chung).
+      onOverlay: (open) => { if (!G.liveSnapshot && !this.pauseLayer && !this.ending) this.session.paused = open; },
+    });
     this.panelLayer = this.add.container(0, 0).setDepth(300);
     this.staffLayer = this.add.container(0, 0).setDepth(205);
     this.cashierX.clear();
