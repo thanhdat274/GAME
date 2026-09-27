@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { DATA, product } from '../core/data';
 import { questDef, questDone } from '../core/quests';
 import { startNextDay } from '../core/day';
-import { formatClock, formatMoney, type JournalEntry } from '../core/state';
+import { formatClock, formatMoney, formatNumber, type JournalEntry } from '../core/state';
 import { G, persist } from '../game';
 import { card } from '../ui/page';
 import { dispatchLiveCommand } from '../services/liveShop';
@@ -62,11 +62,14 @@ export class SummaryScene extends Phaser.Scene {
     if (sum.netProfit !== undefined && (sum.spoiledCost || sum.electricity || sum.debtCollectedAmount || sum.wages || sum.theftCost)) {
       rows.push(['Lãi ròng', formatMoney(sum.netProfit), sum.netProfit >= 0 ? HEX.green : HEX.red]);
     }
+    if (sum.closedEarlyAt !== undefined) {
+      rows.push([`🚪 Đóng cửa sớm${sum.sentHome ? ` · mời về ${sum.sentHome} khách` : ''}`, formatClock(sum.closedEarlyAt), '#b7791f']);
+    }
     rows.push(
       ['Khách hài lòng', `${sum.happy} / ${sum.served + sum.left}`],
       ['Khách bỏ về', String(sum.left), sum.left > 0 ? HEX.red : HEX.ink],
       ['Sao trung bình', sum.avgRating ? `⭐ ${sum.avgRating.toFixed(1)}` : '–'],
-      ['EXP nhận được', `+${sum.expGained}`, HEX.green],
+      ['EXP nhận được', `+${formatNumber(sum.expGained)}`, HEX.green],
     );
     let y = top + 18;
     const pitch = rows.length > 15 ? 18 : rows.length > 10 ? 22 : 28;
@@ -152,6 +155,15 @@ export class SummaryScene extends Phaser.Scene {
     }
 
     const unclaimed = (s.quests?.list ?? []).filter((q) => !q.claimed && questDone(s, questDef(q.id))).length;
+    const fresh = s.reviews.filter((r) => r.day === sum.day);
+    if (fresh.length) {
+      const bad = fresh.filter((r) => r.stars <= 2).length;
+      new Button(this, W / 2, H - (unclaimed ? 146 : 100), {
+        w: 220, h: 38, size: 13, color: bad ? C.redDark : C.blue,
+        label: `✍️ ${fresh.length} đánh giá mới${bad ? ` · ${bad} chê` : ''}`,
+        onTap: () => this.scene.start('Reviews', { back: 'Summary' }),
+      });
+    }
     if (unclaimed) {
       new Button(this, W / 2, H - 100, { w: 220, h: 40, label: `🎯 Nhận ${unclaimed} thưởng nhiệm vụ`, color: C.green, size: 13, onTap: () => this.scene.start('Quests', { back: 'Summary' }) });
     }

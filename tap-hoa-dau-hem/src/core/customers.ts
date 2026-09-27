@@ -75,6 +75,8 @@ export interface Customer {
   fleeLeft?: number;
   /** Khách lấy xe đẩy (mini-mart): mua 3–6 món. */
   cart?: boolean;
+  /** Bị nhân viên thối thiếu (để khách nhắc trong đánh giá). */
+  shortChanged?: boolean;
 }
 
 /** Hệ số mật độ khách theo giờ trong ngày. */

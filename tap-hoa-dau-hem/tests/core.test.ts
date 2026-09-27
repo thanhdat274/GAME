@@ -6,7 +6,7 @@ import { Emitter } from '../src/core/events';
 import { applyLevelUps, averageRating, levelForExp, ratingSpawnMultiplier, recordRating } from '../src/core/progression';
 import { Rng } from '../src/core/rng';
 import { createNewGame, formatClock, formatMoney, unlockedProducts, lotsFrom, warehouseQty } from '../src/core/state';
-import { assignCounterSlot, assignSlot, autoArrange, buyStock, cellsFor, checkCart, clearSlot, refillCounterSlot, refillSlot, warehouseCellsUsed, zoneFill, zoneOf } from '../src/core/stock';
+import { assignCounterSlot, assignSlot, autoArrange, buyStock, cellsFor, checkCart, clearSlot, refillCounterSlot, refillSlot, shelfCapacity, warehouseCellsUsed, zoneFill, zoneOf } from '../src/core/stock';
 
 describe('Rng', () => {
   it('cùng seed cho cùng dãy số', () => {
@@ -141,13 +141,34 @@ describe('kệ hàng', () => {
     expect(s.shelves.flat().some((x) => x.productId === 'gao')).toBe(false);
   });
 
-  it('tự bày lấp ô trống bằng hàng trong kho', () => {
+  it('tự bày lấp ô trống bằng hàng trong kho, mỗi món chỉ một ô', () => {
     const s = createNewGame();
     s.warehouse = lotsFrom({ mi_goi: 12, muoi: 4 });
     autoArrange(s);
-    const onShelf = s.shelves.flat().filter((x) => x.productId);
-    expect(onShelf.reduce((a, b) => a + b.qty, 0)).toBe(16);
-    expect(Object.keys(s.warehouse)).toHaveLength(0);
+    const slotsOf = (id: string) => s.shelves.flat().filter((x) => x.productId === id);
+    expect(slotsOf('mi_goi')).toHaveLength(1);
+    expect(slotsOf('muoi')).toHaveLength(1);
+    const cap = shelfCapacity(s, 0);
+    // Ô đầy tới sức chứa, phần dư nằm lại kho để nạp dần trong giờ bán.
+    expect(slotsOf('mi_goi')[0].qty).toBe(Math.min(12, cap));
+    expect(warehouseQty(s, 'mi_goi')).toBe(12 - Math.min(12, cap));
+    expect(slotsOf('muoi')[0].qty).toBe(4);
+  });
+
+  it('tự bày gom món đang nằm nhiều ô về một ô, nhường chỗ cho món khác', () => {
+    const s = createNewGame();
+    s.zones = s.zones.map((_, i) => (i === 0 ? 'dry' : null));
+    s.shelves[0][0] = { productId: 'mi_goi', qty: 3 };
+    s.shelves[0][1] = { productId: 'mi_goi', qty: 5 };
+    s.shelves[0][2] = { productId: 'mi_goi', qty: 2 };
+    s.warehouse = lotsFrom({ muoi: 4, gao: 3 });
+    autoArrange(s);
+    const slotsOf = (id: string) => s.shelves.flat().filter((x) => x.productId === id);
+    expect(slotsOf('mi_goi')).toHaveLength(1);
+    expect(slotsOf('muoi')).toHaveLength(1);
+    expect(slotsOf('gao')).toHaveLength(1);
+    // Không mất hàng: tổng mì gói trên kệ + kho vẫn là 10.
+    expect(slotsOf('mi_goi')[0].qty + warehouseQty(s, 'mi_goi')).toBe(10);
   });
 
   it('kệ tự nhận khu, từ chối hàng sai khu và bỏ khu khi hết hàng', () => {
@@ -300,5 +321,20 @@ describe('định dạng', () => {
     expect(formatMoney(150000)).toBe('150.000đ');
     expect(formatMoney(-9000)).toBe('-9.000đ');
     expect(formatClock(17 * 60 + 5)).toBe('17:05');
+  });
+});
+
+describe('tiến độ level hiển thị', () => {
+  it('số EXP trong level khớp với thanh; định dạng 2,200', async () => {
+    const { levelStatus, levelProgress } = await import('../src/core/progression');
+    const { formatNumber } = await import('../src/core/state');
+    // Lv 9 bắt đầu 1,780; Lv 10 ở 2,200: có 1,963 EXP → 183 / 420 (≈44%).
+    const st = levelStatus(1963, 9);
+    expect(st).toMatchObject({ next: 10, into: 183, span: 420, remaining: 237, nextExp: 2200 });
+    expect(st.pct).toBeCloseTo(levelProgress(1963, 9));
+    expect(levelStatus(99999, DATA.levels.maxLevel).next).toBeNull();
+    expect(formatNumber(2200)).toBe('2,200');
+    expect(formatNumber(1234567)).toBe('1,234,567');
+    expect(formatNumber(-980)).toBe('-980');
   });
 });

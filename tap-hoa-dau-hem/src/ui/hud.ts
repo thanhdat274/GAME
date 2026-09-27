@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { DATA } from '../core/data';
-import { averageRating, levelProgress, nextLevelDef } from '../core/progression';
+import { averageRating, levelProgress } from '../core/progression';
+import { openLevelRoadmap } from './levelRoadmap';
 import { formatClock, formatMoney, type GameState } from '../core/state';
 import { Bar, toast } from './widgets';
 import { C, HEX, W, txt } from './theme';
@@ -20,7 +20,8 @@ export class Hud extends Phaser.GameObjects.Container {
   private shownMoney = -1;
   private cloudIcon?: Phaser.GameObjects.Text;
 
-  constructor(scene: Phaser.Scene, private gs: GameState, opts: { onPause?: () => void; subtitle?: string } = {}) {
+  /** `onOverlay(true/false)`: bảng lộ trình level mở / đóng (màn bán dừng giờ trong lúc xem). */
+  constructor(scene: Phaser.Scene, private gs: GameState, private opts: { onPause?: () => void; subtitle?: string; onOverlay?: (open: boolean) => void } = {}) {
     super(scene, 0, 0);
     const bg = scene.add.graphics();
     bg.fillStyle(C.hud, 1).fillRect(0, 0, W, HUD_H);
@@ -45,9 +46,9 @@ export class Hud extends Phaser.GameObjects.Container {
       this.once(Phaser.GameObjects.Events.DESTROY, unsubscribe);
     }
 
-    // Chạm thanh EXP để xem phần thưởng level sau.
-    const zone = scene.add.zone(W / 2, 37, W, 22).setInteractive();
-    zone.on('pointerup', () => this.showNextUnlock());
+    // Chạm "Lv" hoặc thanh EXP để mở lộ trình level (tiến độ + các mốc mở khóa).
+    const zone = scene.add.zone(W / 2 - 20, 37, W - 40, 24).setInteractive({ useHandCursor: true });
+    zone.on('pointerup', (p: Phaser.Input.Pointer) => { if (p.getDistance() < 10) this.showRoadmap(); });
     this.add(zone);
 
     if (opts.onPause) {
@@ -99,12 +100,14 @@ export class Hud extends Phaser.GameObjects.Container {
     this.bar.set(levelProgress(s.exp, s.level));
   }
 
-  private showNextUnlock(): void {
-    const next = nextLevelDef(this.gs.level);
-    if (!next) {
-      toast(this.scene, `Level tối đa của bản này!\n${DATA.levels.nextTeaser}`);
-      return;
-    }
-    toast(this.scene, `Lv ${next.level} (${this.gs.exp}/${next.exp} EXP)\nMở khóa: ${next.label}`);
+  private roadmap: Phaser.GameObjects.Container | null = null;
+
+  private showRoadmap(): void {
+    if (this.roadmap?.active) return;
+    this.opts.onOverlay?.(true);
+    this.roadmap = openLevelRoadmap(this.scene, this.gs, () => {
+      this.roadmap = null;
+      this.opts.onOverlay?.(false);
+    });
   }
 }

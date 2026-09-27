@@ -134,7 +134,11 @@ export class ShopScene extends Phaser.Scene {
     this.mapBtn = new Button(this, 26, COUNTER_Y + 44, { w: 44, h: 40, label: '🗺️\nSơ đồ', size: 9, color: C.blue, onTap: () => this.liveMap.open() }).setDepth(260);
     this.drawCounter();
     this.addZoneRefillButtons();
-    this.hud = new Hud(this, s, { onPause: () => this.pause() });
+    this.hud = new Hud(this, s, {
+      onPause: () => this.pause(),
+      // Xem lộ trình level giữa giờ bán thì dừng giờ (trừ khi đang ở menu tạm dừng hoặc chơi chung).
+      onOverlay: (open) => { if (!G.liveSnapshot && !this.pauseLayer && !this.ending) this.session.paused = open; },
+    });
     this.panelLayer = this.add.container(0, 0).setDepth(300);
     this.staffLayer = this.add.container(0, 0).setDepth(205);
     this.cashierX.clear();
@@ -429,7 +433,10 @@ export class ShopScene extends Phaser.Scene {
     e.on('refillDone', () => play('pick'));
     e.on('closing', () => {
       play('door');
-      toast(this, '20:00 rồi! Đóng cửa sau khi phục vụ nốt khách.', 300);
+      const early = G.state.today.closedEarlyAt;
+      toast(this, early !== undefined
+        ? `🚪 Đóng cửa sớm lúc ${formatClock(early)}. Tính tiền nốt khách đang chờ rồi nghỉ.`
+        : `${formatClock(DATA.balance.closeMinute)} rồi! Đóng cửa sau khi phục vụ nốt khách.`, 300);
       this.renderPanel(true);
     });
     e.on('dayEnded', () => this.finishDay());
@@ -684,7 +691,8 @@ export class ShopScene extends Phaser.Scene {
   private removeCustomer(c: Customer, reason: string, stars: number): void {
     const v = this.views.get(c.id);
     this.views.delete(c.id);
-    if (v && reason === 'thief') {
+    if (v && (reason === 'thief' || reason === 'closed')) {
+      if (reason === 'closed') this.sideFloat(v.sprite.x, v.sprite.y - 72, '🙂 Mai ghé lại nhé!', HEX.muted, 13);
       v.bar.destroy();
       this.tweens.killTweensOf(v.sprite);
       this.tweens.add({ targets: v.sprite, x: DOOR_X + 20, alpha: 0, duration: 400, onComplete: () => v.sprite.destroy() });
@@ -1172,6 +1180,30 @@ export class ShopScene extends Phaser.Scene {
     return L;
   }
 
+  /** Hỏi lại trước khi đóng cửa sớm (việc đột xuất, mệt, trời mưa...). */
+  private confirmCloseEarly(): void {
+    if (this.session.closed) return;
+    const now = formatClock(G.state.clock);
+    const waiting = this.session.customers.length;
+    const layer = dialog(this, {
+      icon: '🚪',
+      title: `Đóng cửa sớm lúc ${now}?`,
+      body: 'Kéo cửa xuống, không đón khách mới.\n'
+        + (waiting ? `${waiting} khách trong tiệm: ai đã lấy hàng thì ra quầy tính tiền nốt, ai chưa lấy gì thì mời về (không bị trừ sao).\n` : '')
+        + 'Lương nhân viên, tiền điện vẫn tính cả ngày.',
+      buttons: [
+        { label: 'Thôi', color: C.grey, onTap: () => undefined },
+        { label: 'Đóng cửa', color: C.red, onTap: () => {
+          if (G.liveSnapshot) void this.liveCommand({ type: 'closeEarly' });
+          else { this.session.closeEarly(); persist(); }
+          this.resume();
+          this.renderPanel(true);
+        } },
+      ],
+    });
+    layer.setDepth(3100);
+  }
+
   private pause(): void {
     if (this.pauseLayer || this.ending) return;
     if (!G.liveSnapshot) this.session.paused = true;
@@ -1279,10 +1311,20 @@ export class ShopScene extends Phaser.Scene {
       }));
     }
     y += 54;
+    const closeBtn = new Button(this, W / 2 - 56, y, {
+      w: 108,
+      h: 44,
+      size: 11,
+      label: this.session.closed ? '🌙 Đã đóng cửa' : '🚪 Đóng cửa sớm',
+      color: C.red,
+      onTap: () => this.confirmCloseEarly(),
+    }).setEnabled(!this.session.closed);
+    L.add(closeBtn);
     L.add(
-      new Button(this, W / 2, y, {
-        w: 220,
+      new Button(this, W / 2 + 56, y, {
+        w: 108,
         h: 44,
+        size: 11,
         label: '🏠 Về màn chính',
         color: C.grey,
         onTap: () => {

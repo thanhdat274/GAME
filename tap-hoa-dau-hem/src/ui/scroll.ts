@@ -18,6 +18,8 @@ export interface KineticOptions {
   enabled?: () => boolean;
   /** Kéo quá bao nhiêu điểm thì tính là cuộn (mặc định 6). */
   threshold?: number;
+  /** Cuộn ngang (kéo theo trục X); `inView` vẫn nhận tọa độ Y để biết chạm có nằm trong dải cuộn không. */
+  horizontal?: boolean;
 }
 
 export class KineticScroll {
@@ -27,12 +29,14 @@ export class KineticScroll {
     this.core = new KineticCore({ get: o.get, set: o.set, max: o.max }, o.threshold);
     const input = scene.input;
     const enabled = () => (o.enabled ? o.enabled() : true);
-    const down = (p: Phaser.Input.Pointer) => this.core.down(p.worldY, eventTime(p, 'down'), enabled() && o.inView(p.worldY));
+    const axis = (p: Phaser.Input.Pointer) => (o.horizontal ? p.worldX : p.worldY);
+    const down = (p: Phaser.Input.Pointer) => this.core.down(axis(p), eventTime(p, 'down'), enabled() && o.inView(p.worldY));
     // Dùng thời điểm của sự kiện chạm (không phải lúc xử lý): trình duyệt có thể gom nhiều lần chạm vào một khung hình.
-    const move = (p: Phaser.Input.Pointer) => { if (p.isDown) this.core.move(p.worldY, eventTime(p, 'move')); };
+    const move = (p: Phaser.Input.Pointer) => { if (p.isDown) this.core.move(axis(p), eventTime(p, 'move')); };
     const up = (p: Phaser.Input.Pointer) => this.core.up(eventTime(p, 'up'));
-    const wheel = (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
-      if (enabled() && o.inView(p.worldY)) this.core.wheel(dy);
+    const wheel = (p: Phaser.Input.Pointer, _o: unknown, dx: number, dy: number) => {
+      // Cuộn ngang: lăn chuột thường (dy) cũng kéo dải sang ngang; vuốt ngang trên touchpad (dx) cũng được.
+      if (enabled() && o.inView(p.worldY)) this.core.wheel(o.horizontal && Math.abs(dx) > Math.abs(dy) ? dx : dy);
     };
     const update = (_t: number, deltaMs: number) => this.core.tick(deltaMs);
     input.on('pointerdown', down);

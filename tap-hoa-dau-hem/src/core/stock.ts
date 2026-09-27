@@ -571,9 +571,22 @@ export function autoArrange(state: GameState): string[] {
     const s = at(p);
     if (s.productId && s.qty === 0 && !has(s.productId)) clearSlot(state, p.r, p.c);
   }
+  const slotsOf = (id: string) => slots.filter((p) => at(p).productId === id);
+
+  // Mỗi món chỉ bày 1 ô: gom các ô trùng về ô đang nhiều hàng nhất, trả phần ô thừa về kho
+  // (nếu kho còn chỗ) để nhường chỗ cho món khác. Ô đang bán xả giữ nguyên.
+  const capacity = warehouseCapacity(state);
+  for (const id of new Set(slots.map((p) => at(p).productId).filter((x): x is string => !!x))) {
+    const dup = slotsOf(id).filter((p) => at(p).clearance === undefined).sort((a, b) => at(b).qty - at(a).qty);
+    for (const p of dup.slice(1)) {
+      const after = warehouseTotals(state);
+      after[id] = (after[id] ?? 0) + at(p).qty;
+      if (warehouseCellsUsed(after) > capacity) continue;
+      clearSlot(state, p.r, p.c);
+    }
+  }
   for (const p of slots) refillSlot(state, p.r, p.c);
 
-  const slotsOf = (id: string) => slots.filter((p) => at(p).productId === id);
   const inWarehouse = () => {
     const totals = warehouseTotals(state);
     return Object.keys(totals)
@@ -626,12 +639,12 @@ export function autoArrange(state: GameState): string[] {
     assignSlot(state, target.r, target.c, id);
   }
 
-  // 2) Ô trống còn lại: ưu tiên món còn nhiều trong kho và bán chạy.
+  // 2) Ô trống còn lại: món chưa có ô nào (không bày một món ra nhiều ô cho đỡ tốn chỗ), bán chạy trước.
   for (const p of slots) {
     if (at(p).productId) continue;
     const next = inWarehouse()
-      .filter((id) => fits(p.r, id))
-      .sort((a, b) => slotsOf(a).length - slotsOf(b).length || demand(b) - demand(a))[0];
+      .filter((id) => fits(p.r, id) && slotsOf(id).length === 0)
+      .sort((a, b) => demand(b) - demand(a))[0];
     if (!next) continue;
     assignSlot(state, p.r, p.c, next);
   }

@@ -20,6 +20,21 @@ export function levelProgress(exp: number, level: number): number {
   return Math.min(1, Math.max(0, (exp - cur.exp) / (next.exp - cur.exp)));
 }
 
+/**
+ * Tiến độ EXP để hiển thị: `into`/`span` là phần đã đi / độ dài của level hiện tại (khớp với thanh),
+ * `remaining` là EXP còn thiếu, `nextExp` là mốc tổng EXP của level sau. Level tối đa thì `next` = null.
+ */
+export function levelStatus(exp: number, level: number): {
+  level: number; next: number | null; into: number; span: number; remaining: number; nextExp: number | null; pct: number;
+} {
+  const cur = DATA.levels.levels[level - 1];
+  const next = nextLevelDef(level);
+  if (!next) return { level, next: null, into: 0, span: 0, remaining: 0, nextExp: null, pct: 1 };
+  const span = next.exp - cur.exp;
+  const into = Math.min(span, Math.max(0, exp - cur.exp));
+  return { level, next: next.level, into, span, remaining: Math.max(0, next.exp - exp), nextExp: next.exp, pct: span ? into / span : 1 };
+}
+
 export function isAtCap(state: GameState): boolean {
   return state.level >= DATA.levels.maxLevel;
 }

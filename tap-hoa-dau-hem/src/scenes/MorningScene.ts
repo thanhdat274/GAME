@@ -7,9 +7,10 @@ import { exportBackupCode, importBackupCode } from '../core/save';
 import { MAX_SHELVES, formatMoney, priceOf, shelfCount, totalQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
 import {
   assignCounterSlot, assignSlot, autoArrange, bulkDiscounted, buyStock, checkCart, costTrend, hasPlaceFor, refillCounterSlot,
-  refillSlot, setClearance, slotFreshness, suggestCart, clearSlot, supplierUnlocked, unitCost, warehouseCapacity,
+  isPerishable, refillSlot, setClearance, slotFreshness, suggestCart, clearSlot, supplierUnlocked, unitCost, warehouseCapacity,
   warehouseCellsUsed, type Cart,
 } from '../core/stock';
+import { unrepliedCount } from '../core/reviews';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand } from '../services/liveShop';
 import { suspendLiveShop } from '../services/liveShop';
@@ -60,6 +61,17 @@ const COUNTER_CHIP_Y = 452;
 /** Khung nhìn lưới hàng trong kho ở tab Bày kệ. */
 const CHIP_VIEW_TOP = 356;
 const CHIP_VIEW_BOTTOM = 550;
+/** Thứ tự và nhãn các nhóm hàng trong lưới kho (tab Bày kệ): hàng tươi sống / mau hỏng lên trước. */
+const CHIP_GROUPS: { cat: Category; icon: string; name: string; note: string; color: string }[] = [
+  { cat: 'fresh', icon: '🥬', name: 'Đồ tươi sống', note: 'mau hỏng, bán trước', color: '#c8f7c5' },
+  { cat: 'frozen', icon: '🧊', name: 'Đông lạnh', note: 'để tủ đông', color: '#cfe8ff' },
+  { cat: 'drink', icon: '🥤', name: 'Đồ uống', note: 'ngon hơn khi để tủ lạnh', color: '#d7f0ff' },
+  { cat: 'dry', icon: '🍚', name: 'Đồ khô', note: 'để lâu được', color: '#ffe7b3' },
+  { cat: 'snack', icon: '🍬', name: 'Ăn vặt', note: '', color: '#ffd6e8' },
+  { cat: 'household', icon: '🧴', name: 'Đồ dùng', note: 'không hết hạn', color: '#e6e0ff' },
+  { cat: 'counter', icon: '🔐', name: 'Sau quầy', note: '', color: '#f0e0c8' },
+];
+const GROUP_H = 24;
 /** Giữ bao lâu (ms) thì nhấc món lên để kéo thả (vuốt nhanh là cuộn). */
 const CHIP_HOLD_MS = 280;
 const COUNTER_X0 = 96;
@@ -256,6 +268,8 @@ export class MorningScene extends Phaser.Scene {
     if (hasFeature(s.level, 'land')) items.push({ label: '🏗️ Sắp xếp', color: C.green, onTap: go('Build') });
     items.push({ label: '🗺️ Sơ đồ tiệm', color: C.wood, onTap: go('StoreMap') });
     items.push({ label: '📦 Kho hàng', color: C.wood, onTap: go('Warehouse') });
+    const unreplied = unrepliedCount(s);
+    items.push({ label: `⭐ Đánh giá${unreplied ? ` (${unreplied})` : ''}`, color: C.wood, onTap: go('Reviews') });
     if (hasFeature(s.level, 'quests')) items.push({ label: '🎯 Nhiệm vụ', color: C.wood, onTap: go('Quests') });
     if (hasFeature(s.level, 'pricing')) items.push({ label: '💲 Giá bán', color: C.wood, onTap: go('Prices') });
     if (hasFeature(s.level, 'credit')) items.push({ label: '📒 Sổ nợ', color: C.wood, onTap: go('Ledger') });
@@ -643,51 +657,90 @@ export class MorningScene extends Phaser.Scene {
     const cols = this.counterMode ? 6 : 5;
     const cw = this.counterMode ? 54 : 60;
     const ch = this.counterMode ? 60 : 66;
-    items.forEach(([id, q], i) => {
-      const x = this.counterMode ? 31 + (i % cols) * 59.5 : 42 + (i % cols) * 69;
-      const y = this.counterMode ? COUNTER_CHIP_Y + Math.floor(i / cols) * 66 : 390 + Math.floor(i / cols) * 72;
-      const p = product(id);
-      const sel = this.selected === id;
-      const bg = this.add.graphics();
-      bg.fillStyle(sel ? C.yellow : C.slot, 1).fillRoundedRect(-cw / 2, -ch / 2, cw, ch, 10);
-      bg.lineStyle(sel ? 3 : 2, sel ? C.red : C.slotEdge, 1).strokeRoundedRect(-cw / 2, -ch / 2, cw, ch, 10);
-      const icon = productIcon(this, 0, -8, p, this.counterMode ? 32 : 36);
-      const label = txt(this, 0, ch / 2 - 11, `x${q}`, { size: 12, bold: true, origin: [0.5, 0.5] });
-      const chip = this.add.container(x, y, [bg, icon, label]).setSize(cw, ch).setInteractive({ useHandCursor: true });
-      let hold: Phaser.Time.TimerEvent | null = null;
-      // Món đã cuộn ra ngoài khung (bị che) thì không nhận chạm.
-      const inFrame = (ptr: Phaser.Input.Pointer) => ptr.worldY >= this.chipTop && ptr.worldY <= CHIP_VIEW_BOTTOM;
-      chip.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
-        hold?.remove();
-        if (!inFrame(ptr)) return;
-        hold = this.time.delayedCall(CHIP_HOLD_MS, () => {
-          // Giữ yên (không cuộn) thì nhấc món lên để kéo thả.
-          if (!ptr.isDown || ptr.getDistance() > 8 || this.chipScroll?.moving || this.chipDrag) return;
-          this.chipScroll?.cancel();
-          this.chipDrag = { id, ghost: productIcon(this, ptr.worldX, ptr.worldY, p, 40).setDepth(800).setAlpha(0.9) };
-          vibrate(15);
-          play('tap');
-        });
+    const pitch = this.counterMode ? 66 : 72;
+    const firstY = this.counterMode ? COUNTER_CHIP_Y : 390;
+    // Chia theo nhóm hàng (tươi sống, đông lạnh, đồ uống, đồ khô...), mỗi nhóm một tiêu đề; trong nhóm xếp theo tên.
+    const order = (cat: Category) => { const i = CHIP_GROUPS.findIndex((g) => g.cat === cat); return i < 0 ? CHIP_GROUPS.length : i; };
+    const groups = new Map<Category, [string, number][]>();
+    for (const item of items) {
+      const cat = product(item[0]).category;
+      groups.set(cat, [...(groups.get(cat) ?? []), item]);
+    }
+    const sorted = [...groups.entries()].sort((a, b) => order(a[0]) - order(b[0]));
+    const showHeaders = sorted.length > 1 || !this.counterMode;
+    // Hạn sớm nhất của từng món trong kho (hàng mau hỏng).
+    const soonest = new Map<string, number>();
+    for (const lot of G.state.warehouse) if (lot.qty > 0 && lot.exp !== null) soonest.set(lot.productId, Math.min(soonest.get(lot.productId) ?? Infinity, lot.exp));
+    let top = firstY - ch / 2;
+    for (const [cat, list] of sorted) {
+      list.sort((a, b) => product(a[0]).name.localeCompare(product(b[0]).name, 'vi'));
+      if (showHeaders) {
+        const g = CHIP_GROUPS.find((item) => item.cat === cat);
+        const title = `${g?.icon ?? '📦'} ${g?.name ?? ZONE_NAMES[cat as keyof typeof ZONE_NAMES] ?? cat} · ${list.length} món${g?.note ? ` · ${g.note}` : ''}`;
+        const head = txt(this, 12, top + 2, title, { size: 11, bold: true, color: g?.color ?? HEX.cream });
+        const line = this.add.graphics();
+        line.fillStyle(0x000000, 0.18).fillRect(8, top + GROUP_H - 5, W - 16, 1.5);
+        this.chips.add([line, head]);
+        top += GROUP_H;
+      }
+      list.forEach(([id, q], i) => {
+        const x = this.counterMode ? 31 + (i % cols) * 59.5 : 42 + (i % cols) * 69;
+        const y = top + ch / 2 + Math.floor(i / cols) * pitch;
+        this.addChip(id, q, x, y, cw, ch, soonest.get(id));
       });
-      chip.on('pointerup', (ptr: Phaser.Input.Pointer) => {
-        hold?.remove();
-        if (ptr.getDistance() > 10 || this.chipScroll?.blockTap || !inFrame(ptr)) return;
-        this.selected = sel ? null : id;
-        play('tap');
-        this.refresh();
-      });
-      this.chips.add(chip);
-    });
+      top += Math.ceil(list.length / cols) * pitch + 2;
+    }
     // Khung cuộn: phần trên là ô quầy khi ở chế độ sau quầy.
     this.chipTop = this.counterMode ? COUNTER_CHIP_Y - 36 : CHIP_VIEW_TOP;
-    const rows = Math.ceil(items.length / cols);
-    const firstY = this.counterMode ? COUNTER_CHIP_Y : 390;
-    const bottom = firstY + (rows - 1) * (this.counterMode ? 66 : 72) + ch / 2 + 8;
+    const bottom = top - (pitch - ch) + 8;
     this.chipMax = Math.max(0, bottom - CHIP_VIEW_BOTTOM);
     this.chipMask?.clear().fillStyle(0xffffff).fillRect(0, this.chipTop, W, CHIP_VIEW_BOTTOM - this.chipTop);
     this.chipCuller?.reset();
     this.setChipOffset(this.chipOffset);
     this.renderCounterSlots();
+  }
+
+  /** Một ô món trong lưới kho; `exp` = ngày hết hạn sớm nhất (hàng mau hỏng hiện số ngày còn bán được; hôm nay = bán nốt trong ngày). */
+  private addChip(id: string, q: number, x: number, y: number, cw: number, ch: number, exp?: number): void {
+    const p = product(id);
+    const sel = this.selected === id;
+    const bg = this.add.graphics();
+    bg.fillStyle(sel ? C.yellow : C.slot, 1).fillRoundedRect(-cw / 2, -ch / 2, cw, ch, 10);
+    bg.lineStyle(sel ? 3 : 2, sel ? C.red : C.slotEdge, 1).strokeRoundedRect(-cw / 2, -ch / 2, cw, ch, 10);
+    const icon = productIcon(this, 0, -8, p, this.counterMode ? 32 : 36);
+    const label = txt(this, 0, ch / 2 - 11, `x${q}`, { size: 12, bold: true, origin: [0.5, 0.5] });
+    const parts: Phaser.GameObjects.GameObject[] = [bg, icon, label];
+    if (exp !== undefined && isPerishable(p)) {
+      const left = exp - G.state.day;
+      const tag = txt(this, cw / 2 - 3, -ch / 2 + 3, left <= 0 ? 'hôm nay' : `${left}n`, {
+        size: 9, bold: true, color: HEX.white, origin: [1, 0],
+      }).setBackgroundColor(left <= 1 ? '#d84a3a' : left <= 3 ? '#e08a00' : '#4a8f3c').setPadding(3, 1, 3, 1);
+      parts.push(tag);
+    }
+    const chip = this.add.container(x, y, parts).setSize(cw, ch).setInteractive({ useHandCursor: true });
+    let hold: Phaser.Time.TimerEvent | null = null;
+    // Món đã cuộn ra ngoài khung (bị che) thì không nhận chạm.
+    const inFrame = (ptr: Phaser.Input.Pointer) => ptr.worldY >= this.chipTop && ptr.worldY <= CHIP_VIEW_BOTTOM;
+    chip.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      hold?.remove();
+      if (!inFrame(ptr)) return;
+      hold = this.time.delayedCall(CHIP_HOLD_MS, () => {
+        // Giữ yên (không cuộn) thì nhấc món lên để kéo thả.
+        if (!ptr.isDown || ptr.getDistance() > 8 || this.chipScroll?.moving || this.chipDrag) return;
+        this.chipScroll?.cancel();
+        this.chipDrag = { id, ghost: productIcon(this, ptr.worldX, ptr.worldY, p, 40).setDepth(800).setAlpha(0.9) };
+        vibrate(15);
+        play('tap');
+      });
+    });
+    chip.on('pointerup', (ptr: Phaser.Input.Pointer) => {
+      hold?.remove();
+      if (ptr.getDistance() > 10 || this.chipScroll?.blockTap || !inFrame(ptr)) return;
+      this.selected = sel ? null : id;
+      play('tap');
+      this.refresh();
+    });
+    this.chips.add(chip);
   }
 
   private setChipOffset(v: number): void {
