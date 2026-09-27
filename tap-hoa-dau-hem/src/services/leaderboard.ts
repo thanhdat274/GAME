@@ -1,3 +1,4 @@
+import type { GameState } from '../core/state';
 import { getFirebase } from './firebase';
 
 export interface LeaderboardEntry {
@@ -33,6 +34,31 @@ export async function fetchMyRank(uid: string): Promise<{ entry: LeaderboardEntr
   );
   const higherCount = await firestoreSdk.getCountFromServer(higherQuery);
   return { entry, rank: higherCount.data().count + 1 };
+}
+
+/**
+ * Client tự ghi điểm (giống cơ chế cloud save): không qua Cloud Function nên chạy được ở gói
+ * Firebase Spark miễn phí, đổi lại không có kiểm tra chéo với bản lưu thật — chấp nhận vì đây
+ * là bảng xếp hạng vui/so tài, không phải mục đích cạnh tranh nghiêm ngặt.
+ */
+export async function submitLeaderboardEntry(state: GameState): Promise<void> {
+  const { db, auth, firestoreSdk } = await getFirebase();
+  const user = auth.currentUser;
+  if (!user) return;
+  await firestoreSdk.setDoc(firestoreSdk.doc(db, 'leaderboards', user.uid), {
+    uid: user.uid,
+    displayName: user.displayName ?? 'Ẩn danh',
+    photoURL: user.photoURL ?? null,
+    level: state.summary.level,
+    day: state.summary.day,
+    money: state.summary.money,
+    updatedAt: firestoreSdk.serverTimestamp(),
+  });
+}
+
+export async function deleteLeaderboardEntry(uid: string): Promise<void> {
+  const { db, firestoreSdk } = await getFirebase();
+  await firestoreSdk.deleteDoc(firestoreSdk.doc(db, 'leaderboards', uid));
 }
 
 function parseEntry(uid: string, value: any): LeaderboardEntry {

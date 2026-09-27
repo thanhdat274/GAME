@@ -1,6 +1,7 @@
 import type { GameState } from '../core/state';
 import { compressSave as compressState, decompressSave as decompressState, utf8Bytes } from '../core/compress';
 import { getFirebase } from './firebase';
+import { submitLeaderboardEntry } from './leaderboard';
 
 const MAX_COMPRESSED_CHARS = 900_000;
 
@@ -76,6 +77,8 @@ export async function push(state: GameState): Promise<CloudResult<number>> {
     state.sync.baseRevision = revision;
     state.sync.dirty = false;
     state.sync.lastSyncedAt = Date.now();
+    // Không chặn kết quả lưu cloud nếu ghi bảng xếp hạng lỗi (mạng chập chờn, v.v.).
+    void submitLeaderboardEntry(state).catch(() => {});
     return { status: 'ok', value: revision };
   } catch (error) {
     if (error instanceof CloudConflict) return { status: 'conflict', cloud: error.cloud };

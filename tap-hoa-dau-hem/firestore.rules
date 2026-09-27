@@ -38,10 +38,20 @@ service cloud.firestore {
       allow read, write, delete: if false;
     }
 
-    // Bảng xếp hạng: chỉ Cloud Function (Admin SDK) mới ghi được, đọc cần đăng nhập.
+    // Bảng xếp hạng: đọc cần đăng nhập. Client tự ghi điểm của chính mình (như cloud save),
+    // không qua Cloud Function nên chạy được ở gói Spark miễn phí; đổi lại rules chỉ kiểm tra
+    // được hình thức dữ liệu, không đối chiếu được với bản lưu thật (đủ cho bảng xếp hạng vui).
     match /leaderboards/{uid} {
       allow read: if request.auth != null;
-      allow write: if false;
+      allow delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() < 60
+        && (request.resource.data.photoURL == null || request.resource.data.photoURL is string)
+        && request.resource.data.level is int && request.resource.data.level >= 1
+        && request.resource.data.day is int && request.resource.data.day >= 1
+        && request.resource.data.money is number && request.resource.data.money >= 0 && request.resource.data.money < 1e15;
     }
   }
 }

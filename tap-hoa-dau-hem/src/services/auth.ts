@@ -1,5 +1,6 @@
 import { getFirebase, hasAuthHint, setAuthHint } from './firebase';
 import { isInAppBrowser, prefersRedirect } from './inAppBrowser';
+import { deleteLeaderboardEntry } from './leaderboard';
 
 export interface AccountUser {
   uid: string;
@@ -87,6 +88,7 @@ export async function deleteCurrentAccount(): Promise<void> {
   await firestoreSdk.deleteDoc(save);
   const meta = firestoreSdk.doc(db, 'users', user.uid, 'meta', 'clock');
   await firestoreSdk.deleteDoc(meta);
+  await deleteLeaderboardEntry(user.uid).catch(() => {});
   await authSdk.deleteUser(user);
   setAuthHint(false);
 }

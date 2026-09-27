@@ -126,7 +126,8 @@ describe('đăng nhập Google và quản lý tài khoản', () => {
     await deleteCurrentAccount();
     expect(doc).toHaveBeenNthCalledWith(1, {}, 'users', 'user-1', 'saves', 'main');
     expect(doc).toHaveBeenNthCalledWith(2, {}, 'users', 'user-1', 'meta', 'clock');
-    expect(deleteDoc).toHaveBeenCalledTimes(2);
+    expect(doc).toHaveBeenNthCalledWith(3, {}, 'leaderboards', 'user-1');
+    expect(deleteDoc).toHaveBeenCalledTimes(3);
     expect(deleteUser).toHaveBeenCalledWith(user);
     expect(firebase.setAuthHint).toHaveBeenCalledWith(false);
   });
