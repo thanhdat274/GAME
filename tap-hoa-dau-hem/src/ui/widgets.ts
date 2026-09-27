@@ -256,6 +256,9 @@ export function dialog(
 
 /** Thanh tiến trình đơn giản. */
 export class Bar extends Phaser.GameObjects.Graphics {
+  private lastWidth = -1;
+  private lastColor = -1;
+
   constructor(scene: Phaser.Scene, private bx: number, private by: number, private bw: number, private bh: number, private fg = C.green, private back = 0x000000) {
     super(scene);
     scene.add.existing(this);
@@ -263,8 +266,15 @@ export class Bar extends Phaser.GameObjects.Graphics {
 
   set(ratio: number, color?: number): void {
     const r = Math.max(0, Math.min(1, ratio));
+    const width = r > 0 ? Math.round(Math.max(this.bh, this.bw * r)) : 0;
+    const fill = color ?? this.fg;
+    // These graphics are often refreshed every frame; don't rebuild their WebGL geometry
+    // when the visible bar still occupies the same logical pixel width.
+    if (width === this.lastWidth && fill === this.lastColor) return;
+    this.lastWidth = width;
+    this.lastColor = fill;
     this.clear();
     this.fillStyle(this.back, 0.35).fillRoundedRect(this.bx, this.by, this.bw, this.bh, this.bh / 2);
-    if (r > 0) this.fillStyle(color ?? this.fg, 1).fillRoundedRect(this.bx, this.by, Math.max(this.bh, this.bw * r), this.bh, this.bh / 2);
+    if (width > 0) this.fillStyle(fill, 1).fillRoundedRect(this.bx, this.by, width, this.bh, this.bh / 2);
   }
 }

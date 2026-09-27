@@ -23,6 +23,7 @@ import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sou
 import { Bar, Button, dialog, floatText, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
+import { perfEnabled, recordPerfSection } from '../ui/perfOverlay';
 
 const SHELF_TOP = HUD_H + 10;
 /** Màn hình đủ cao thì hiện thêm 1 hàng kệ; sàn, quầy và ô bên dưới dời xuống tương ứng. */
@@ -1202,8 +1203,13 @@ export class ShopScene extends Phaser.Scene {
     }
     // Chế độ quản lý: tăng tốc x2/x4 (nhiều bước core mỗi khung hình).
     const speed = G.state.today.managerDay ? G.state.manager.speed : 1;
+    let measureAt = perfEnabled ? performance.now() : 0;
     if (!G.liveSnapshot) for (let i = 0; i < speed && !this.ending; i++) this.session.update(dtMs / 1000);
     this.tickIdle(dtMs / 1000);
+    if (perfEnabled) {
+      recordPerfSection('sim', performance.now() - measureAt);
+      measureAt = performance.now();
+    }
     const gameDt = this.session.paused ? 0 : speed * Math.min(dtMs / 1000, 0.5);
     this.liveMap.update(gameDt);
     if (this.playMap) {
@@ -1218,6 +1224,10 @@ export class ShopScene extends Phaser.Scene {
           : this.session.queue.length ? `Khách đầu hàng phải chờ bạn quay lại mới tính tiền được.\n(${this.session.queue.length} người đang chờ quầy bạn)` : 'Khách đầu hàng phải chờ bạn quay lại mới tính tiền được.');
       }
     }
+    if (perfEnabled) {
+      recordPerfSection('map', performance.now() - measureAt);
+      measureAt = performance.now();
+    }
     this.renderAcc += dtMs;
     if (this.renderAcc >= 100) {
       this.renderAcc = 0;
@@ -1228,6 +1238,10 @@ export class ShopScene extends Phaser.Scene {
       const canShowZoneActions = this.session.customers.length === 0;
       this.zoneRefillButtons.forEach(({ zone, button }) => button.setVisible(canShowZoneActions && !this.topDown && G.state.zones.some((item) => item === zone)));
       this.checkQuestProgress();
+    }
+    if (perfEnabled) {
+      recordPerfSection('ui', performance.now() - measureAt);
+      measureAt = performance.now();
     }
     const side = !this.topDown;
     this.session.customers.forEach((c) => {
@@ -1245,6 +1259,7 @@ export class ShopScene extends Phaser.Scene {
       this.counterTimerText.setText(`⏱ ${Math.ceil(requestLeft)}s`);
       this.counterRequestBar?.set(requestLeft / Math.max(1, this.session.front?.counterRequestSeconds ?? 1), requestLeft <= 2 ? C.red : C.green);
     }
+    if (perfEnabled) recordPerfSection('actors', performance.now() - measureAt);
   }
 
   // ---------- Chơi hộ khi rảnh tay ----------

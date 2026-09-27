@@ -1,0 +1,11 @@
+node_modules
+dist
+functions/lib
+.env.local
+*.log
+
+.vercel
+yarn.lock
+.claude/launch.json
+.env*
+!.env.example
