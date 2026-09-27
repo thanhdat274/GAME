@@ -7,9 +7,9 @@
     <meta name="description" content="Tạp Hóa Đầu Hẻm - game mở tiệm tạp hóa nhỏ: nhập hàng, bày kệ, bán hàng và thối tiền." />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <!-- Keep iOS status bar on a solid dark surface; black-translucent lets the
-         game show through the system area and Safari applies a frosted blur. -->
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Thanh trạng thái iOS nền đặc: "black-translucent" cho game vẽ xuống dưới giờ/pin
+         và iOS phủ lớp kính mờ lên đó (đồng thời làm sai chiều cao màn hình ở chế độ PWA). -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>Tạp Hóa Đầu Hẻm</title>
@@ -30,9 +30,12 @@
         user-select: none;
         -webkit-tap-highlight-color: transparent;
       }
+      /* Game luôn nằm trong vùng an toàn (dưới tai thỏ / Dynamic Island, trên thanh Home).
+         Phần viền ngoài là nền đặc của body nên không còn chữ bị mờ dưới thanh trạng thái. */
       #game {
         position: fixed;
         inset: 0;
+        inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
         margin: 0;
         padding: 0;
         overflow: hidden;
