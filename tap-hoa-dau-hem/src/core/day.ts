@@ -1,5 +1,5 @@
 import { computeTip, customerPayment, judgeChange, type ChangeResult } from './change';
-import { createCustomer, meanSpawnSeconds, orderTotal, ratingFor, type Customer, type OrderLine } from './customers';
+import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, type Customer, type OrderLine } from './customers';
 import { recordDay } from './analytics';
 import { applyPlanogram, planogramProduct, runRestockRules } from './autorestock';
 import { DATA, hasFeature, product, type Category } from './data';
@@ -27,14 +27,14 @@ import {
   addStaffExp, errorChance, friendlyStarChance, friendlyTipMul, payroll, tiredAfterMinutes, timeFactor, updateMoods,
 } from './staff';
 import {
-  emptyStats, fixtureOfShelf, formatMoney, shelfKind, unlockedProducts, usableShelves, warehouseQty, warehouseTotals,
+  emptyStats, fixtureOfShelf, formatMoney, priceOf, shelfKind, unlockedProducts, usableShelves, warehouseQty, warehouseTotals,
   type DaySummary, type GameState, type JournalEntry, type Staff, type StaffDayPerf,
   type DiningTableState,
   formatClock,
 } from './state';
 import {
   assignSlot, canRefill, electricityCost, expireLots, putIntoSlot, receiveDeliveries, refillSlot, shelfCapacity, slotUnitPrice, stowHolding,
-  takeOneFromSlot, zoneOf, type DeliveryResult,
+  findSlotWith, takeLots, takeOneFromSlot, zoneOf, type DeliveryResult,
   spoilFrozenStock,
 } from './stock';
 import { PLAYER, ROLE_TASKS, TaskQueue, type Task } from './tasks';
@@ -47,7 +47,7 @@ export interface Lane {
   id: number;
   staffId: string;
   queue: Customer[];
-  job: { customerId: number; phase: 'scan' | 'change'; left: number } | null;
+  job: { customerId: number; phase: 'ask' | 'scan' | 'change'; left: number } | null;
   /** Nhân viên sắp hết ca: phục vụ xong khách đang làm rồi bàn giao. */
   closing: boolean;
 }
@@ -87,6 +87,10 @@ export interface DayEvents {
   review: Review;
   itemTaken: { customer: Customer; productId: string; shelf: number; slot: number };
   itemMissing: { customer: Customer; productId: string };
+  /** Khách tới quầy hỏi món hết trên kệ; người đứng quầy bắt đầu kiểm kho. */
+  stockAsking: Customer;
+  /** Khách ra quầy hỏi món hết trên kệ: `found` = số lấy được từ kho (đã bày thêm lên kệ), `missing` = số thật sự hết. */
+  stockAsked: { customer: Customer; productId: string; found: number; missing: number; restocked: number };
   basketReady: Customer;
   itemScanned: { customer: Customer; productId: string; scanned: number; remaining: number };
   counterRequested: { customer: Customer; productId: string; seconds: number };
@@ -376,6 +380,7 @@ export class DaySession {
     }
     const c = this.front;
     if (c?.status === 'scanning') this.tickCounterRequest(c, dt);
+    if (c?.status === 'waiting' && c.askLeft && (this.playerAtCounter || this.autoPlayer)) c.askLeft = Math.max(0, c.askLeft - dt);
     this.promoteFront();
     this.tickLanes(dt);
     if (this.autoPlayer) this.autoServe(dt);
@@ -590,7 +595,9 @@ export class DaySession {
         this.state.today.missed[line.productId] = (this.state.today.missed[line.productId] ?? 0) + missing;
       }
     }
-    if (!c.order.some((line) => line.picked > 0) && !c.order.some((line) => line.counterLine)) {
+    // Không lấy được gì và cũng không có món hết để hỏi (vd chê đắt hết): về luôn.
+    // Có món hết trên kệ thì vẫn ra quầy hỏi xem trong kho còn không.
+    if (!c.order.some((line) => line.picked > 0) && !c.order.some((line) => line.counterLine) && !c.order.some(askable)) {
       this.removeFrom(this.shoppers, c);
       this.leave(c, 'nothing');
       return;
@@ -611,6 +618,61 @@ export class DaySession {
       if (c.status === 'done') continue;
       this.joinLane(c, lane);
     }
+  }
+
+  /**
+   * Khách tới quầy hỏi các món hết trên kệ. Kho còn thì lấy cho khách luôn (nạp thêm lên kệ rồi đưa khách);
+   * kho cũng hết thì chỉ tính tiền phần còn lại. Trả về false nếu khách chẳng mua được gì và đã ra về.
+   * Vẫn giữ sao bị trừ do hết hàng trên kệ (khách phải hỏi mới có), nên nạp kệ đầy đủ vẫn có lợi.
+   */
+  private askForMissing(c: Customer): boolean {
+    for (const line of c.order) {
+      if (!askable(line)) continue;
+      line.asked = true;
+      const want = line.missing;
+      let found = 0;
+      let restocked = 0;
+      // Nạp đầy các ô kệ đang bày món này (kể cả ô đã bán hết) từ kho, rồi lấy từ kệ đưa khách.
+      for (const shelf of usableShelves(this.state)) {
+        this.state.shelves[shelf].forEach((slot, index) => {
+          if (slot.productId === line.productId && canRefill(this.state, shelf, index)) restocked += refillSlot(this.state, shelf, index);
+        });
+      }
+      while (found < want) {
+        const at = findSlotWith(this.state, line.productId);
+        if (!at) break;
+        const slot = this.state.shelves[at.shelf][at.slot];
+        line.value = (line.value ?? 0) + slotUnitPrice(this.state, slot);
+        const exp = takeOneFromSlot(slot) ?? null;
+        line.pickedFrom ??= [];
+        const recorded = line.pickedFrom.find((item) => item.shelf === at.shelf && item.slot === at.slot);
+        if (recorded) { recorded.qty++; (recorded.exps ??= []).push(exp); }
+        else line.pickedFrom.push({ ...at, qty: 1, exps: [exp] });
+        found++;
+      }
+      // Món không bày trên kệ nào: lấy thẳng trong kho.
+      if (found < want) {
+        const unit = priceOf(line.productId, this.state);
+        for (const lot of takeLots(this.state, line.productId, want - found)) {
+          found += lot.qty;
+          line.value = (line.value ?? 0) + unit * lot.qty;
+        }
+      }
+      if (found > 0) {
+        line.picked += found;
+        line.missing -= found;
+        c.basketMissing = Math.max(0, c.basketMissing - found);
+        const missed = this.state.today.missed;
+        missed[line.productId] = Math.max(0, (missed[line.productId] ?? 0) - found);
+        if (!missed[line.productId]) delete missed[line.productId];
+      }
+      this.events.emit('stockAsked', { customer: c, productId: line.productId, found, missing: line.missing, restocked });
+    }
+    if (!c.order.some((line) => line.picked > 0) && !c.order.some((line) => line.counterLine)) {
+      this.leave(c, 'nothing');
+      return false;
+    }
+    return true;
   }
 
   /** Vào quầy: 0 = quầy người chơi, số khác = id quầy nhân viên. */
@@ -649,6 +711,15 @@ export class DaySession {
     const c = this.front;
     if (!c || c.status !== 'waiting') return;
     if (!this.playerAtCounter && !this.autoPlayer) return;
+    if (c.order.some(askable)) {
+      // Khách đi tới quầy hỏi món hết, người đứng quầy kiểm kho: mất vài giây rồi mới tính tiền.
+      if (c.askLeft === undefined) {
+        c.askLeft = DATA.balance.askStockSeconds;
+        this.events.emit('stockAsking', c);
+      }
+      if (c.askLeft > 0) return;
+      if (!this.askForMissing(c)) return;
+    }
     c.status = 'scanning';
     this.events.emit('customerFront', c);
     const request = c.order.find((line) => line.counterLine && line.picked === 0 && line.missing === 0);
@@ -1385,6 +1456,13 @@ export class DaySession {
       if (!c) continue;
       if (!lane.job) {
         if (lane.closing || c.status !== 'waiting') continue;
+        if (c.order.some(askable)) {
+          // Khách hỏi món hết: thu ngân kiểm kho trước rồi mới quét.
+          if (c.askLeft === undefined) this.events.emit('stockAsking', c);
+          c.askLeft = DATA.balance.askStockSeconds;
+          lane.job = { customerId: c.id, phase: 'ask', left: DATA.balance.askStockSeconds * timeFactor(s, w.tired) };
+          continue;
+        }
         c.status = 'scanning';
         const items = c.order.reduce((n, l) => n + l.picked, 0);
         const counter = c.order.some((l) => l.counterLine && l.picked === 0 && l.missing === 0);
@@ -1392,7 +1470,13 @@ export class DaySession {
         continue;
       }
       lane.job.left -= dt;
+      if (lane.job.phase === 'ask') c.askLeft = Math.max(0, lane.job.left);
       if (lane.job.left > 0) continue;
+      if (lane.job.phase === 'ask') {
+        lane.job = null;
+        if (this.askForMissing(c)) c.askLeft = 0;
+        continue;
+      }
       if (lane.job.phase === 'scan') this.staffCheckout(lane, c, s, w);
       else this.staffChange(lane, c, s);
     }

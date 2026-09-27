@@ -8,7 +8,7 @@ import { roleDef, moodLabel } from '../core/staff';
 import { canGiveCredit } from '../core/ledger';
 import { claimQuest, questDef, questDone, questProgress, questsUnlocked } from '../core/quests';
 import { formatClock, formatMoney, warehouseQty } from '../core/state';
-import { orderTotal } from '../core/customers';
+import { askable, orderTotal } from '../core/customers';
 import { ensureDiningTables } from '../core/dining';
 import { calendarDate } from '../core/calendar';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
@@ -393,6 +393,15 @@ export class ShopScene extends Phaser.Scene {
       // Nhắc nút nhập hàng khi khách hỏi món đã hết.
       if (this.restockBtn && !this.tweens.isTweening(this.restockBtn)) this.tweens.add({ targets: this.restockBtn, scale: 1.2, yoyo: true, repeat: 2, duration: 160 });
     });
+    e.on('stockAsking', () => this.renderPanel(true));
+    e.on('stockAsked', ({ customer, productId, found, missing }) => {
+      const v = this.views.get(customer.id);
+      const name = product(productId).name;
+      if (found > 0) play('pick');
+      this.sideFloat(v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74,
+        found > 0 ? `📦 Kho còn ${name}!${missing > 0 ? ` (thiếu ${missing})` : ''}` : `🙁 Hết ${name} thật rồi`, found > 0 ? HEX.green : HEX.red, 12);
+      this.renderPanel(true);
+    });
     e.on('itemScanned', () => this.renderPanel(true));
     e.on('counterRequested', ({ customer, productId, seconds }) => {
       const v = this.views.get(customer.id);
@@ -768,7 +777,7 @@ export class ShopScene extends Phaser.Scene {
     const c = this.session.front;
     const away = this.session.playerAway > 0;
     const managerKey = this.managerView ? `manager-${G.state.manager.speed}-${this.session.openIncidents().map((i) => i.id).join(',')}` : '';
-    const mode = away && !c ? 'away' : managerKey || (!c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`);
+    const mode = away && !c ? 'away' : managerKey || (!c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'waiting' && c.askLeft !== undefined && c.order.some(askable) ? `ask-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`);
     if (!force && mode === this.panelMode) return;
     const keepPay = mode === this.panelMode && mode.startsWith('pay');
     this.panelMode = mode;
@@ -811,10 +820,19 @@ export class ShopScene extends Phaser.Scene {
       }
       return;
     }
-    if (c.status === 'paying') this.renderPaying(c);
+    if (mode.startsWith('ask')) this.renderAsking(c);
+    else if (c.status === 'paying') this.renderPaying(c);
     else if (c.status === 'bargain') this.renderBargain(c);
     else if (c.status === 'credit') this.renderCredit(c);
     else this.renderScanning(c);
+  }
+
+  /** Khách ra quầy hỏi món hết trên kệ, đang kiểm kho. */
+  private renderAsking(c: Customer): void {
+    const L = this.panelLayer;
+    const names = c.order.filter(askable).map((l) => product(l.productId).name.toLowerCase());
+    L.add(txt(this, W / 2, PANEL_Y + 50, `🙋 ${this.who(c)}: "Còn ${names.join(', ') || 'hàng'} không con? Trên kệ hết rồi."`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
+    L.add(txt(this, W / 2, PANEL_Y + 110, '🔎 Đang kiểm kho...\nCòn thì lấy đưa khách và bày thêm lên kệ; hết thì tính tiền phần còn lại.', { size: 13, origin: [0.5, 0.5], align: 'center', color: HEX.muted, wrap: W - 50 }));
   }
 
   private who(c: Customer): string {

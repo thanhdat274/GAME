@@ -91,9 +91,12 @@ describe('người chơi rời quầy (góc nhìn trên xuống)', () => {
       }
     }
     expect(waited).toBe(true);
+    const first = session.front!;
     session.playerAtCounter = true;
     session.tick(step);
-    expect(['scanning', 'paying']).toContain(session.front?.status);
+    // Khách có món hết trên kệ thì hỏi kho vài giây trước (không lấy được gì thì về).
+    for (let i = 0; i < DATA.balance.askStockSeconds / step + 2 && first.status === 'waiting'; i++) session.tick(step);
+    expect(['scanning', 'paying', 'done']).toContain(first.status);
     expect(session.snapshot().playerAtCounter).toBe(true);
   });
 });

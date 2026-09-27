@@ -17,6 +17,8 @@ export interface OrderLine {
   value?: number;
   /** Khách bỏ món vì giá đắt hoặc không lạnh. */
   declined?: 'price' | 'cold';
+  /** Đã hỏi ở quầy về phần hết trên kệ (nhân viên đã kiểm kho). */
+  asked?: boolean;
 }
 
 export type CustomerStatus = 'entering' | 'browsing' | 'waiting' | 'scanning' | 'bargain' | 'credit' | 'paying' | 'fleeing' | 'done';
@@ -69,6 +71,8 @@ export interface Customer {
   lane?: number;
   /** Sao cộng thêm (thu ngân thân thiện). */
   bonusStars?: number;
+  /** Giây còn lại để người đứng quầy kiểm kho món khách hỏi (undefined: chưa hỏi). */
+  askLeft?: number;
   /** Kẻ trộm vặt: lấy hàng rồi đi thẳng ra cửa. */
   thief?: boolean;
   /** Giây còn lại để bắt quả tang. */
@@ -77,6 +81,11 @@ export interface Customer {
   cart?: boolean;
   /** Bị nhân viên thối thiếu (để khách nhắc trong đánh giá). */
   shortChanged?: boolean;
+}
+
+/** Món khách không lấy được trên kệ vì hết (không phải chê giá / chê không lạnh) và chưa hỏi ở quầy. */
+export function askable(line: OrderLine): boolean {
+  return !line.counterLine && !line.declined && !line.asked && line.missing > 0;
 }
 
 /** Hệ số mật độ khách theo giờ trong ngày. */
