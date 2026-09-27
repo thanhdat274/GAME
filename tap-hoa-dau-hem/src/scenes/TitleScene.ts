@@ -133,13 +133,14 @@ export class TitleScene extends Phaser.Scene {
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribeStatus);
     }
 
-    // Các nút chức năng chính trên vỉa hè
+    // Các nút chức năng chính trên vỉa hè (tự canh đều theo chiều cao màn hình)
     const saved = hasSave();
     const btnW = 268;
+    const extraY = Math.max(0, (H - 640) * 0.45);
 
     if (saved) {
       // 1. Nút Chơi tiếp (chính, nổi bật có hiệu ứng nhịp thở nhẹ)
-      const continueBtn = new Button(this, W / 2, 388, {
+      const continueBtn = new Button(this, W / 2, 388 + extraY, {
         w: btnW,
         h: 48,
         label: `▶   Chơi tiếp (Ngày ${G.state.day})`,
@@ -160,7 +161,7 @@ export class TitleScene extends Phaser.Scene {
       });
 
       // 2. Nút Chơi mới (cam gạch retro)
-      new Button(this, W / 2, 444, {
+      new Button(this, W / 2, 444 + extraY, {
         w: btnW,
         h: 42,
         label: '✨   Chơi mới',
@@ -173,7 +174,7 @@ export class TitleScene extends Phaser.Scene {
       });
 
       // 3. Nút Cách chơi (nâu gỗ ấm)
-      new Button(this, W / 2, 496, {
+      new Button(this, W / 2, 496 + extraY, {
         w: btnW,
         h: 38,
         label: '📖   Cách chơi',
@@ -188,7 +189,7 @@ export class TitleScene extends Phaser.Scene {
       // 4. Hàng Cài đặt trợ giúp tiện ích (2 nút đặt song song ngang nhau)
       const toggleW = 130;
       const toggleH = 36;
-      const toggleY = 546;
+      const toggleY = 546 + extraY;
 
       const autoChangeColor = () => (G.state.settings.autoChange ? 0x2e7545 : 0x4e3322);
       const autoChangeStroke = () => (G.state.settings.autoChange ? 0x5ebd7c : 0x7c5840);
@@ -231,9 +232,11 @@ export class TitleScene extends Phaser.Scene {
           persist();
         },
       });
+
+      this.addLeaderboardButton(toggleY + 44);
     } else {
       // Khi chưa có file lưu (người chơi mới)
-      const startBtn = new Button(this, W / 2, 406, {
+      const startBtn = new Button(this, W / 2, 406 + extraY, {
         w: btnW,
         h: 50,
         label: '▶   Mở tiệm ngay',
@@ -253,9 +256,9 @@ export class TitleScene extends Phaser.Scene {
         ease: 'Sine.easeInOut',
       });
 
-      new Button(this, W / 2, 468, {
+      new Button(this, W / 2, 474 + extraY, {
         w: btnW,
-        h: 44,
+        h: 42,
         label: '📖   Cách chơi',
         color: 0x734828,
         stroke: 0xdfb475,
@@ -266,8 +269,8 @@ export class TitleScene extends Phaser.Scene {
       });
 
       const toggleW = 130;
-      const toggleH = 38;
-      const toggleY = 530;
+      const toggleH = 36;
+      const toggleY = 530 + extraY;
 
       const autoChangeColor = () => (G.state.settings.autoChange ? 0x2e7545 : 0x4e3322);
       const autoChangeStroke = () => (G.state.settings.autoChange ? 0x5ebd7c : 0x7c5840);
@@ -310,10 +313,12 @@ export class TitleScene extends Phaser.Scene {
           persist();
         },
       });
+
+      this.addLeaderboardButton(toggleY + 44);
     }
 
     // Chân trang hoài niệm
-    txt(this, W / 2, 614, '★  Tiệm Tạp Hóa Đầu Hẻm · Phiên bản 0.1  ★', {
+    txt(this, W / 2, H - 24, '★  Tiệm Tạp Hóa Đầu Hẻm · Phiên bản 0.1  ★', {
       size: 10,
       color: '#dfc7a8',
       origin: [0.5, 0.5],
@@ -440,9 +445,35 @@ export class TitleScene extends Phaser.Scene {
     dialog(this, { icon: '☁️', title: this.account?.displayName ?? 'Tài khoản Google', body: `${this.account?.email ?? ''}\n${this.statusText(this.syncStatus, this.syncMessage ?? undefined)}\nLần đồng bộ cuối: ${lastSync}`, buttons, portraitKey: this.accountAvatarTextureKey });
   }
 
+  private addLeaderboardButton(y: number): void {
+    if (isMaxLevelSimulation || !cloudSaveEnabled()) return;
+    new Button(this, W / 2, y, {
+      w: 268,
+      h: 36,
+      label: '🏆  Bảng xếp hạng',
+      color: 0x9a6b16,
+      stroke: 0xf2c65a,
+      strokeAlpha: 0.6,
+      size: 13.5,
+      radius: 9,
+      onTap: () => { void this.showLeaderboard(); },
+    });
+  }
+
   private async showLeaderboard(): Promise<void> {
     const uid = this.account?.uid;
-    if (!uid) return;
+    if (!uid) {
+      dialog(this, {
+        icon: '🏆',
+        title: 'Bảng xếp hạng',
+        body: 'Đăng nhập Google để xem bảng xếp hạng và so tài với người chơi khác.',
+        buttons: [
+          { label: 'Đăng nhập', color: C.green, onTap: () => { void this.openAccount(); } },
+          { label: 'Đóng', color: C.grey },
+        ],
+      });
+      return;
+    }
     try {
       const [top, mine] = await Promise.all([fetchTopLeaderboard(10), fetchMyRank(uid)]);
       const inTop10 = top.some((e) => e.uid === uid);
@@ -460,7 +491,9 @@ export class TitleScene extends Phaser.Scene {
         buttons: [{ label: 'Đóng', color: C.grey }],
       });
     } catch (error) {
-      toast(this, error instanceof Error ? error.message : 'Không tải được bảng xếp hạng.');
+      const code = (error as { code?: string } | null)?.code;
+      if (code === 'permission-denied') toast(this, 'Máy chủ chưa cho phép đọc bảng xếp hạng. Cần cập nhật quyền Firestore.');
+      else toast(this, navigator.onLine ? 'Không tải được bảng xếp hạng.' : 'Không có mạng, chưa tải được bảng xếp hạng.');
     }
   }
 

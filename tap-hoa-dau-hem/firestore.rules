@@ -51,7 +51,7 @@ service cloud.firestore {
         && (request.resource.data.photoURL == null || request.resource.data.photoURL is string)
         && request.resource.data.level is int && request.resource.data.level >= 1
         && request.resource.data.day is int && request.resource.data.day >= 1
-        && request.resource.data.money is number && request.resource.data.money >= 0 && request.resource.data.money < 1e15;
+        && request.resource.data.money is number && request.resource.data.money >= 0 && request.resource.data.money < 1000000000000000;
     }
   }
 }
