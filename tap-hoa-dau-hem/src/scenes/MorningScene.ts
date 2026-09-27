@@ -27,6 +27,7 @@ import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/f
 import { scheduleEvents } from '../core/eventScheduler';
 import { openBills, taxBillOverdue } from '../core/tax';
 import { internalSuppliers } from '../core/internalSupply';
+import { cookedPortions, soakLabel } from '../core/stickyRice';
 
 type Tab = 'buy' | 'arrange';
 
@@ -126,6 +127,9 @@ export class MorningScene extends Phaser.Scene {
   private hint!: Phaser.GameObjects.Text;
   private selected: string | null = null;
   private counterMode = false;
+  /** Tiệm chỉ bán ở quầy (tiệm xôi): không có kệ, tab thứ hai là quầy xôi thay cho bày kệ. */
+  private counterShop = false;
+  private xoiPanel!: Phaser.GameObjects.Container;
   private pauseLayer: Phaser.GameObjects.Container | null = null;
   private supplierId = 'co_tu';
   private supplierBtns: Record<string, Button> = {};
@@ -176,9 +180,10 @@ export class MorningScene extends Phaser.Scene {
     this.hud = new Hud(this, G.state, { subtitle: 'Buổi sáng', onPause: () => this.pause() });
 
     const phase2 = G.state.level >= 5;
+    this.counterShop = activeShopType(G.state).def.service === 'counter';
     this.tabBtns = {
       buy: new Button(this, phase2 ? 68 : 90, 68, { w: phase2 ? 116 : 156, h: 34, radius: 5, label: '🛒 Nhập hàng', size: 13.5, onTap: () => this.setTab('buy') }),
-      arrange: new Button(this, phase2 ? 192 : 270, 68, { w: phase2 ? 116 : 156, h: 34, radius: 5, label: '🧺 Bày kệ', size: 13.5, onTap: () => this.setTab('arrange') }),
+      arrange: new Button(this, phase2 ? 192 : 270, 68, { w: phase2 ? 116 : 156, h: 34, radius: 5, label: this.counterShop ? '🍙 Quầy xôi' : '🧺 Bày kệ', size: 13.5, onTap: () => this.setTab('arrange') }),
     };
     this.menuBtn = new Button(this, 305, 68, { w: 90, h: 34, radius: 5, label: '☰ Tiệm', size: 13.5, color: C.blue, onTap: () => this.openShopMenu() });
     this.menuBtn.setVisible(phase2);
@@ -547,7 +552,9 @@ export class MorningScene extends Phaser.Scene {
       this.refresh();
       return;
     }
-    toast(this, `Đã nhập hàng: -${formatMoney(res.total)}\nGiờ bày hàng lên kệ nhé!`, H * 0.5, C.greenDark);
+    toast(this, this.counterShop
+      ? `Đã nhập nguyên liệu: -${formatMoney(res.total)}\nVào Bếp xôi để ngâm, hấp và làm món.`
+      : `Đã nhập hàng: -${formatMoney(res.total)}\nGiờ bày hàng lên kệ nhé!`, H * 0.5, C.greenDark);
     persist();
     // Nhập xong thì chuyển luôn sang bày kệ (bước tiếp theo trong buổi sáng).
     this.setTab('arrange');
@@ -625,10 +632,11 @@ export class MorningScene extends Phaser.Scene {
       w: 148,
       h: 46,
       radius: 5,
-      label: '✨ Tự bày',
+      label: this.counterShop ? '🍙 Bếp xôi' : '✨ Tự bày',
       color: C.blue,
       size: 14,
       onTap: () => {
+        if (this.counterShop) { this.scene.start('Kitchen'); return; }
         if (G.liveSnapshot) { void this.liveCommand({ type: 'autoArrange' }); return; }
         const unplaced = autoArrange(G.state);
         play('pick');
@@ -640,7 +648,30 @@ export class MorningScene extends Phaser.Scene {
       },
     });
     const open = new Button(this, 264, H - 38, { w: 172, h: 48, radius: 5, label: 'Mở cửa ▶', color: C.red, size: 16.5, onTap: () => this.tryOpen() });
-    this.arrangeLayer.add([this.shelves, g, this.whLabel, this.hint, this.counterTabBtn, this.counterPanel, this.chips, foot, auto, open]);
+    this.xoiPanel = this.add.container(0, 0);
+    this.shelves.setVisible(!this.counterShop);
+    this.arrangeLayer.add([this.shelves, this.xoiPanel, g, this.whLabel, this.hint, this.counterTabBtn, this.counterPanel, this.chips, foot, auto, open]);
+  }
+
+  /** Tiệm xôi: vùng kệ thay bằng tóm tắt quầy xôi, nếp chín và mẻ ngâm, kèm nút vào Bếp xôi. */
+  private renderXoiPanel(): void {
+    const s = G.state;
+    this.xoiPanel.removeAll(true);
+    const top = this.shelfTop;
+    const h = this.whTop - top - 10;
+    this.xoiPanel.add(panel(this, 10, top, W - 20, h));
+    this.xoiPanel.add(txt(this, 22, top + 12, '🍙 QUẦY XÔI', { size: 13, bold: true, color: HEX.muted }));
+    const dishes = new Map<string, number>();
+    for (const slot of s.counter) if (slot.productId && slot.qty > 0) dishes.set(slot.productId, (dishes.get(slot.productId) ?? 0) + slot.qty);
+    const dishText = dishes.size
+      ? [...dishes.entries()].map(([id, qty]) => `${product(id).icon} ${product(id).name} ×${qty}`).join(' · ')
+      : 'Quầy chưa có món nào · khách gọi sẽ phải chờ';
+    this.xoiPanel.add(txt(this, 22, top + 36, dishText, { size: 12, bold: dishes.size > 0, color: dishes.size ? HEX.ink : HEX.red, wrap: W - 44 }));
+    const menu = s.activeRecipes.filter((id) => activeShopType(s).allowsRecipe(id) && !DATA.recipes.find((r) => r.id === id)?.packaged).length;
+    const soak = s.soakBatches.length ? s.soakBatches.map((b) => soakLabel(b, s.day, s.clock)).join('\n') : 'Chưa có mẻ nếp nào đang ngâm';
+    const info = `Món đang mở bán: ${menu} · Nếp chín: ${cookedPortions(s)} phần\n${soak}`;
+    this.xoiPanel.add(txt(this, 22, top + 78, info, { size: 11, color: HEX.muted, wrap: W - 44 }));
+    this.xoiPanel.add(new Button(this, W / 2, top + h - 30, { w: 200, h: 40, radius: 5, label: '🍙 Vào Bếp xôi', color: C.green, size: 14, onTap: () => this.scene.start('Kitchen') }));
   }
 
   private onSlotTap(r: number, c: number): void {
@@ -804,7 +835,8 @@ export class MorningScene extends Phaser.Scene {
     clipInteractive(chip, inFrameY);
     chip.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
       hold?.remove();
-      if (!inFrame(ptr)) return;
+      // Tiệm xôi không có kệ: kho chỉ để xem, không chọn hay kéo món.
+      if (!inFrame(ptr) || this.counterShop) return;
       hold = this.time.delayedCall(CHIP_HOLD_MS, () => {
         // Giữ yên (không cuộn) thì nhấc món lên để kéo thả.
         if (!ptr.isDown || ptr.getDistance() > 8 || this.chipScroll?.moving || this.chipDrag) return;
@@ -816,7 +848,7 @@ export class MorningScene extends Phaser.Scene {
     });
     chip.on('pointerup', (ptr: Phaser.Input.Pointer) => {
       hold?.remove();
-      if (ptr.getDistance() > 10 || this.chipScroll?.blockTap || !inFrame(ptr)) return;
+      if (ptr.getDistance() > 10 || this.chipScroll?.blockTap || !inFrame(ptr) || this.counterShop) return;
       this.selected = sel ? null : id;
       play('tap');
       this.refresh();
@@ -998,6 +1030,13 @@ export class MorningScene extends Phaser.Scene {
       );
       this.buyBtn.setText(sp.delayDays > 0 ? 'Đặt hàng' : 'Nhập hàng');
       this.buyBtn.setEnabled(check.ok);
+    } else if (this.counterShop) {
+      this.renderXoiPanel();
+      this.whLabel.setText(`📦 Kho nguyên liệu · ${warehouseCellsUsed(s.warehouse)}/${warehouseCapacity(s)} ô${s.deliveries.length ? ' · 🚚 chờ giao' : ''}`);
+      this.hint.setText('Nguyên liệu dùng ở Bếp xôi · không cần bày kệ');
+      this.counterTabBtn.setVisible(false);
+      this.counterMode = false;
+      this.renderChips();
     } else {
       this.shelves.render(s, { mode: 'arrange' });
       this.whLabel.setText(`📦 Kho · ${warehouseCellsUsed(s.warehouse)}/${warehouseCapacity(s)} ô${s.deliveries.length ? ' · 🚚 chờ giao' : ''}`);

@@ -1358,7 +1358,8 @@ export class ShopScene extends Phaser.Scene {
     y += 56;
     L.add(new Button(this, W / 2, y, { w: 220, h: 50, label: '▶ Tiếp tục', onTap: () => this.resume() }));
     y += 58;
-    L.add(new Button(this, W / 2, y, { w: 220, h: 44, label: '📦 Nhập & bày hàng', color: C.green, onTap: () => this.openRestock() }));
+    const counterShop = activeShopType(G.state).def.service === 'counter';
+    L.add(new Button(this, W / 2, y, { w: 220, h: 44, label: counterShop ? '📦 Nhập nguyên liệu' : '📦 Nhập & bày hàng', color: C.green, onTap: () => this.openRestock() }));
     y += 54;
     const autoLabel = () => (G.state.settings.autoChange ? '🧮 Tự thối tiền: Bật' : '✋ Tự thối tiền: Tắt');
     const autoBtn = new Button(this, W / 2, y, {

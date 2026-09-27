@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DATA, product, supplier, type Category } from '../core/data';
 import type { LiveShopCommand } from '../core/liveSession';
+import { activeShopType } from '../core/shopTypes';
 import { formatMoney, priceOf, shelfQty, unlockedProducts, usableShelves, warehouseQty, warehouseTotals } from '../core/state';
 import {
   assignCounterSlot, assignSlot, buyStock, canRefill, checkCart, clearSlot, counterFreeForNew, hasPlaceFor, planNewProducts, refillSlot, slotFreeForNew,
@@ -37,6 +38,8 @@ export class RestockScene extends Phaser.Scene {
   private suggested = new Set<string>();
   private supplierId = 'co_tu';
   private busy = false;
+  /** Tiệm chỉ bán ở quầy (tiệm xôi): chỉ nhập nguyên liệu, không có tab bày kệ. */
+  private counterShop = false;
   private selected: string | null = null;
   private tabBtns!: Record<Tab, Button>;
   private buyLayer!: Phaser.GameObjects.Container;
@@ -75,17 +78,22 @@ export class RestockScene extends Phaser.Scene {
     this.supplierBtns = {};
     this.supplierNote = null;
     if (!supplierUnlocked(G.state, this.supplierId)) this.supplierId = 'co_tu';
-    pageFrame(this, '📦 Nhập & bày hàng', () => this.close(), '⏸ Tiệm đang tạm dừng');
+    // Tiệm chỉ bán ở quầy (tiệm xôi) không có kệ: màn này chỉ còn phần nhập nguyên liệu.
+    this.counterShop = activeShopType(G.state).def.service === 'counter';
+    pageFrame(this, this.counterShop ? '📦 Nhập nguyên liệu' : '📦 Nhập & bày hàng', () => this.close(), '⏸ Tiệm đang tạm dừng');
     this.tabBtns = {
       buy: new Button(this, 92, TAB_Y, { w: 154, h: 36, radius: 5, label: '🛒 Nhập hàng', size: 13.5, onTap: () => this.setTab('buy') }),
       arrange: new Button(this, 268, TAB_Y, { w: 154, h: 36, radius: 5, label: '🧺 Bày kệ', size: 13.5, onTap: () => this.setTab('arrange') }),
     };
+    if (this.counterShop) {
+      this.tabBtns.arrange.setVisible(false);
+    }
     this.buildBuy();
     this.buildArrange();
     const onLiveUpdated = () => { if (G.liveSnapshot) this.refresh(); };
     window.addEventListener('thdh-live-updated', onLiveUpdated);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.removeEventListener('thdh-live-updated', onLiveUpdated));
-    this.setTab(data.tab ?? 'buy');
+    this.setTab(this.counterShop ? 'buy' : data.tab ?? 'buy');
   }
 
   private setTab(tab: Tab): void {
@@ -157,6 +165,8 @@ export class RestockScene extends Phaser.Scene {
   }
 
   private products() {
+    // Tiệm xôi không có kệ: nguyên liệu nằm trong kho, không cần chỗ bày.
+    if (this.counterShop) return unlockedProducts(G.state.level, G.state);
     return unlockedProducts(G.state.level, G.state).filter((p) => p.behindCounter || hasPlaceFor(G.state, p));
   }
 
@@ -194,7 +204,7 @@ export class RestockScene extends Phaser.Scene {
         productIcon(this, 33, cy, p, 38),
         nameTxt,
         txt(this, 58, y + 29, `Nhập ${formatMoney(unitCost(s, p.id, this.supplierId))} · bán ${formatMoney(priceOf(p.id, s))}`, { size: 10.5, color: HEX.muted }),
-        txt(this, 58, y + 47, `${p.behindCounter ? 'Quầy' : 'Kệ'} ${onShelf} · Kho ${inWh}`, { size: 10, bold: false, color: onShelf + inWh === 0 ? HEX.red : HEX.green }),
+        txt(this, 58, y + 47, this.counterShop ? `Kho ${inWh}` : `${p.behindCounter ? 'Quầy' : 'Kệ'} ${onShelf} · Kho ${inWh}`, { size: 10, bold: false, color: onShelf + inWh === 0 ? HEX.red : HEX.green }),
         stepperG,
         new Button(this, 232, cy, { w: 26, h: 26, radius: 4, label: '−', color: q > 0 ? C.red : C.woodLight, size: 15, onTap: this.list.guard(() => this.changeQty(p.id, -1)) }).setEnabled(q > 0),
         txt(this, 264, cy, String(q), { size: 14, bold: true, color: q > 0 ? '#1b4d24' : '#5a6652', origin: [0.5, 0.5] }),
@@ -270,6 +280,11 @@ export class RestockScene extends Phaser.Scene {
     play('cash');
     if (sp.delayDays > 0) {
       toast(this, `Đã đặt ${sp.name}: -${formatMoney(total)}\nXe giao 15:00 ngày ${G.state.day + sp.delayDays}.`, H * 0.5, C.greenDark);
+      this.renderBuy();
+      return;
+    }
+    if (this.counterShop) {
+      toast(this, `Đã nhập nguyên liệu: -${formatMoney(total)}`, H * 0.5, C.greenDark);
       this.renderBuy();
       return;
     }
