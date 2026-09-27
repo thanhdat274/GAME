@@ -18,7 +18,7 @@ import { productIcon } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
 import { ShelfView, ZONE_NAMES, placeErrorText } from '../ui/shelves';
 import { play, setSoundEnabled, stopMusic, vibrate } from '../ui/sound';
-import { Culler, KineticScroll, snap } from '../ui/scroll';
+import { Culler, KineticScroll, clipInteractive, snap } from '../ui/scroll';
 import { Button, dialog, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
@@ -717,10 +717,12 @@ export class MorningScene extends Phaser.Scene {
       }).setBackgroundColor(left <= 1 ? '#d84a3a' : left <= 3 ? '#e08a00' : '#4a8f3c').setPadding(3, 1, 3, 1);
       parts.push(tag);
     }
-    const chip = this.add.container(x, y, parts).setSize(cw, ch).setInteractive({ useHandCursor: true });
+    const chip = this.add.container(x, y, parts).setSize(cw, ch);
     let hold: Phaser.Time.TimerEvent | null = null;
-    // Món đã cuộn ra ngoài khung (bị che) thì không nhận chạm.
-    const inFrame = (ptr: Phaser.Input.Pointer) => ptr.worldY >= this.chipTop && ptr.worldY <= CHIP_VIEW_BOTTOM;
+    // Món đã cuộn ra ngoài khung (bị che) thì không nhận chạm, và cũng không chặn chạm vào kệ / nút phía trên.
+    const inFrameY = (worldY: number) => worldY >= this.chipTop && worldY <= CHIP_VIEW_BOTTOM;
+    const inFrame = (ptr: Phaser.Input.Pointer) => inFrameY(ptr.worldY);
+    clipInteractive(chip, inFrameY);
     chip.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
       hold?.remove();
       if (!inFrame(ptr)) return;

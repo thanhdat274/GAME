@@ -4,7 +4,7 @@ import { counterFixture, walkTiles } from '../core/layout';
 import { MAX_SHELVES, fixtureOfShelf, shelfKind, shelfUsable, shelfCount, type GameState } from '../core/state';
 import { canRefill, slotFreshness, zoneFill, zoneOf } from '../core/stock';
 import { productIcon } from './art';
-import { KineticScroll, snap } from './scroll';
+import { KineticScroll, clipInteractive, snap } from './scroll';
 import { C, HEX, txt } from './theme';
 
 export const SLOT_W = 52;
@@ -176,6 +176,11 @@ export class ShelfView extends Phaser.GameObjects.Container {
     });
   }
 
+  /** Chỉ nhận chạm trong khung nhìn kệ (ô đã cuộn ra ngoài không che nút phía trên / kho phía dưới). */
+  private clipInput(obj: Phaser.GameObjects.Container): void {
+    clipInteractive(obj, (y) => y >= this.top - 6 && y <= this.top + this.viewH);
+  }
+
   /** Chạm hiện tại là để cuộn / dừng trôi, không phải bấm ô. */
   private get scrollTap(): boolean {
     return !!this.kinetic?.blockTap;
@@ -239,7 +244,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
       txt(s, 0, 0, '+', { size: 13, bold: true, color: HEX.white, origin: [0.5, 0.5] }),
     ]);
     // Vùng chạm lớn hơn hình để dễ bấm trên điện thoại.
-    refillBtn.setSize(26, 26).setInteractive({ useHandCursor: true });
+    this.clipInput(refillBtn.setSize(26, 26));
     refillBtn.on('pointerup', (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
       if (p.getDistance() < 10 && !this.scrollTap && this.inView(p.worldY)) this.cb.onRefill?.(r, c);
@@ -249,14 +254,14 @@ export class ShelfView extends Phaser.GameObjects.Container {
       s.add.circle(0, 0, 8, C.red).setStrokeStyle(2, 0xffffff),
       txt(s, 0, 0, '×', { size: 12, bold: true, color: HEX.white, origin: [0.5, 0.5] }),
     ]);
-    removeBtn.setSize(24, 24).setInteractive({ useHandCursor: true });
+    this.clipInput(removeBtn.setSize(24, 24));
     removeBtn.on('pointerup', (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
       if (p.getDistance() < 10 && !this.scrollTap && this.inView(p.worldY)) this.cb.onRemove?.(r, c);
     });
 
     const root = s.add.container(x, y, [bg, glow, qty, out, fresh, progress, refillBtn, removeBtn]);
-    root.setSize(SLOT_W, SLOT_H).setInteractive({ useHandCursor: true });
+    this.clipInput(root.setSize(SLOT_W, SLOT_H));
     root.on('pointerup', (p: Phaser.Input.Pointer) => {
       if (p.getDistance() < 12 && !this.scrollTap && this.inView(p.worldY)) this.cb.onSlotTap(r, c);
     });
