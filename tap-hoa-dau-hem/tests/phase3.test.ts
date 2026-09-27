@@ -403,8 +403,8 @@ describe('mini-mart, nhiều quầy, xe đẩy', () => {
     expect(buyFixture(s, 'counter2', 2, 0, 0)).toBe('limit');
     expect(buyFixture(s, 'shelf_double', 0, 2, 0)).toBe('ok');
     const shelf = s.fixtures.find((f) => f.type === 'shelf_double')!.shelf!;
-    expect(shelfCapacity(s, shelf)).toBe(20);
-    expect(shelfCapacity(s, 0)).toBe(10);
+    expect(shelfCapacity(s, shelf)).toBe(40);
+    expect(shelfCapacity(s, 0)).toBe(20);
   });
 
   it('khách mới xếp vào quầy ít người chờ nhất', () => {

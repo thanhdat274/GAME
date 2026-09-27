@@ -1,8 +1,8 @@
 {
   "startMoney": 500000,
   "warehouseCells": 30,
-  "slotsPerShelf": 6,
-  "slotCapacity": 10,
+  "slotsPerShelf": 12,
+  "slotCapacity": 20,
   "daySeconds": 180,
   "openMinute": 480,
   "closeMinute": 1320,
