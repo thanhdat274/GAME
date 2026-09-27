@@ -14,7 +14,7 @@ import { calendarDate } from '../core/calendar';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand, startLivePulses, stopLivePulses, suspendLiveShop } from '../services/liveShop';
 import { cloudSaveEnabled } from '../services/firebase';
-import { bakeStatic, bill, customerLook, customerSprite, drawShopInterior, productIcon, setWalkFrame, staffSprite } from '../ui/art';
+import { bakeStatic, bill, customerLook, customerSprite, drawShopInterior, ownerSprite, productIcon, setWalkFrame, staffSprite } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
 import { LiveMap } from '../ui/liveMap';
 import { ShelfView } from '../ui/shelves';
@@ -73,6 +73,10 @@ export class ShopScene extends Phaser.Scene {
   /** Nhân viên đứng quầy và huy hiệu nhân viên khác trên mặt quầy. */
   private staffLayer!: Phaser.GameObjects.Container;
   private cashierX = new Map<string, number>();
+  /** Chủ tiệm (người chơi) đứng ở quầy của mình, bên cạnh quầy thu ngân. */
+  private ownerAvatar: Phaser.GameObjects.Image | null = null;
+  /** Vị trí chủ tiệm đứng ở quầy của mình, cạnh máy tính tiền. */
+  private readonly ownerX = 150;
   private phoneBtn: Button | null = null;
   private ordersBtn: Button | null = null;
   private managerStatus: Phaser.GameObjects.Text | null = null;
@@ -231,9 +235,34 @@ export class ShopScene extends Phaser.Scene {
     g.fillStyle(C.woodLight, 1).fillRect(0, COUNTER_Y, W - 56, 10);
     g.fillStyle(C.wood, 1).fillRect(0, COUNTER_Y + 10, W - 56, PANEL_Y - COUNTER_Y - 10);
     for (let x = 16; x < W - 56; x += 40) g.fillStyle(C.woodDark, 1).fillRect(x, COUNTER_Y + 16, 2, PANEL_Y - COUNTER_Y - 22);
+    this.drawCashRegister(g, 100);
     bakeStatic(this, [g], 200);
     txt(this, 22, COUNTER_Y - 10, '🧾', { size: 22, emoji: true, origin: [0.5, 0.5] }).setDepth(201);
     txt(this, W - 90, COUNTER_Y + 30, 'QUẦY', { size: 12, bold: true, color: '#f6e3c4', origin: [0.5, 0.5] }).setDepth(201);
+  }
+
+  /** Bộ máy tính tiền pixel art (màn hình + bàn phím + ngăn kéo) đặt trên mặt quầy, chỗ chủ tiệm đứng. */
+  private drawCashRegister(g: Phaser.GameObjects.Graphics, cx: number): void {
+    const screenW = 30;
+    const screenH = 20;
+    const top = COUNTER_Y + 12;
+    // Màn hình CRT cũ kiểu máy tính tiền thập niên 90, hợp phong cách hoài niệm của tiệm.
+    g.fillStyle(0x241a12, 1).fillRect(cx - screenW / 2 - 3, top, screenW + 6, screenH + 6);
+    g.fillStyle(0x2f6b3a, 1).fillRect(cx - screenW / 2, top + 3, screenW, screenH);
+    g.fillStyle(0x7ee08a, 0.85).fillRect(cx - screenW / 2 + 3, top + 6, screenW - 12, 2);
+    g.fillStyle(0x7ee08a, 0.6).fillRect(cx - screenW / 2 + 3, top + 11, screenW - 8, 2);
+    g.fillStyle(0x7ee08a, 0.6).fillRect(cx - screenW / 2 + 3, top + 16, screenW - 16, 2);
+    // Chân đế màn hình
+    g.fillStyle(0x241a12, 1).fillRect(cx - 4, top + screenH + 6, 8, 5);
+    g.fillStyle(0x3a2c1c, 1).fillRect(cx - 12, top + screenH + 11, 24, 3);
+    // Bàn phím
+    g.fillStyle(0xcfc2a0, 1).fillRoundedRect(cx - 16, top + 32, 32, 10, 2);
+    g.fillStyle(0xb7a97e, 1);
+    for (let kx = cx - 13; kx < cx + 13; kx += 5) g.fillRect(kx, top + 34, 3, 3);
+    // Ngăn kéo đựng tiền
+    g.fillStyle(0x8d8d8d, 1).fillRoundedRect(cx - 18, top + 44, 36, 8, 2);
+    g.fillStyle(0x5c5c5c, 1).fillRect(cx - 14, top + 47, 28, 2);
+    g.fillStyle(0xc0392b, 1).fillRect(cx - 3, top + 44, 6, 2);
   }
 
   /** Nút nạp cả khu (hiện khi quầy vắng khách), tối đa 6 khu xếp 2 hàng. */
@@ -506,6 +535,12 @@ export class ShopScene extends Phaser.Scene {
     if (!this.staffLayer) return;
     this.staffLayer.removeAll(true);
     this.cashierX.clear();
+    this.ownerAvatar = ownerSprite(this, this.ownerX, PANEL_Y + 2).setScale(0.75).setFlipX(true);
+    this.ownerAvatar.setVisible(!this.session.closed && this.session.playerAway <= 0);
+    this.staffLayer.add([
+      this.ownerAvatar,
+      txt(this, this.ownerX, COUNTER_Y + 50, 'Bạn', { size: 9, bold: true, color: HEX.cream, origin: [0.5, 0.5] }),
+    ]);
     this.session.lanes.forEach((lane, i) => {
       const st = this.session.staffOf(lane.staffId);
       if (!st) return;
@@ -789,6 +824,7 @@ export class ShopScene extends Phaser.Scene {
   private renderPanel(force = false): void {
     const c = this.session.front;
     const away = this.session.playerAway > 0;
+    this.ownerAvatar?.setVisible(!away && !this.session.closed);
     const managerKey = this.managerView ? `manager-${G.state.manager.speed}-${this.session.openIncidents().map((i) => i.id).join(',')}` : '';
     const mode = away && !c ? 'away' : managerKey || (!c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'waiting' && c.askLeft !== undefined && c.order.some(askable) ? `ask-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`);
     if (!force && mode === this.panelMode) return;
