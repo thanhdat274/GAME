@@ -3,7 +3,7 @@ import { DATA, product, supplier, type Category } from '../core/data';
 import type { LiveShopCommand } from '../core/liveSession';
 import { formatMoney, priceOf, shelfQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
 import {
-  assignCounterSlot, assignSlot, buyStock, checkCart, clearSlot, counterFreeForNew, hasPlaceFor, planNewProducts, slotFreeForNew,
+  assignCounterSlot, assignSlot, buyStock, checkCart, clearSlot, counterFreeForNew, hasPlaceFor, planNewProducts, refillSlot, slotFreeForNew,
   suggestRestockCart, supplierUnlocked, unitCost, warehouseCapacity, warehouseCellsUsed, type Cart,
 } from '../core/stock';
 import { G, persist } from '../game';
@@ -184,7 +184,7 @@ export class RestockScene extends Phaser.Scene {
               : '',
     );
     this.buyBtn.setText(sp.delayDays > 0 ? 'Đặt hàng' : 'Nhập hàng');
-    this.buyBtn.setEnabled(check.ok && !this.busy);
+    this.buyBtn.setEnabled(!this.busy);
   }
 
   private changeQty(id: string, delta: number): void {
@@ -203,7 +203,19 @@ export class RestockScene extends Phaser.Scene {
   private async buy(): Promise<void> {
     const sp = supplier(this.supplierId);
     const cart = { ...this.cart };
-    const total = checkCart(G.state, cart, this.supplierId).total;
+    const check = checkCart(G.state, cart, this.supplierId);
+    if (!check.ok) {
+      play('error');
+      toast(this, {
+        empty: 'Chưa chọn món nào.',
+        locked: 'Mối sỉ này chưa mở.',
+        'min-order': `Đơn tối thiểu ${formatMoney(sp.minOrder)} (thiếu ${formatMoney(check.missing)})`,
+        space: 'Kho đầy, không đủ chỗ chứa!',
+        money: `Thiếu ${formatMoney(check.missing)}`,
+      }[check.reason], H * 0.5, C.red);
+      return;
+    }
+    const total = check.total;
     if (G.liveSnapshot) {
       this.busy = true;
       const ok = await this.liveCommand({ type: 'buyStock', cart, supplierId: this.supplierId });
@@ -232,6 +244,7 @@ export class RestockScene extends Phaser.Scene {
     this.arrangeLayer = this.add.container(0, 0);
     this.shelves = new ShelfView(this, SHELF_TOP, {
       onSlotTap: (r, c) => this.onSlotTap(r, c),
+      onRefill: (r, c) => this.shelfAction({ type: 'refillShelf', shelf: r, slot: c }, () => refillSlot(G.state, r, c)),
       onRemove: (r, c) => {
         // Chỉ dọn ô đã bán hết để đổi món; ô còn hàng giữ nguyên (tránh dọn rồi bày lại để nạp tức thì).
         if ((G.state.shelves[r]?.[c]?.qty ?? 0) > 0) { toast(this, 'Ô còn hàng, đang bán thì chưa dọn được.', H * 0.62); return; }
@@ -255,7 +268,7 @@ export class RestockScene extends Phaser.Scene {
 
   private renderArrange(): void {
     const s = G.state;
-    this.shelves.render(s, { mode: 'arrange', noRefill: true });
+    this.shelves.render(s, { mode: 'arrange' });
     this.whLabel.setText(`📦 Kho · ${warehouseCellsUsed(s.warehouse)}/${warehouseCapacity(s)} ô`);
     this.hint.setText(this.selected
       ? `Chạm ô kệ để bày ${product(this.selected).name}`
@@ -300,7 +313,7 @@ export class RestockScene extends Phaser.Scene {
     if (!slot) return;
     if (this.selected) {
       const id = this.selected;
-      // Giữa giờ bán chỉ bày món mới vào ô trống; ô đang bày thì nạp bằng nút + (có thời gian nạp) ở màn bán.
+      // Ô đang bày món khác thì không gán đè; ô cùng món hoặc trống thì nạp/gán bằng nút + xanh.
       if (!slotFreeForNew(G.state, r, c, id)) { this.refillHint(); return; }
       this.shelfAction({ type: 'assignShelf', shelf: r, slot: c, productId: id }, () => assignSlot(G.state, r, c, id), () => {
         if (warehouseQty(G.state, id) <= 0) this.selected = null;
@@ -313,7 +326,7 @@ export class RestockScene extends Phaser.Scene {
   }
 
   private refillHint(): void {
-    toast(this, 'Ô này đang có hàng. Nạp thêm bằng nút + xanh ở màn bán nhé!', H * 0.62);
+    toast(this, 'Ô này đang có hàng. Bấm nút + xanh trên ô để nạp thêm.', H * 0.62);
   }
 
   /** Hàng sau quầy: đưa vào một ô quầy trống (món đang có ở quầy thì không nạp tức thì). */

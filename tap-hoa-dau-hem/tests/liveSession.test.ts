@@ -60,7 +60,7 @@ describe('phiên tiệm dùng chung', () => {
     expect(placed.dayRuntime).not.toBeNull();
   });
 
-  it('giữa giờ bán không cho nạp tức thì ô đang bày', () => {
+  it('giữa giờ bán chỉ chặn gán/dọn ô đang bày; nạp tức thì (refillShelf) vẫn cho phép', () => {
     const state = createNewGame();
     state.shelves[0][0] = { productId: 'mi_goi', qty: 2 };
     state.zones[0] = 'dry';
@@ -69,7 +69,9 @@ describe('phiên tiệm dùng chung', () => {
 
     expect(() => applyLiveShopCommand(bought, { type: 'assignShelf', shelf: 0, slot: 0, productId: 'mi_goi' })).toThrow('ô trống');
     expect(() => applyLiveShopCommand(bought, { type: 'clearShelf', shelf: 0, slot: 0 })).toThrow('hết hàng');
-    expect(() => applyLiveShopCommand(bought, { type: 'refillShelf', shelf: 0, slot: 0 })).toThrow('không dùng được');
+    const refilled = applyLiveShopCommand(bought, { type: 'refillShelf', shelf: 0, slot: 0 }).aggregate;
+    expect(refilled.state.shelves[0][0].qty).toBeGreaterThan(2);
+    expect(warehouseQty(refilled.state, 'mi_goi')).toBeLessThan(warehouseQty(bought.state, 'mi_goi'));
   });
 
   it('tự bày giữa giờ bán chỉ xếp món chưa có ô vào ô trống', () => {
