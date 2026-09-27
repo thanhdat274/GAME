@@ -255,10 +255,15 @@ export interface PayrollResult {
 }
 
 /** Lương cuối ngày cho người có ca (nửa lương mỗi ca); thiếu tiền thì thành nợ lương và mọi người −20 tâm trạng. */
+/** Đầu bếp và thợ nấu xôi được miễn lương 3 ngày thử việc đầu tiên. */
+export function onProbation(s: Staff, day: number): boolean {
+  return (s.role === 'chef' || s.role === 'xoi_cook') && day - s.hiredDay < 3;
+}
+
 export function payroll(state: GameState): PayrollResult {
   let total = state.wageDebt;
   for (const s of state.staff) {
-    if (s.quitting || (s.role === 'chef' && state.day - s.hiredDay < 3)) continue;
+    if (s.quitting || onProbation(s, state.day)) continue;
     total += Math.round((s.wage * shiftsOn(state, s.id, state.day)) / 2);
   }
   const paid = Math.max(0, Math.min(total, state.money));

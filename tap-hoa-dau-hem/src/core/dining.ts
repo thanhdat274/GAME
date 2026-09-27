@@ -76,6 +76,7 @@ export function serveDiningAddOns(state: GameState, table: DiningTableState, rng
     state.lifetime.sold++;
     table.extraOrders++;
     table.secondsLeft += DATA.balance.dining.extraOrderSeconds;
+    recordTaxableRevenue(state, 'goods', amount);
     state.today.journal.push({ m: state.clock, t: `Khách ngồi gọi thêm ${item.name}` });
     served.push(item.id);
   }

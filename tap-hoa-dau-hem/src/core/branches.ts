@@ -1,4 +1,8 @@
-import { DATA, hasFeature, type BranchDef } from './data';
+import { DATA, hasFeature, product, type BranchDef } from './data';
+import { markPullDelivered } from './internalSupply';
+import { simulateProductionDay } from './production';
+import { shopTypeOf } from './shopTypes';
+import { recordTaxableRevenue } from './tax';
 import { ensureDiningTables } from './dining';
 import { addStoreSnapshot, activateStore, createNewGame, emptyStats, syncActiveStore, type GameState, type StoreSnapshot } from './state';
 import { takeLots } from './stock';
@@ -113,9 +117,31 @@ export function sendBranchShipment(state: GameState, toStoreId: string, productI
   return { ok: true, shipmentId, fee };
 }
 
+/**
+ * Tạp hóa vắng chủ nhận xôi gói (hàng chế biến ở quầy): bán `floor(qty × hiệu suất)` theo giá bán, EXP 50%,
+ * phần còn lại hỏng. Trả doanh thu.
+ */
+function sellDeliveredPrepared(state: GameState, store: StoreSnapshot, efficiency: number): number {
+  const counter = Array.isArray(store.data.counter) ? store.data.counter as { productId: string | null; qty: number; lots?: unknown[] }[] : [];
+  const prices = (store.data.prices ?? {}) as Record<string, number>;
+  let revenue = 0;
+  for (const slot of counter) {
+    if (!slot.productId || slot.qty <= 0 || !DATA.products.find((p) => p.id === slot.productId)?.recipeOnly) continue;
+    const sold = Math.floor(slot.qty * efficiency);
+    revenue += sold * (prices[slot.productId] ?? product(slot.productId).price);
+    state.exp += Math.round(sold * DATA.balance.expPerItem * 0.5);
+    slot.qty = 0;
+    slot.productId = null;
+    slot.lots = [];
+  }
+  if (revenue) recordTaxableRevenue(state, 'goods', revenue);
+  return revenue;
+}
+
 /** Deliver due cargo into each destination's receiving area, retaining original expiry lots. */
-export function deliverBranchShipments(state: GameState, throughDay: number): number {
-  const due = state.branchShipments.filter((shipment) => shipment.arriveDay <= throughDay);
+export function deliverBranchShipments(state: GameState, throughDay: number, throughMinute = 24 * 60): number {
+  const due = state.branchShipments.filter((shipment) => shipment.arriveDay < throughDay
+    || (shipment.arriveDay === throughDay && (shipment.arriveMinute ?? 0) <= throughMinute));
   for (const shipment of due) {
     const destination = state.stores.find((store) => store.id === shipment.toStoreId);
     if (!destination) continue;
@@ -128,16 +154,30 @@ export function deliverBranchShipments(state: GameState, throughDay: number): nu
       else receiving.push({ productId: shipment.productId, qty: lot.qty, exp: lot.exp });
     }
   }
-  state.branchShipments = state.branchShipments.filter((shipment) => shipment.arriveDay > throughDay || !state.stores.some((store) => store.id === shipment.toStoreId));
+  const deliveredIds = new Set(due.map((shipment) => shipment.id));
+  state.branchShipments = state.branchShipments.filter((shipment) => !deliveredIds.has(shipment.id) || !state.stores.some((store) => store.id === shipment.toStoreId));
+  for (const orderId of new Set(due.map((shipment) => shipment.orderId).filter((id): id is string => !!id))) markPullDelivered(state, orderId);
   syncActiveStore(state);
   return due.length;
 }
 
-/** Pay out each unattended branch once for every closed game day. */
+/**
+ * Pay out each unattended branch once for every closed game day. Tiệm sản xuất (tiệm xôi) chạy mô phỏng sản xuất
+ * từng ngày; tạp hóa vắng chủ vẫn tính theo lãi trung bình và bán bớt xôi gói được giao tới.
+ */
 export function simulateBranches(state: GameState, throughDay: number): Record<string, number> {
   const result: Record<string, number> = {};
   for (const store of state.stores) {
     if (store.id === state.activeStoreId) continue;
+    if (shopTypeOf(store).def.sim === 'production') {
+      const last = Math.max(store.simDay ?? state.branchLastSimDay[store.id] ?? 0, 0);
+      const before = state.money;
+      for (let day = last + 1; day <= throughDay; day++) simulateProductionDay(state, store.id, day);
+      store.simDay = Math.max(last, throughDay);
+      state.branchLastSimDay[store.id] = store.simDay;
+      if (state.money !== before) result[store.id] = state.money - before;
+      continue;
+    }
     const def = branchDefinition(store.id);
     const storeAnalytics = Array.isArray(store.data.analytics) ? store.data.analytics as { profit: number }[] : [];
     const base = storeAnalytics.slice(-7);
@@ -148,7 +188,7 @@ export function simulateBranches(state: GameState, throughDay: number): Record<s
     const managers = workers.filter((worker) => worker.role === 'branch_manager');
     const managerBoost = managers.length ? managers.reduce((sum, manager) => sum + 0.03 * (manager.level ?? 1) + 0.005 * (manager.stats?.accuracy ?? 0), 0) / managers.length : 0;
     const efficiency = Math.min(0.9, (def?.efficiency ?? 0.6) + managerBoost);
-    const income = Math.round(averageProfit * efficiency * (def?.traffic ?? 1) * days);
+    const income = Math.round(averageProfit * efficiency * (def?.traffic ?? 1) * days) + sellDeliveredPrepared(state, store, efficiency);
     state.money += income;
     store.simDay = throughDay;
     state.branchLastSimDay[store.id] = throughDay;

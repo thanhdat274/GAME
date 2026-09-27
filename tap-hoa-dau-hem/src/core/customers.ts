@@ -172,7 +172,9 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
   if (level >= counterUnlockLevel && type.counterRequestChance > 0 && rng.next() < type.counterRequestChance) {
     const counterProducts = unlockedProducts(level, state).filter((p) => p.behindCounter);
     if (state) {
-      const prepared = DATA.products.filter((p) => p.recipeOnly && state.activeRecipes.some((id) => DATA.recipes.find((r) => r.id === id)?.output === p.id)
+      // Món chế biến đang có ở quầy: tự nấu (món đang mở bán) hoặc nhận từ tiệm khác trong chuỗi (xôi gói).
+      const prepared = DATA.products.filter((p) => p.recipeOnly && p.unlockLevel <= level
+        && (state.activeRecipes.some((id) => DATA.recipes.find((r) => r.id === id)?.output === p.id) || activeShopType(state).def.sourcesFrom.includes(p.id))
         && state.counter.some((slot) => slot.productId === p.id && slot.qty > 0));
       counterProducts.push(...prepared);
     }

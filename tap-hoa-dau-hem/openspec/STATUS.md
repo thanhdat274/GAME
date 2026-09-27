@@ -11,15 +11,15 @@
 | `phase-2-shop-expansion` | 41 | 1 | 8.2 điện thoại thật. |
 | `phase-3-staff-and-manager` | 39 | 2 | 9.3 điện thoại thật, 9.4 deploy. |
 | `topdown-store-view` | 15 | 7 | 4.2–4.4 điện thoại/người chơi/deploy; 5.1–5.4 để cho change sau. |
-| `sticky-rice-shop` | 19 | 18 | Đợt A, B (trừ 3.9 chơi thử một ngày trên điện thoại) xong; tiếp Đợt C (đặt hàng nội bộ, thợ nấu xôi, mô phỏng sản xuất). |
+| `sticky-rice-shop` | 32 | 5 | Còn playtest viewport 375×812 (3.9, 4.7, 5.6), cân bằng chuỗi chưa đạt ngưỡng (6.1), điện thoại thật và deploy (6.4). |
 | `phase-4-events-food-branches` | — | — | Đã lưu trữ (`archive/2026-09-27-…`). |
 
-Tổng còn mở: 47 task (27/09/2026).
+Tổng còn mở: 34 task (27/09/2026).
 
 ## Kiểm tra trong repo
 
-- Vitest: 277/277 test qua; có kiểm thử lịch, EffectStack, migrate v4→v5, công thức, nhiệm vụ tuần và quà tuần, giao đơn tiệc, xe chuyển hàng giữ hạn dùng, lưới riêng cho từng chi nhánh, mục tiêu truyện, chi nhánh và thử việc đầu bếp.
-- `npm run build` qua (TypeScript + Vite + PWA); `npm run validate:events` và `npm run validate:recipes` đều qua.
+- Vitest hiện có 707 test: lượt full tuần tự qua 706/707; test duy nhất timeout 5 giây ở `tests/phase3.test.ts` (xe đẩy), nhưng chạy riêng qua trong 2.7 giây. Test `yearSimulation` trong lượt này bỏ ngày tối đa 433 ms. Nhóm test tiệm xôi/đơn nội bộ qua 33/33.
+- TypeScript, Vite/PWA build, `validate:events` và `validate:recipes` đều qua bằng Node runtime đóng gói. `npm` trực tiếp trả `EPERM` khi kiểm tra `C:\Users\Admin`; các script được chạy bằng binary local/Vite SSR.
 - `npm run playtest -- 30 5`: người chơi dùng "Gợi ý" lên L9 ở ngày ~21–22 (mục tiêu 20–30), hàng tươi hỏng 7–9% (mục tiêu < 10%), lãi ròng dương.
 - Chơi thử trình duyệt ở khung 375×812 giả lập: migrate bản v2 L7, mở đất, mua/kéo/xoay nội thất, chặn lối đi bị từ chối, nhập hàng, bán xả, mặc cả, ghi sổ, tổng kết và các màn Kho/Giá/Sổ nợ/Nhiệm vụ; ván mới L1 vẫn như giai đoạn 1. Chưa đo 60fps hay thử trên điện thoại thật.
 
@@ -95,3 +95,13 @@ Không đánh dấu hoàn thành các task yêu cầu thiết bị thật, Conso
 - UI: màn Bếp xôi (ngâm, hấp, nếp chín, menu), mini-game hấp và gói, nút Bếp xôi trong bảng tạm dừng, Bản đồ mở từ L29, "Ngâm cho mai" ở tổng kết.
 - Kiểm tra: Vitest (thêm `tests/stickyRice.test.ts`, gồm một ngày tiệm xôi chạy tự động), build, validator. Trên trình duyệt 375×812 đã xem Bản đồ, Bếp xôi (ngâm thật), mở cửa và mở Bếp giữa giờ bán; trình duyệt nhúng chỉ đạt 1 FPS nên chưa chơi thử mini-game và phục vụ khách thời gian thực (task 3.9 còn mở).
 - Khác spec: tiệm xôi mở cùng giờ chung 8h–20h nên cao điểm là 8h–10h thay vì 5h–10h.
+
+## Tiệm xôi — Đợt C (27/09/2026)
+
+- Đặt hàng nội bộ lấy mối từ `shopTypes.json`; hai tiệm giữ kho, kệ và quầy riêng. Nguyên liệu từ tạp hóa tới kho riêng của tiệm xôi vào sáng hôm sau theo FEFO; xôi gói giao vào ô sau quầy riêng của tạp hóa lúc 7h. Báo cáo tính vốn ở tiệm nhận và không trừ tiền chung hai lần.
+- Màn Nhập hàng có nút “Hàng nhà mình” ở hàng riêng bên dưới các nút mối sỉ; vào màn nội bộ để đặt một lần/đặt mỗi ngày, xem năng lực làm, số lượng, phí xe và đơn gần đây. Tên các chi nhánh cùng loại được phân biệt.
+- Tiệm xôi có quầy trưng bày riêng trong layout mặc định. Món xôi nằm ở quầy tiệm xôi để khách gọi; không cần đặt kệ tạp hóa. Khi chuyển xôi gói, hàng tới quầy sau của tiệm nhận.
+- Thợ nấu xôi ưu tiên đơn nội bộ; mô phỏng tiệm vắng chủ ghi số làm/bán/giao/hỏng và cảnh báo nếu thiếu thợ. Giá vốn hàng nội bộ hiện riêng theo tiệm.
+- Trình duyệt local xác nhận nút “Hàng nhà mình” mở đúng màn đơn nội bộ; màn này nêu rõ mỗi tiệm có kho/quầy riêng, nguyên liệu vào kho xôi và xôi gói vào quầy sau tạp hóa. Core test đã qua cả hai chiều và kịch bản tạp hóa chạy 3 ngày với xôi vắng chủ, đơn định kỳ tới quầy.
+- Đã cập nhật `docs/shop-types-json.md` và bảng trạng thái. Còn 5/37 task: viewport 375×812 (3.9, 4.7, 5.6), cân bằng chuỗi 6.1 chưa đạt mục tiêu, điện thoại thật và deploy (6.4). So sánh mô phỏng/đứng chơi 6.2 đã qua với cùng seed 1010: 181.000đ so với 194.500đ, lệch 6.9%.
+- TypeScript, Vite/PWA build, hai validator và 33 test tiệm xôi/đơn nội bộ qua. `npm run playtest` đã được mở rộng; lượt 10 ngày/1 seed hiện báo tỉ lệ lãi xôi/Chợ 577.6%, lãi ròng tăng thêm do đơn định kỳ -71.0%, hàng hỏng 0.4%, và bot Gợi ý không đủ vốn mở Chợ sau giỏ hàng. Chưa đánh dấu 6.1 hoàn thành.

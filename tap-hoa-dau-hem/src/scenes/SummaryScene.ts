@@ -255,9 +255,19 @@ export class SummaryScene extends Phaser.Scene {
   private showChainSummary(day: number): void {
     persist();
     const rows = G.state.stores.map((store) => {
-      const records = Array.isArray(store.data.analytics) ? store.data.analytics as { day: number; revenue: number; profit: number; customers: number }[] : [];
+      const records = Array.isArray(store.data.analytics) ? store.data.analytics as { day: number; revenue: number; profit: number; customers: number; internalCost?: number; production?: { made: number; sold: number; delivered: number; spoiled: number; noCook: boolean } }[] : [];
       const record = [...records].reverse().find((item) => item.day <= day);
-      return { name: store.name, revenue: record?.revenue ?? 0, profit: record?.profit ?? 0, customers: record?.customers ?? 0, recordDay: record?.day ?? null };
+      const orderCost = G.state.internalOrders.filter((order) => order.toStoreId === store.id && order.dueDay === day)
+        .reduce((sum, order) => sum + (order.internalCost ?? 0), 0);
+      return {
+        name: store.name,
+        revenue: record?.revenue ?? 0,
+        profit: record?.profit ?? 0,
+        customers: record?.customers ?? 0,
+        recordDay: record?.day ?? null,
+        internalCost: Math.max(record?.day === day ? record.internalCost ?? 0 : 0, orderCost),
+        production: record?.day === day ? record.production : undefined,
+      };
     });
     const layer = this.add.container(0, 0).setDepth(2000);
     layer.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.66).setInteractive());
@@ -267,11 +277,18 @@ export class SummaryScene extends Phaser.Scene {
     layer.add(txt(this, W - 30, 130, 'Doanh thu · Lãi · Khách', { size: 10, bold: true, color: HEX.muted, origin: [1, 0] }));
     let y = 150;
     for (const row of rows) {
-      layer.add(card(this, 24, y, W - 48, 56, C.panel));
+      const hasDetails = !!row.internalCost || !!row.production;
+      const height = row.production && row.internalCost ? 88 : hasDetails ? 74 : 56;
+      layer.add(card(this, 24, y, W - 48, height, C.panel));
       layer.add(txt(this, 34, y + 7, row.name, { size: 12, bold: true }));
       layer.add(txt(this, 34, y + 29, row.recordDay === null ? 'Chưa có ngày bán được ghi nhận' : `Số liệu ngày ${row.recordDay}`, { size: 9, color: HEX.muted }));
       layer.add(txt(this, W - 34, y + 17, `${formatMoney(row.revenue)}  ·  ${formatMoney(row.profit)}  ·  ${row.customers}`, { size: 10, bold: true, origin: [1, 0] }));
-      y += 62;
+      if (row.production) {
+        const p = row.production;
+        layer.add(txt(this, 34, y + 49, p.noCook ? '⚠ Không có thợ · không sản xuất' : `Xôi: làm ${p.made} · bán ${p.sold} · giao ${p.delivered} · hỏng ${p.spoiled}`, { size: 9, color: p.noCook ? HEX.red : HEX.ink, wrap: W - 68 }));
+      }
+      if (row.internalCost) layer.add(txt(this, W - 34, y + (row.production ? 66 : 49), `Nhận hàng nội bộ: ${formatMoney(row.internalCost)}`, { size: 9, color: HEX.muted, origin: [1, 0] }));
+      y += height + 6;
     }
     const totals = rows.reduce((sum, row) => ({ revenue: sum.revenue + row.revenue, profit: sum.profit + row.profit, customers: sum.customers + row.customers }), { revenue: 0, profit: 0, customers: 0 });
     layer.add(panel(this, 24, y + 2, W - 48, 62, 0xe8f5e9));

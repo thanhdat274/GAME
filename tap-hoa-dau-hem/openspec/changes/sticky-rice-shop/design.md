@@ -56,11 +56,11 @@ InternalOrder { id, fromStoreId, toStoreId, items: Record<productId, qty>, fille
                 createdDay, dueDay, dueMinute, status, shortReason? }
 ```
 Mối nội bộ hiện ở màn Nhập hàng dưới dạng nhà cung cấp ảo `internal:<storeId>`, do hàm `internalSuppliers(state)` sinh ra từ `supplies`/`sourcesFrom` của loại tiệm (không ghi vào `suppliers.json`; xem "Nguyên tắc chuỗi cung ứng"). Có hai hướng:
-- **Xôi gói → tạp hóa** (*pull theo đơn*): đơn `pending` được lấp khi tiệm xôi làm món có đầu ra `*_goi`. Lúc `dueMinute` (mặc định 420 = 7h) xe chở phần đã lấp vào `holding` tạp hóa **cùng ngày**. `BranchShipment` được mở rộng thêm `arriveMinute`.
-- **Nguyên liệu → tiệm xôi** (*kéo từ kho tạp hóa*): `pullFromStore(state, fromId, productId, qty)` dùng `storeView` + `takeLots` trên kho tạp hóa và tạo `BranchShipment` tới sáng hôm sau. Giữ lô FEFO và dùng phí xe cũ.
+- **Xôi gói → tạp hóa** (*làm theo đơn*): đơn `pending` được lấp khi tiệm xôi làm món có đầu ra `*_goi`. Lúc `dueMinute` (mặc định 420 = 7h), phần đã lấp được đưa vào các ô sau quầy riêng của tạp hóa trước giờ mở cửa; hàng không nằm chung kho/kệ với tiệm xôi.
+- **Nguyên liệu → tiệm xôi** (*kéo từ kho tạp hóa*): `placeInternalOrder` dùng `storeView` + `takeLots` trên kho tạp hóa và tạo `BranchShipment` tới sáng hôm sau. Giữ lô FEFO, hạn dùng và dùng phí xe cũ. `BranchShipment.arriveMinute` cho phép chặn giao cho tới giờ nhận.
 
 ### D6. Giá nội bộ = giá vốn, không có EXP
-Tiền dùng chung nên lãi nội bộ vô nghĩa, lại dễ bị lợi dụng. Đơn xôi gói tính `Σ giá vốn nguyên liệu + bao gói`. Nguyên liệu kéo từ tạp hóa tính giá vốn lô. `ledger` ghi `internal_transfer` để tổng kết từng tiệm đúng: tiệm nhận ghi chi phí, tiệm giao không ghi doanh thu. Không có EXP cho việc giao; EXP tính khi bán lẻ.
+Tiền dùng chung nên lãi nội bộ vô nghĩa, lại dễ bị lợi dụng. Đơn xôi gói tính `Σ giá vốn nguyên liệu + bao gói`. Nguyên liệu kéo từ tạp hóa tính giá vốn lô. Mỗi đơn lưu `internalCost`, và `DayRecord.internalCost` hiển thị giá vốn nhận hàng riêng trong báo cáo từng tiệm; khoản này không trừ tiền chung lần hai. Không có EXP cho việc giao; EXP tính khi bán lẻ.
 
 ### D7. Mô phỏng sản xuất (`sim: 'production'`) chạy **đầu ngày**
 Hàm `simulateProductionDay(state, storeId, day, rng)` tất định, chạy ở bước xử lý buổi sáng (cùng chỗ `deliverBranchShipments`) cho mỗi tiệm `production` đang vắng chủ:
@@ -88,6 +88,9 @@ Tiệm xôi dùng `food_table_2`/`food_table_4` và `ensureDiningTables` sẵn c
 
 ### D12. Xôi độc quyền của tiệm xôi
 Món xôi chỉ nằm trong `shopTypes.json › xoi.recipes`. `KitchenScene` lọc menu theo loại tiệm, nên góc đồ ăn tạp hóa không thể nấu xôi. Nguồn xôi duy nhất ở tạp hóa là xôi gói từ đơn nội bộ. Nhờ vậy chuỗi cung ứng là cách *duy nhất* để tạp hóa có mặt hàng này.
+
+### D13. Kho và quầy của từng tiệm độc lập
+Mỗi tiệm có `warehouse`, `shelves` và `counter` riêng trong `StoreSnapshot.data`; không dùng chung vị trí trưng bày. Tiệm xôi không bán qua kệ tự chọn: khách gọi món, và món đã làm nằm ở quầy xôi/trưng bày riêng của tiệm. Tạp hóa đặt xôi gói từ tiệm xôi; hàng giao được đưa vào ô sau quầy riêng của tạp hóa để khách gọi mua trong ngày. Vì đây là hàng `behindCounter`, không cần ô kệ thường và không tiêu chỗ kệ/tủ trong ảnh kho. Nguyên liệu tạp hóa giao ngược về tiệm xôi vẫn vào khu nhận hàng (`holding`) để người chơi cất vào kho tiệm xôi.
 
 ## Risks / Trade-offs
 

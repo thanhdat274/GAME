@@ -2,7 +2,7 @@ import { computeTip, customerPayment, judgeChange, type ChangeResult } from './c
 import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, shopDensityAt, type Customer, type OrderLine } from './customers';
 import { recordDay } from './analytics';
 import { applyPlanogram, planogramProduct, runRestockRules } from './autorestock';
-import { DATA, hasFeature, product, type Category } from './data';
+import { DATA, hasFeature, product, type Category, type RecipeDef } from './data';
 import { attractionMultiplier, hasCat } from './decor';
 import { createPhoneOrder, deliveryUnlocked, orderShortfall, orderUnits, reserveItems, tripSeconds, type PhoneOrder } from './delivery';
 import { Emitter } from './events';
@@ -11,10 +11,11 @@ import { eventDefinition, scheduleEvents } from './eventScheduler';
 import { calendarDate } from './calendar';
 import { deliverBranchShipments, simulateBranches } from './branches';
 import { prestigeRevenueMultiplier } from './prestige';
-import { prepareRecipe } from './recipes';
+import { makeServing, missingIngredients, prepareRecipe } from './recipes';
 import { cleanDiningTable, seatDiner, serveDiningAddOns, serveExtraDiningOrder, tickDining } from './dining';
 import { activeShopType } from './shopTypes';
-import { discardSpoiledSoaks, spoilRiceEndOfDay } from './stickyRice';
+import { cookedPortions, discardSpoiledSoaks, soakStatus, spoilRiceEndOfDay, startSoak, steamBatch, suggestSoakKg } from './stickyRice';
+import { fillOrder, orderRemaining, pendingOrdersFrom, runInternalSupplyMorning } from './internalSupply';
 import { counterFixture, counterFixtures, maxQueueFor, maxShoppersFor, walkTiles, walkableGrid } from './layout';
 import { canGiveCredit, collectDebt, markBadDebts, recordDebt, repaymentsToday } from './ledger';
 import { cheapSpawnMultiplier, keepChance } from './pricing';
@@ -1431,6 +1432,13 @@ export class DaySession {
         w.left = recipe.prepSeconds * timeFactor(s, w.tired);
         continue;
       }
+      if (s.role === 'xoi_cook') {
+        const job = this.xoiCookJob();
+        if (!job) { w.idle = DATA.balance.staff.refillCheckSeconds; continue; }
+        w.task = job.key;
+        w.left = job.seconds * timeFactor(s, w.tired);
+        continue;
+      }
       if (s.role === 'branch_manager') { w.idle = DATA.balance.staff.refillCheckSeconds; continue; }
       w.idle = DATA.balance.staff.refillCheckSeconds;
       const task = this.tasks.claim(s.id, ROLE_TASKS[s.role].filter((k) => k !== 'watch'));
@@ -1452,10 +1460,55 @@ export class DaySession {
     }
   }
 
+  /**
+   * Việc tiếp theo của Thợ nấu xôi: hấp khi hết nếp chín, làm đơn nội bộ trước (trừ khi tắt ưu tiên),
+   * rồi làm món bán lẻ còn ít ở quầy.
+   */
+  private xoiCookJob(): { key: string; seconds: number } | null {
+    const st = this.state;
+    const shop = activeShopType(st);
+    if (shop.def.id !== 'xoi') return null;
+    const hasStation = (station: string) => st.fixtures.some((f) => f.type === station);
+    if (cookedPortions(st) < 3 && hasStation('xung_hap')) {
+      const ready = st.soakBatches.find((b) => soakStatus(b, st.day, st.clock).kind === 'ready');
+      if (ready) return { key: `steam:${ready.id}`, seconds: DATA.balance.stickyRice.steamSeconds * 2 };
+    }
+    const canMake = (recipe: RecipeDef) => hasStation(recipe.station) && !missingIngredients(st, recipe).length;
+    if (st.settings.xoiOrderPriority !== false) {
+      for (const order of pendingOrdersFrom(st, st.activeStoreId)) {
+        if (order.dueDay > st.day + 1) continue;
+        for (const id of Object.keys(order.items)) {
+          const recipe = DATA.recipes.find((r) => r.output === id);
+          if (recipe && orderRemaining(order, id) > 0 && canMake(recipe)) return { key: `xoi:${recipe.id}:${order.id}`, seconds: recipe.prepSeconds };
+        }
+      }
+    }
+    const retail = DATA.recipes.find((r) => shop.allowsRecipe(r.id) && !r.packaged && st.activeRecipes.includes(r.id) && canMake(r)
+      && st.counter.filter((slot) => slot.productId === r.output).reduce((n, slot) => n + slot.qty, 0) < 3);
+    return retail ? { key: `cook:${retail.id}`, seconds: retail.prepSeconds } : null;
+  }
+
   private finishTask(s: Staff, w: Worker): void {
     const key = w.task!;
     w.task = null;
     this.tasks.complete(key);
+    const quality = Math.min(1.2, 0.75 + s.stats.accuracy * 0.045);
+    if (key.startsWith('steam:')) {
+      const result = steamBatch(this.state, this.state, key.slice('steam:'.length), quality);
+      if (result.ok) { this.jobDone(s); this.log(`${s.name} hấp xong ${result.rice.portions} phần nếp chín`); }
+      return;
+    }
+    if (key.startsWith('xoi:')) {
+      const [, recipeId, orderId] = key.split(':');
+      const recipe = DATA.recipes.find((r) => r.id === recipeId);
+      const order = this.state.internalOrders.find((o) => o.id === orderId);
+      if (!recipe || !order || orderRemaining(order, recipe.output) <= 0) return;
+      if (makeServing(this.state, recipe, this.state.day, this.state.clock, quality) === null) return;
+      fillOrder(order, recipe.output, 1);
+      this.jobDone(s);
+      this.log(`${s.name} làm 1 ${product(recipe.output).name} cho đơn của ${this.state.stores.find((x) => x.id === order.toStoreId)?.name ?? 'tiệm khác'}`);
+      return;
+    }
     if (key.startsWith('cook:')) {
       const recipeId = key.slice('cook:'.length);
       const result = prepareRecipe(this.state, recipeId, Math.min(1.2, 0.75 + s.stats.accuracy * 0.045));
@@ -1948,8 +2001,12 @@ export function endDay(state: GameState): DaySummary {
   if (outage && Number(outage.params?.outageHours ?? 0) > 3) spoilFrozenStock(state);
   receiveDeliveries(state, state.day, DATA.balance.closeMinute);
   expireLots(state, state.day);
-  // Tiệm xôi: nếp chín thừa và mẻ ngâm quá hạn bị bỏ cuối ngày.
+  // Tiệm xôi: nếp chín thừa và mẻ ngâm quá hạn bị bỏ cuối ngày; có thợ thì thợ tự ngâm cho mai.
   spoilRiceEndOfDay(state, state);
+  if (state.staff.some((st) => st.role === 'xoi_cook' && !st.quitting)) {
+    const kg = suggestSoakKg(state);
+    if (kg > 0 && startSoak(state, state, kg).ok) state.morningNotes.push(`🪣 Thợ nấu xôi đã ngâm ${kg} kg nếp cho hôm nay.`);
+  }
   const power = electricityCost(state);
   state.money -= power;
   t.electricity += power;
@@ -1998,6 +2055,7 @@ export function endDay(state: GameState): DaySummary {
     theftCost: t.theftCost,
     fines: t.fines,
     deliveryFees: t.deliveryFees,
+    internalCost: t.internalCost,
     staffLevelUps: [...t.staffLevelUps],
     journal: [...t.journal],
     closedEarlyAt: t.closedEarlyAt,
@@ -2073,16 +2131,19 @@ export function startNextDay(state: GameState): number {
   claimAllDone(state);
   state.day++;
   const branchIncome = simulateBranches(state, state.day - 1);
-  const arrivals = deliverBranchShipments(state, state.day);
-  if (arrivals) state.morningNotes.push(`🚚 ${arrivals} chuyến xe hàng đã đến chi nhánh.`);
-  for (const [id, amount] of Object.entries(branchIncome)) {
-    const name = state.stores.find((store) => store.id === id)?.name ?? id;
-    state.morningNotes.push(`${name} đóng góp ${formatMoney(amount)} từ ngày hôm qua.`);
-  }
+  // Reset trước các chuyến giao để giá vốn nhận hàng được ghi vào ngày mới.
   state.phase = 'morning';
   state.clock = DATA.balance.openMinute;
   state.today = emptyStats();
   state.lastSummary = null;
+  const arrivals = deliverBranchShipments(state, state.day, DATA.balance.openMinute);
+  if (arrivals) state.morningNotes.push(`🚚 ${arrivals} chuyến xe hàng đã đến chi nhánh.`);
+  // Đơn nội bộ: giao xôi gói tới hạn (7h), sinh đơn định kỳ cho sáng mai, dọn đơn cũ.
+  runInternalSupplyMorning(state);
+  for (const [id, amount] of Object.entries(branchIncome)) {
+    const name = state.stores.find((store) => store.id === id)?.name ?? id;
+    state.morningNotes.push(`${name} đóng góp ${formatMoney(amount)} từ ngày hôm qua.`);
+  }
   discardSpoiledSoaks(state, state);
   updateTax(state);
   state.morningNotes.push(...taxReminders(state));

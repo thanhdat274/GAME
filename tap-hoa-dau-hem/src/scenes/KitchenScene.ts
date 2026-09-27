@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DATA, product, type RecipeDef } from '../core/data';
 import { missingIngredients, prepareRecipe, recipeIngredients, setRecipeActive } from '../core/recipes';
+import { assignCounterToOrders, orderRemaining, pendingOrdersFrom } from '../core/internalSupply';
 import { activeShopType } from '../core/shopTypes';
 import { formatMoney, warehouseQty } from '../core/state';
 import {
@@ -73,7 +74,9 @@ export class KitchenScene extends Phaser.Scene {
     let y = 6;
     if (shop.def.id === 'xoi') y = this.renderXoiPrep(y);
     this.list.add(txt(this, 14, y, 'SỔ CÔNG THỨC', { size: 12, bold: true, color: HEX.muted })); y += 22;
-    this.list.add(txt(this, 14, y, 'Bật món trong menu để khách có thể gọi. Chế biến dùng nguyên liệu trong kho.', { size: 10, color: HEX.muted, wrap: W - 28 })); y += 40;
+    this.list.add(txt(this, 14, y, shop.def.id === 'xoi'
+      ? 'Mỗi tiệm có quầy riêng. Món làm ra bày ở quầy xôi để khách gọi; xôi gói có thể chuyển sang đơn tạp hóa.'
+      : 'Bật món trong menu để khách có thể gọi. Chế biến dùng nguyên liệu trong kho.', { size: 10, color: HEX.muted, wrap: W - 28 })); y += 40;
     // Món xôi chỉ nấu ở tiệm xôi; tạp hóa muốn bán xôi thì đặt xôi gói từ tiệm xôi.
     if (shop.def.id === 'grocery' && chainHasXoi()) {
       this.list.add(card(this, 8, y, W - 16, 44, 0xfff4d6));
@@ -93,12 +96,18 @@ export class KitchenScene extends Phaser.Scene {
     const missing = missingIngredients(s, recipe);
     const enough = !missing.length;
     const active = s.activeRecipes.includes(recipe.id);
-    const h = 92;
+    const internalOrders = recipe.packaged && activeShopType(s).def.id === 'xoi'
+      ? pendingOrdersFrom(s, s.activeStoreId).filter((order) => orderRemaining(order, output.id) > 0)
+      : [];
+    const ready = s.counter.filter((slot) => slot.productId === output.id).reduce((n, slot) => n + slot.qty, 0);
+    const needed = internalOrders.reduce((n, order) => n + orderRemaining(order, output.id), 0);
+    const h = internalOrders.length ? 120 : 92;
     this.list.add(card(this, 8, y, W - 16, h - 5, active ? 0xe8f5e9 : C.panel));
     this.list.add(txt(this, 18, y + 7, `${recipe.packaged ? '📦' : recipe.category === 'food' ? '🍽️' : '🥤'} ${recipe.name}`, { size: 13, bold: true }));
     this.list.add(txt(this, 18, y + 28, Object.entries(reqs).map(([id, qty]) => ingredientLabel(id, qty)).join(' · '), { size: 9, color: HEX.muted, wrap: W - 118 }));
     const missingText = missing.includes(COOKED_RICE_ID) ? 'Chưa có nếp chín · hấp một mẻ trước' : 'Thiếu nguyên liệu trong kho';
-    const status = locked ? `Mở ở L${recipe.unlockLevel}` : !station ? `Cần ${DATA.furniture.find((f) => f.id === recipe.station)?.name ?? recipe.station}` : !enough ? missingText : active ? `${output.icon} Có ${s.counter.filter((x) => x.productId === output.id).reduce((n, x) => n + x.qty, 0)} phần ở quầy` : 'Sẵn sàng mở bán';
+    const stockLabel = activeShopType(s).def.id === 'xoi' ? 'phần ở quầy xôi riêng' : 'phần sau quầy';
+    const status = locked ? `Mở ở L${recipe.unlockLevel}` : !station ? `Cần ${DATA.furniture.find((f) => f.id === recipe.station)?.name ?? recipe.station}` : !enough ? missingText : active ? `${output.icon} Có ${ready} ${stockLabel}` : 'Sẵn sàng mở bán';
     this.list.add(txt(this, 18, y + 62, status, { size: 10, color: locked || !station || !enough ? HEX.red : HEX.green, wrap: W - 118 }));
     this.list.add(new Button(this, W - 57, y + 30, { w: 78, h: 31, label: active ? 'Tắt món' : 'Mở bán', size: 10, color: active ? C.wood : C.green, onTap: this.list.guard(() => {
       if (locked || !station) return;
@@ -109,6 +118,14 @@ export class KitchenScene extends Phaser.Scene {
       if (!s.counter.some((slot) => slot.productId === output.id || slot.productId === null || slot.qty <= 0)) { toast(this, 'Quầy đã đầy · bán bớt hoặc dọn một ô quầy trước'); return; }
       this.scene.start('Cook', { recipeId: recipe.id, fromKitchen: true, kitchenFromShop: this.fromShop });
     }) }).setEnabled(!locked && station && enough && active));
+    if (internalOrders.length) {
+      const transferable = Math.min(ready, needed);
+      this.list.add(txt(this, 18, y + 91, `Đơn chờ ${needed} · quầy có ${ready}`, { size: 9, color: HEX.muted, wrap: W - 152 }));
+      this.list.add(new Button(this, W - 58, y + 102, { w: 104, h: 26, label: `Giao ${transferable} cho đơn`, size: 9, color: C.wood, onTap: this.list.guard(() => {
+        const moved = assignCounterToOrders(s, output.id);
+        if (moved) { persist(); toast(this, `Đã chuyển ${moved} phần vào đơn nội bộ`); this.render(); }
+      }) }).setEnabled(transferable > 0));
+    }
     return y + h;
   }
 

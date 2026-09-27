@@ -4,6 +4,7 @@ import { DATA, hasFeature, product, supplier, type TaxKind } from './data';
 import { recordRating } from './progression';
 import { Rng, daySeed } from './rng';
 import { shiftsOn } from './schedule';
+import { onProbation } from './staff';
 import { formatMoney, type GameState, type TaxBill } from './state';
 
 /**
@@ -154,7 +155,7 @@ function withholdStaffPit(state: GameState): number {
   if (state.wageDebt > 0) return 0;
   let total = 0;
   for (const s of state.staff) {
-    if (s.quitting || (s.role === 'chef' && state.day - s.hiredDay < 3)) continue;
+    if (s.quitting || onProbation(s, state.day)) continue;
     const paid = Math.round((s.wage * shiftsOn(state, s.id, state.day)) / 2);
     total += Math.round(Math.max(0, paid - c.dailyThreshold) * c.rate);
   }

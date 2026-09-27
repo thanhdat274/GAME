@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { branchAvailable, maxStores, openBranch, sendBranchShipment, visitStore } from '../core/branches';
 import { DATA, product } from '../core/data';
 import { formatMoney, warehouseTotals } from '../core/state';
+import { missingCook } from '../core/production';
 import { G, persist } from '../game';
 import { PAGE_TOP, ScrollArea, card, pageFrame } from '../ui/page';
 import { Button, panel, toast } from '../ui/widgets';
@@ -32,8 +33,10 @@ export class BranchesScene extends Phaser.Scene {
       this.list.add(card(this, 8, y, W - 16, h - 6, current ? 0xe8f5e9 : C.panel));
       this.list.add(txt(this, 18, y + 8, `${def.icon} ${def.name}`, { size: 14, bold: true }));
       this.list.add(txt(this, 18, y + 31, def.description, { size: 10, color: HEX.muted, wrap: W - 42 }));
-      const status = current ? 'Bạn đang ở đây' : store ? `Tồn kho riêng · mô phỏng đến ngày ${store.simDay ?? 0}` : locked ? `Mở ở L${def.unlockLevel}` : `Phí mở ${formatMoney(def.cost)}`;
-      this.list.add(txt(this, 18, y + 58, status, { size: 10, color: current ? HEX.green : HEX.muted, wrap: W - 130 }));
+      const noCook = !!store && missingCook(s, store.id);
+      const status = noCook ? '⚠ Thiếu Thợ nấu xôi · không sản xuất khi vắng'
+        : current ? 'Bạn đang ở đây' : store ? `Kho, quầy và nhân viên riêng · mô phỏng đến ngày ${store.simDay ?? 0}` : locked ? `Mở ở L${def.unlockLevel}` : `Phí mở ${formatMoney(def.cost)}`;
+      this.list.add(txt(this, 18, y + 58, status, { size: 10, color: noCook ? HEX.red : current ? HEX.green : HEX.muted, wrap: W - 130 }));
       if (!current) this.list.add(new Button(this, W - 60, y + 39, { w: 82, h: 34, label: store ? 'Ghé tiệm' : 'Mở tiệm', size: 11, color: store ? C.blue : C.green, onTap: this.list.guard(() => {
         if (store) visitStore(s, def.id);
         else {

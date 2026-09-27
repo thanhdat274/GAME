@@ -83,6 +83,18 @@ export function missingIngredients(store: StoreData, recipe: RecipeDef, variant?
 }
 
 /**
+ * Trừ nguyên liệu cho một phần ở tiệm `store` mà không đưa lên quầy (mô phỏng sản xuất khi vắng chủ).
+ * Trả chất lượng món, hoặc null nếu thiếu nguyên liệu.
+ */
+export function makeServing(store: StoreData, recipe: RecipeDef, day: number, minute: number, quality = 1): number | null {
+  if (missingIngredients(store, recipe).length) return null;
+  const { [COOKED_RICE_ID]: ricePortions, ...stock } = recipeRequirements(recipe);
+  const q = ricePortions ? riceDishQuality(quality, takeCookedRice(store, ricePortions, day, minute)!) : quality;
+  consumeWarehouse(store, stock);
+  return q;
+}
+
+/**
  * Prepare one serving from real warehouse stock and place it in counter inventory.
  * `store` mặc định là tiệm đang đứng; truyền `storeView(state, id)` để chế biến ở tiệm khác
  * (level, ngày, giờ vẫn lấy từ phần chung của `state`). Món chỉ làm được ở loại tiệm có công thức đó.

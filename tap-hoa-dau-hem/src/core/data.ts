@@ -179,6 +179,18 @@ export interface Balance {
     warmMinutes: number;
     coldQualityCap: number;
     steamSeconds: number;
+    /** Giờ xe chở xôi gói tới tiệm đặt (phút trong ngày). */
+    orderDueMinute: number;
+    /** Đơn định kỳ tự tạm dừng sau số lần giao thiếu liên tiếp này. */
+    recurringShortLimit: number;
+    /** Đơn đã xong/hủy được dọn sau số ngày này. */
+    orderKeepDays: number;
+    /** Mô phỏng vắng chủ: phần/giờ của một thợ (nhân thêm 10%/điểm tốc độ), số giờ làm, khách bán lẻ/ngày, lượt quay bàn/ngày, phần tối thiểu tự ngâm. */
+    cookPortionsPerHour: number;
+    workHours: number;
+    simRetailPerDay: number;
+    tableTurnsPerDay: number;
+    minSimPortions: number;
   };
   tax: TaxBalance;
 }
@@ -271,7 +283,7 @@ export interface StaffBalance {
   shifts: { name: string; from: number; to: number }[];
 }
 
-export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'branch_manager';
+export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'branch_manager' | 'xoi_cook';
 export type StatKey = 'speed' | 'accuracy' | 'friendly' | 'stamina';
 export type StaffStats = Record<StatKey, number>;
 export interface Look { shirt: string; pants: string; hair: string; skin: string }

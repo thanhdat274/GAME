@@ -141,6 +141,8 @@ export interface DayRecord {
   hourly: number[];
   staff: Record<string, StaffDayPerf>;
   manager: boolean;
+  /** Giá vốn hàng nhận qua đơn nội bộ (ghi chú, không phải tiền mặt bị trừ lần nữa). */
+  internalCost?: number;
 }
 
 export interface JournalEntry {
@@ -192,6 +194,8 @@ export interface DayStats {
   /** Hàng hỏng/bỏ trong ngày (số lượng theo món) và giá vốn. */
   spoiled: Record<string, number>;
   spoiledCost: number;
+  /** Giá vốn hàng nhận từ tiệm khác trong chuỗi (không phải tiền chi thêm; tiền dùng chung). */
+  internalCost?: number;
   electricity: number;
   debtCollected: number;
   debtCollectedAmount: number;
@@ -261,6 +265,8 @@ export interface DaySummary {
   theftCost?: number;
   fines?: number;
   deliveryFees?: number;
+  /** Giá vốn hàng nhận qua đơn nội bộ, hiển thị riêng trong báo cáo chuỗi. */
+  internalCost?: number;
   /** Nhân viên lên cấp trong ngày (tên). */
   staffLevelUps?: string[];
   journal?: JournalEntry[];
@@ -293,6 +299,8 @@ export interface Settings {
   idleAutoPlay?: number;
   /** Góc nhìn lúc bán: 'side' = nhìn ngang (mặc định), 'topdown' = sơ đồ trên xuống, tự đi lại. */
   viewMode?: 'side' | 'topdown';
+  /** Thợ nấu xôi làm đơn nội bộ trước hàng bán lẻ (mặc định bật). */
+  xoiOrderPriority?: boolean;
 }
 
 export interface SaveSync {
@@ -365,6 +373,8 @@ export interface InternalOrder {
   dueMinute: number;
   status: InternalOrderStatus;
   shortReason?: string;
+  /** Giá vốn phần hàng thực giao, để báo cáo chuỗi theo ngày. */
+  internalCost?: number;
   recurringId?: string;
 }
 
@@ -386,7 +396,11 @@ export interface BranchShipment {
   lots: SlotLot[];
   sentDay: number;
   arriveDay: number;
+  /** Phút trong ngày hàng tới (xôi gói giao 7h); thiếu = đầu ngày. */
+  arriveMinute?: number;
   fee: number;
+  /** Chuyến hàng thuộc đơn nội bộ nào (kéo nguyên liệu từ tiệm khác). */
+  orderId?: string;
 }
 
 /** Tờ thuế một tháng (hoặc tờ truy thu sau thanh tra): nộp trước hạn để khỏi bị tính tiền chậm nộp. */

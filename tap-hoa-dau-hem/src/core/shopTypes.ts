@@ -23,9 +23,14 @@ export function shopTypeDef(id: ShopTypeId): ShopTypeDef {
   return def;
 }
 
-/** Loại cửa hàng của một tiệm; snapshot cũ thiếu trường được coi là tạp hóa. */
+const behaviors = new Map<ShopTypeDef, ShopTypeBehavior>();
+
+/** Loại cửa hàng của một tiệm; snapshot cũ thiếu trường được coi là tạp hóa. Được gọi rất dày (mỗi khách, mỗi lần lọc hàng) nên cache theo định nghĩa. */
 export function shopTypeOf(store: Pick<StoreSnapshot, 'shopType'> | undefined): ShopTypeBehavior {
-  return behavior(shopTypeDef(store?.shopType ?? 'grocery'));
+  const def = shopTypeDef(store?.shopType ?? 'grocery');
+  let cached = behaviors.get(def);
+  if (!cached) { cached = behavior(def); behaviors.set(def, cached); }
+  return cached;
 }
 
 /** Loại cửa hàng của tiệm người chơi đang đứng. */

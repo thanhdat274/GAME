@@ -1783,7 +1783,7 @@ Object.assign(PRODUCT_SPRITES, {
 for (const [id, source] of Object.entries({
   food_grill: 'counter', hot_kettle: 'storage_rack', bread_case: 'shelf', food_table_2: 'storage_rack', food_table_4: 'counter',
   drink_counter: 'counter', blender: 'storage_rack', sugarcane_press: 'counter', drink_table_2: 'storage_rack', generator: 'counter',
-  thung_ngam: 'storage_rack', xung_hap: 'storage_rack', quay_xoi: 'storage_rack',
+  thung_ngam: 'storage_rack', xung_hap: 'storage_rack',
 })) FURNITURE_SPRITES[id] = FURNITURE_SPRITES[source];
 
 // Hàng bổ sung (vẽ từ các khuôn chai / lon / hộp / gói / túi dùng chung).
@@ -1935,3 +1935,23 @@ for (const [id, source] of Object.entries({
   xoi_dau_xanh_tp: 'banh_bao', xoi_man_tp: 'banh_bao', xoi_trung_tp: 'banh_bao', xoi_dua_tp: 'banh_bao',
   xoi_dau_xanh_goi: 'banh_bao', xoi_man_goi: 'banh_bao', xoi_trung_goi: 'banh_bao', xoi_dua_goi: 'banh_bao',
 })) PRODUCT_SPRITES[id] = PRODUCT_SPRITES[source];
+
+// Quầy trưng bày xôi (1×1).
+FURNITURE_SPRITES.quay_xoi = [
+  '................',
+  '......kkkk......',
+  '....kkcccckk....',
+  '...kciiiiiick...',
+  '...kcYYccYYck...',
+  '...kcccccccck...',
+  '..kkkkkkkkkkkk..',
+  '..kttttttttttk..',
+  '..kBBBBBBBBBBk..',
+  '..kkBBBBBBBBkk..',
+  '....kB....kB....',
+  '....kB....kB....',
+  '....kkkkkkkk....',
+  '.......kk.......',
+  '................',
+  '................',
+];

@@ -26,6 +26,7 @@ import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
 import { scheduleEvents } from '../core/eventScheduler';
 import { openBills, taxBillOverdue } from '../core/tax';
+import { internalSuppliers } from '../core/internalSupply';
 
 type Tab = 'buy' | 'arrange';
 
@@ -382,20 +383,30 @@ export class MorningScene extends Phaser.Scene {
   private buildBuy(): void {
     this.buyLayer = this.add.container(0, 0);
     const supplierLabel = txt(this, 14, 94, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay', { size: 12, color: HEX.muted });
+    const hasInternalSuppliers = internalSuppliers(G.state).length > 0;
     this.supplierBtns = {};
     this.supplierNote = null;
-    this.listTop = LIST_TOP;
-    if (supplierUnlocked(G.state, 'anh_ba')) {
+    const hasWholesaleTabs = supplierUnlocked(G.state, 'anh_ba');
+    if (hasWholesaleTabs) {
       supplierLabel.setVisible(false);
       DATA.suppliers.filter((sp) => supplierUnlocked(G.state, sp.id)).forEach((sp, i) => {
-        const b = new Button(this, 64 + i * 118, 112, { w: 112, h: 28, size: 11, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => { this.supplierId = sp.id; this.refresh(); } });
+        const b = new Button(this, 64 + i * 118, 106, { w: 112, h: 28, size: 11, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => { this.supplierId = sp.id; this.refresh(); } });
         this.supplierBtns[sp.id] = b;
         this.buyLayer.add(b);
       });
-      // Dòng ghi chú mối đang chọn nằm dưới hai nút, đẩy danh sách xuống một chút.
-      this.supplierNote = txt(this, 14, 134, '', { size: 10, color: HEX.muted });
+      // Dòng ghi chú mối đang chọn nằm dưới hàng nút mối sỉ (có giới hạn độ rộng để tự xuống dòng nếu dài).
+      this.supplierNote = txt(this, 14, 126, '', { size: 10, color: HEX.muted, wrap: W - 28 });
       this.buyLayer.add(this.supplierNote);
-      this.listTop = LIST_TOP + 46;
+    }
+    if (hasInternalSuppliers) {
+      const y = hasWholesaleTabs ? 168 : 126;
+      this.buyLayer.add(new Button(this, W / 2, y, { w: 160, h: 26, radius: 5, label: '🏪 Hàng nhà mình', size: 11, color: C.blue, onTap: () => this.scene.start('Internal', { back: 'Morning' }) }));
+    }
+    // Dành khoảng trống dọc riêng biệt cho mối sỉ, ghi chú và nút nội bộ, không để chồng lên nhau.
+    if (hasWholesaleTabs) {
+      this.listTop = hasInternalSuppliers ? 186 : 144;
+    } else {
+      this.listTop = hasInternalSuppliers ? 144 : 100;
     }
     this.list = this.add.container(0, this.listTop + 16);
     const maskG = this.make.graphics({}, false).fillRect(0, this.listTop + 14, W, LIST_BOTTOM - this.listTop - 14);

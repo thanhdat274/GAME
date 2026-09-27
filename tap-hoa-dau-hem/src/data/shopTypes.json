@@ -70,7 +70,12 @@
       "dua_nao",
       "bao_goi"
     ],
-    "sourcesFrom": [],
+    "sourcesFrom": [
+      "xoi_dau_xanh_goi",
+      "xoi_man_goi",
+      "xoi_trung_goi",
+      "xoi_dua_goi"
+    ],
     "dineInChance": 1,
     "addOns": [],
     "landPlots": true,
