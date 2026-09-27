@@ -266,8 +266,12 @@ export interface DaySummary {
   /** Đóng cửa sớm lúc (phút trong ngày). */
   closedEarlyAt?: number;
   sentHome?: number;
-  /** Thuế phát sinh hôm nay (VAT + TNCN), nộp gộp theo tháng. */
+  /** Thuế phát sinh hôm nay (VAT + TNCN/TNDN), nộp gộp theo tháng. */
   tax?: number;
+  /** TNCN khấu trừ từ lương nhân viên hôm nay (nộp thay, không phải chi phí). */
+  staffPit?: number;
+  /** Tiền chuyển vào quỹ thuế hôm nay. */
+  taxReserved?: number;
 }
 
 /** Hiệu quả những ngày quản lý gần nhất (cho thu nhập offline). */
@@ -335,15 +339,22 @@ export interface BranchShipment {
   fee: number;
 }
 
-/** Tờ thuế một tháng: lập khi sang tháng mới, nộp trước hạn để khỏi bị tính tiền chậm nộp. */
+/** Tờ thuế một tháng (hoặc tờ truy thu sau thanh tra): nộp trước hạn để khỏi bị tính tiền chậm nộp. */
 export interface TaxBill {
   id: number;
   year: number;
   month: number;
+  /** 'month': thuế tháng; 'audit': truy thu + phạt sau thanh tra. */
+  kind?: 'month' | 'audit';
+  /** Hình thức lúc lập tờ: hộ kinh doanh (VAT + TNCN) hay doanh nghiệp (VAT + TNDN). */
+  mode?: TaxMode;
   /** Doanh thu tháng theo nhóm ngành (kể cả phần dưới ngưỡng miễn thuế). */
   revenue: Record<TaxKind, number>;
   vat: number;
+  /** Hộ kinh doanh: thuế TNCN của chủ hộ; doanh nghiệp: thuế TNDN. */
   pit: number;
+  /** Thuế TNCN đã khấu trừ từ lương nhân viên, nộp thay. */
+  staffPit?: number;
   /** Số thuế còn phải nộp (chưa gồm tiền chậm nộp tính từ `interestFrom`). */
   amount: number;
   /** Hạn nộp: hết ngày này. */
@@ -356,6 +367,31 @@ export interface TaxBill {
   paidDay?: number;
   /** Tổng tiền đã nộp cho tờ này (thuế + chậm nộp + phạt). */
   paidTotal?: number;
+  /** Khai bớt doanh thu: số thuế đã giấu (thanh tra phát hiện sẽ truy thu + phạt). */
+  hidden?: number;
+  /** Đã qua thanh tra (không truy thu lại). */
+  audited?: boolean;
+  /** Tờ truy thu: nội dung vi phạm. */
+  note?: string;
+}
+
+export type TaxMode = 'household' | 'company';
+
+export interface TaxAudit {
+  day: number;
+  /** Tổng truy thu + phạt (0: không vi phạm). */
+  total: number;
+  findings: string[];
+}
+
+export interface TaxYear {
+  year: number;
+  revenue: number;
+  paid: number;
+  late: number;
+  evasion: boolean;
+  /** Được khen hộ/doanh nghiệp gương mẫu. */
+  exemplary: boolean;
 }
 
 export interface TaxState {
@@ -369,18 +405,44 @@ export interface TaxState {
   /** Doanh thu cả năm đã ghi nhận (để so với ngưỡng miễn thuế). */
   yearRevenue: number;
   monthRevenue: Record<TaxKind, number>;
+  /** VAT phải nộp của tháng (doanh nghiệp: đầu ra − đầu vào, có thể âm = được khấu trừ chuyển kỳ sau). */
   monthVat: number;
+  /** Hộ: TNCN; doanh nghiệp: TNDN tạm tính (âm = lỗ, trừ vào tháng sau trong năm). */
   monthPit: number;
+  /** TNCN khấu trừ từ lương nhân viên trong tháng. */
+  monthStaffPit: number;
   bills: TaxBill[];
   nextBillId: number;
   /** Tổng tiền đã nộp thuế từ trước tới nay. */
   lifetimePaid: number;
+  mode: TaxMode;
+  companyDay: number;
+  /** Quỹ thuế: tự để riêng thuế tạm tính mỗi ngày. */
+  reserveOn: boolean;
+  reserve: number;
+  /** Đã lắp máy tính tiền xuất hóa đơn điện tử. */
+  invoiceMachine: boolean;
+  /** Giá trị hàng nhập không hóa đơn chưa qua thanh tra. */
+  unauditedMarket: number;
+  /** Số tháng liên tiếp nộp thuế đúng hạn và kỷ lục. */
+  onTimeStreak: number;
+  bestOnTimeStreak: number;
+  /** Trong năm đang tính: số tờ nộp trễ / bị cưỡng chế, có bị truy thu trốn thuế không, đã nộp bao nhiêu. */
+  yearLate: number;
+  yearEvasion: boolean;
+  yearPaid: number;
+  audits: TaxAudit[];
+  years: TaxYear[];
+  /** Năm đã nhắc bắt buộc lắp máy tính tiền. */
+  machineWarnedYear: number;
 }
 
 export function emptyTaxState(): TaxState {
   return {
     registered: false, registeredDay: 0, year: 0, month: 0, yearRevenue: 0,
-    monthRevenue: { goods: 0, food: 0, service: 0 }, monthVat: 0, monthPit: 0, bills: [], nextBillId: 1, lifetimePaid: 0,
+    monthRevenue: { goods: 0, food: 0, service: 0 }, monthVat: 0, monthPit: 0, monthStaffPit: 0, bills: [], nextBillId: 1, lifetimePaid: 0,
+    mode: 'household', companyDay: 0, reserveOn: false, reserve: 0, invoiceMachine: false, unauditedMarket: 0,
+    onTimeStreak: 0, bestOnTimeStreak: 0, yearLate: 0, yearEvasion: false, yearPaid: 0, audits: [], years: [], machineWarnedYear: 0,
   };
 }
 

@@ -38,6 +38,11 @@ const PAGES = [
     title: '7. Lên level',
     body: 'Bán hàng và làm khách vui để nhận EXP. Lên level mở khóa ăn vặt, kệ thứ 3 và đồ dùng gia đình.',
   },
+  {
+    icon: '🧾',
+    title: '8. Thuế (từ level 10)',
+    body: 'Tiệm lớn thì đăng ký hộ kinh doanh. Doanh thu năm dưới ngưỡng được miễn thuế; vượt ngưỡng thì mỗi tháng chốt sổ, nộp VAT + thuế TNCN ở ☰ Tiệm → Sổ thuế trước hạn. Trễ hạn bị tính tiền chậm nộp; khai bớt hay nhập hàng không hóa đơn coi chừng thanh tra!',
+  },
 ];
 
 export class HowToScene extends Phaser.Scene {

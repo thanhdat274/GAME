@@ -4,8 +4,12 @@ import { endDay, startNextDay } from '../src/core/day';
 import { collectDebt } from '../src/core/ledger';
 import { migrate } from '../src/core/save';
 import { createNewGame, type GameState } from '../src/core/state';
+import { checkAchievements } from '../src/core/quests';
+import { beginChapter, chapterComplete } from '../src/core/story';
 import {
-  billTotal, monthTaxEstimate, openBills, payTaxBill, recordTaxableRevenue, taxKindOfProduct, taxOwed, taxReminders, updateTax,
+  auditChance, becomeCompany, billTotal, buyInvoiceMachine, companyCheck, customerWantsInvoice, declareLess, isCompany, machineRequired,
+  monthTaxEstimate, openBills, partyRewardFactor, payTaxBill, recordPurchase, recordTaxableRevenue, runAudit, setTaxReserve,
+  supplierTaxFactor, taxKindOfProduct, taxOwed, taxReminders, updateTax,
 } from '../src/core/tax';
 
 const cfg = DATA.balance.tax;
@@ -194,5 +198,195 @@ describe('thuế hộ kinh doanh', () => {
     expect(loaded.tax.registered).toBe(false);
     expect(loaded.tax.bills).toEqual([]);
     expect(loaded.today.taxAccrued).toBe(0);
+  });
+});
+
+describe('thuế nâng cao', () => {
+  it('quỹ thuế: cuối ngày để riêng thuế tạm tính, nộp dùng quỹ trước, tắt thì trả về tiền mặt', () => {
+    const s = registered();
+    setTaxReserve(s, true);
+    s.phase = 'open';
+    s.money = 1_000_000;
+    s.tax.yearRevenue = cfg.yearlyThreshold;
+    recordTaxableRevenue(s, 'goods', 10_000_000);
+    const summary = endDay(s);
+    expect(summary.taxReserved).toBe(summary.tax);
+    expect(s.tax.reserve).toBe(summary.tax);
+    expect(s.money).toBe(1_000_000 - (summary.tax ?? 0));
+    goTo(s, 11);
+    const bill = openBills(s)[0];
+    s.money = 0;
+    expect(payTaxBill(s, bill.id)).toBe('ok');
+    expect(s.tax.reserve).toBe(0);
+    s.tax.reserve = 5000;
+    setTaxReserve(s, false);
+    expect(s.money).toBe(5000);
+  });
+
+  it('nộp đúng hạn tăng chuỗi; trễ hạn thì mất chuỗi', () => {
+    const s = registered();
+    for (let m = 0; m < 3; m++) {
+      s.tax.yearRevenue = cfg.yearlyThreshold;
+      recordTaxableRevenue(s, 'goods', 10_000_000);
+      goTo(s, 11 + m * 10);
+      s.money = 10_000_000;
+      expect(payTaxBill(s, openBills(s)[0].id)).toBe('ok');
+    }
+    expect(s.tax.onTimeStreak).toBe(3);
+    expect(s.tax.bestOnTimeStreak).toBe(3);
+    recordTaxableRevenue(s, 'goods', 10_000_000);
+    goTo(s, 41);
+    const bill = openBills(s)[0];
+    goTo(s, bill.dueDay + 1);
+    payTaxBill(s, bill.id);
+    expect(s.tax.onTimeStreak).toBe(0);
+    expect(s.tax.bestOnTimeStreak).toBe(3);
+    expect(s.tax.yearLate).toBe(1);
+  });
+
+  it('khai bớt giảm tiền thuế; có máy tính tiền thì không khai bớt được', () => {
+    const s = registered();
+    s.tax.yearRevenue = cfg.yearlyThreshold;
+    recordTaxableRevenue(s, 'goods', 10_000_000);
+    goTo(s, 11);
+    const bill = openBills(s)[0];
+    bill.audited = false;
+    const full = bill.amount;
+    expect(declareLess(s, bill.id)).toBe('ok');
+    expect(bill.hidden).toBe(Math.round(full * cfg.underDeclarePct));
+    expect(bill.amount).toBe(full - (bill.hidden ?? 0));
+    expect(declareLess(s, bill.id)).toBe('already');
+    const s2 = registered();
+    s2.tax.invoiceMachine = true;
+    s2.tax.bills.push({ ...bill, id: 99, hidden: undefined, amount: full });
+    expect(declareLess(s2, 99)).toBe('machine');
+  });
+
+  it('thanh tra: truy thu phần khai bớt + phạt, phạt hàng chợ không hóa đơn, mất uy tín', () => {
+    const s = registered();
+    s.tax.bills.push({ id: 1, year: 1, month: 1, kind: 'month', revenue: { goods: 0, food: 0, service: 0 }, vat: 100_000, pit: 50_000, amount: 105_000, dueDay: 15, interestFrom: 15, status: 'paid', hidden: 45_000 });
+    s.tax.unauditedMarket = 1_000_000;
+    s.ratings = [];
+    const total = runAudit(s);
+    expect(total).toBe(45_000 * (1 + cfg.audit.evasionFineMul) + 1_000_000 * cfg.audit.marketFineRate);
+    const audit = openBills(s).find((b) => b.kind === 'audit')!;
+    expect(audit.amount).toBe(total);
+    expect(s.tax.unauditedMarket).toBe(0);
+    expect(s.tax.yearEvasion).toBe(true);
+    expect(s.ratings).toEqual([cfg.audit.evasionStars]);
+    expect(runAudit(s)).toBe(0);
+    expect(s.ratings.at(-1)).toBe(cfg.audit.cleanStars);
+  });
+
+  it('thanh tra phạt chưa lắp máy tính tiền khi doanh thu đã tới mức bắt buộc', () => {
+    const s = registered();
+    s.tax.yearRevenue = cfg.invoiceMachine.requiredYearRevenue;
+    expect(machineRequired(s)).toBe(true);
+    expect(auditChance(s)).toBeCloseTo(cfg.audit.chance + cfg.audit.noMachineExtraChance);
+    expect(runAudit(s)).toBe(cfg.audit.noMachineFine);
+    s.money = cfg.invoiceMachine.cost;
+    expect(buyInvoiceMachine(s)).toBe('ok');
+    expect(s.money).toBe(0);
+    expect(auditChance(s)).toBe(cfg.audit.withMachineChance);
+  });
+
+  it('nhập chợ không hóa đơn được ghi lại cho thanh tra; mối có hóa đơn thì không', () => {
+    const s = registered();
+    recordPurchase(s, 'cho_dau_moi', 300_000);
+    recordPurchase(s, 'co_tu', 200_000);
+    expect(s.tax.unauditedMarket).toBe(300_000);
+  });
+
+  it('khấu trừ TNCN nhân viên lương cao: tiệm giữ lại rồi nộp cùng tờ thuế tháng', () => {
+    const s = registered();
+    s.phase = 'open';
+    s.staff = [{ id: 'a', name: 'An', personality: 'cheerful', look: {} as never, role: 'cashier', stats: {} as never, wage: 250_000, level: 1, exp: 0, mood: 80, hiredDay: 1, streak: 0, lowMoodDays: 0, quitting: false, scoldedDay: null, lifetime: { served: 0, mistakes: 0, ratingSum: 0, ratingCount: 0, jobs: 0 } }];
+    s.schedule = { a: Array.from({ length: 14 }, () => true) };
+    s.money = 1_000_000;
+    const summary = endDay(s);
+    const expected = Math.round((250_000 - cfg.staffPit.dailyThreshold) * cfg.staffPit.rate);
+    expect(summary.staffPit).toBe(expected);
+    expect(s.tax.monthStaffPit).toBe(expected);
+    goTo(s, 11);
+    expect(openBills(s)[0].staffPit).toBe(expected);
+  });
+
+  it('doanh nghiệp: cần máy tính tiền, VAT khấu trừ đầu vào, TNDN trên lãi, chiết khấu mối có hóa đơn', () => {
+    const s = registered();
+    s.level = 27;
+    s.money = 10_000_000;
+    expect(companyCheck(s)).toBe('machine');
+    s.tax.invoiceMachine = true;
+    expect(becomeCompany(s)).toBe('ok');
+    expect(s.money).toBe(10_000_000 - cfg.company.setupCost);
+    expect(isCompany(s)).toBe(true);
+    const v = cfg.company.vatRate;
+    // Không còn ngưỡng: doanh thu đầu tiên đã có VAT đầu ra.
+    expect(recordTaxableRevenue(s, 'goods', 1_080_000)).toBeCloseTo(1_080_000 * v / (1 + v));
+    recordPurchase(s, 'anh_ba', 540_000);
+    expect(s.tax.monthVat).toBeCloseTo((1_080_000 - 540_000) * v / (1 + v));
+    expect(supplierTaxFactor(s, 'anh_ba')).toBeCloseTo(1 - cfg.company.supplierDiscount);
+    expect(supplierTaxFactor(s, 'cho_dau_moi')).toBe(1);
+    s.phase = 'open';
+    s.today.revenue = 1_080_000;
+    s.today.cogs = 540_000;
+    const vatNet = s.today.taxAccrued;
+    const summary = endDay(s);
+    const preTax = (summary.netProfit ?? 0) + (summary.tax ?? 0);
+    expect(s.tax.monthPit).toBeCloseTo((preTax - vatNet) * cfg.company.citRate);
+  });
+
+  it('doanh nghiệp: VAT đầu vào dư chuyển sang tháng sau, không lập tờ âm', () => {
+    const s = registered();
+    s.tax.mode = 'company';
+    recordPurchase(s, 'co_tu', 1_080_000);
+    goTo(s, 11);
+    expect(openBills(s)).toHaveLength(0);
+    expect(s.tax.monthVat).toBeLessThan(0);
+  });
+
+  it('khách văn phòng xin hóa đơn khi đã đăng ký thuế', () => {
+    const s = registered();
+    const hits = Array.from({ length: 200 }, (_, id) => customerWantsInvoice(s, cfg.invoiceCustomer.type, id)).filter(Boolean).length;
+    expect(hits).toBeGreaterThan(20);
+    expect(hits).toBeLessThan(120);
+    expect(customerWantsInvoice(s, 'hoc_sinh', 1)).toBe(false);
+    expect(customerWantsInvoice(createNewGame(), cfg.invoiceCustomer.type, 1)).toBe(false);
+  });
+
+  it('quyết toán năm: khen gương mẫu khi nộp đủ, không trễ, không bị truy thu', () => {
+    const s = registered();
+    s.tax.yearPaid = 500_000;
+    const exp = s.exp;
+    goTo(s, 121);
+    expect(s.tax.years[0]).toMatchObject({ year: 1, paid: 500_000, exemplary: true });
+    expect(s.exp).toBe(exp + cfg.settlementExp);
+    expect(s.tax.yearPaid).toBe(0);
+  });
+
+  it('thành tựu Công dân gương mẫu tặng bằng khen khi nộp đúng hạn 6 tháng liền', () => {
+    const s = registered();
+    s.tax.bestOnTimeStreak = 6;
+    const unlocked = checkAchievements(s).map((a) => a.id);
+    expect(unlocked).toContain('tax_model');
+    expect(s.decorOwned).toContain('bang_khen_thue');
+  });
+
+  it('chương truyện Chị Hạnh bên thuế cần 3 tháng nộp đúng hạn', () => {
+    const s = registered();
+    s.level = 16;
+    s.storyProgress = ['homecoming', 'growing_shop', 'first_helper'];
+    expect(beginChapter(s, 'tax_officer')).toBe(true);
+    const chapter = DATA.story.find((c) => c.id === 'tax_officer')!;
+    expect(chapterComplete(s, chapter)).toBe(false);
+    s.tax.bestOnTimeStreak = 3;
+    expect(chapterComplete(s, chapter)).toBe(true);
+  });
+
+  it('công ty được thưởng đơn tiệc cao hơn', () => {
+    const s = registered();
+    expect(partyRewardFactor(s)).toBe(1);
+    s.tax.mode = 'company';
+    expect(partyRewardFactor(s)).toBe(cfg.company.partyRewardMul);
   });
 });

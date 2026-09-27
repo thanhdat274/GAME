@@ -3,7 +3,7 @@ import { Rng, daySeed } from './rng';
 import { takeLots, takeOneFromSlot } from './stock';
 import { weekIndex } from './weeklyQuests';
 import { type GameState, type PartyOrder, type Slot } from './state';
-import { recordTaxableRevenue } from './tax';
+import { partyRewardFactor, recordTaxableRevenue } from './tax';
 
 export function refreshPartyOrder(state: GameState): void {
   if (state.level < 27) { state.partyOrder = null; return; }
@@ -17,7 +17,7 @@ export function refreshPartyOrder(state: GameState): void {
   if (rng.next() >= 0.45 || !DATA.partyOrders.length) { state.partyOrder = null; return; }
   const template = rng.pick(DATA.partyOrders);
   const items = { ...template.items };
-  const rewardMoney = Math.round(Object.entries(items).reduce((sum, [id, qty]) => sum + product(id).price * qty, 0) * 1.3);
+  const rewardMoney = Math.round(Object.entries(items).reduce((sum, [id, qty]) => sum + product(id).price * qty, 0) * 1.3 * partyRewardFactor(state));
   state.partyOrder = {
     id: `party:${template.id}:${week}`,
     week,

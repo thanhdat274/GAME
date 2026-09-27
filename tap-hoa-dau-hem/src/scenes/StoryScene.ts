@@ -34,7 +34,7 @@ export class StoryScene extends Phaser.Scene {
       if (available && !done) this.list.add(new Button(this, W - 61, y + 120, { w: 78, h: 30, label, size: 10, color: complete ? C.green : C.blue, onTap: this.list.guard(() => {
         if (!started) { beginChapter(G.state, chapter.id); toast(this, chapter.dialog[0]); }
         else if (claimChapter(G.state, chapter.id)) toast(this, `Hoàn thành: ${chapter.title}`);
-        else toast(this, chapter.id === 'rival_supermarket' ? 'Cần đủ 10 ngày, sao trung bình từ 4,5 và 20 khách quen' : chapter.id === 'grandma_visit' ? 'Bà chờ cháu bán 10 phần món ăn nóng' : chapter.id === 'open_chain' ? 'Mở chi nhánh để hoàn thành chương' : `Mục tiêu: ${chapter.goal}`);
+        else toast(this, chapter.id === 'rival_supermarket' ? 'Cần đủ 10 ngày, sao trung bình từ 4,5 và 20 khách quen' : chapter.id === 'grandma_visit' ? 'Bà chờ cháu bán 10 phần món ăn nóng' : chapter.id === 'open_chain' ? 'Mở chi nhánh để hoàn thành chương' : chapter.id === 'tax_officer' ? `Nộp thuế đúng hạn 3 tháng liền (đang ${G.state.tax.onTimeStreak} tháng)` : `Mục tiêu: ${chapter.goal}`);
         persist(); this.render();
       }) }).setEnabled(label !== 'Đang diễn ra'));
       else this.list.add(txt(this, W - 61, y + 120, label, { size: 10, bold: true, color: done ? HEX.green : HEX.muted, origin: [0.5, 0.5] }));

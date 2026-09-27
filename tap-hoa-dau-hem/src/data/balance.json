@@ -363,6 +363,22 @@
     "lateInterestPerDay": 0.005,
     "enforceAfterDays": 10,
     "enforceFine": 0.2,
-    "historyBills": 12
+    "historyBills": 12,
+    "underDeclarePct": 0.3,
+    "audit": {
+      "chance": 0.15,
+      "noMachineExtraChance": 0.15,
+      "withMachineChance": 0.05,
+      "evasionFineMul": 1,
+      "evasionStars": 1,
+      "marketFineRate": 0.4,
+      "noMachineFine": 500000,
+      "cleanStars": 5
+    },
+    "invoiceMachine": { "cost": 1500000, "requiredYearRevenue": 50000000 },
+    "invoiceCustomer": { "type": "van_phong", "chance": 0.3, "companyChance": 0.6, "bonusExp": 20, "noInvoiceMaxStars": 3 },
+    "staffPit": { "dailyThreshold": 150000, "rate": 0.05 },
+    "company": { "setupCost": 3000000, "vatRate": 0.08, "citRate": 0.2, "supplierDiscount": 0.05, "partyRewardMul": 1.3 },
+    "settlementExp": 300
   }
 }

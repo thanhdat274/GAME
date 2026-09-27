@@ -3,6 +3,8 @@ import eventData from '../data/events.json';
 import { calendarDate } from '../core/calendar';
 import { DATA } from '../core/data';
 import { eventDefinition } from '../core/eventScheduler';
+import { formatMoney } from '../core/state';
+import { billLabel, billTotal, monthTaxEstimate, openBills } from '../core/tax';
 import { G, persist } from '../game';
 import { Button, panel } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
@@ -26,20 +28,28 @@ export class CalendarScene extends Phaser.Scene {
 
     panel(this, 16, 124, W - 32, 153);
     txt(this, 30, 139, `Tháng ${date.month} · ${date.seasonName}`, { size: 14, bold: true, color: HEX.ink });
+    // Hạn nộp thuế rơi vào tháng này (ngày lịch = ngày hôm nay + số ngày còn lại tới hạn).
+    const taxDue = new Set(openBills(state).map((bill) => date.day + bill.dueDay - state.day).filter((d) => d >= 1 && d <= 10));
     for (let d = 1; d <= 10; d++) {
       const col = (d - 1) % 5;
       const row = Math.floor((d - 1) / 5);
       const x = 50 + col * 65;
       const y = 184 + row * 41;
       const isToday = d === date.day;
+      const due = taxDue.has(d);
       const g = this.add.graphics();
-      g.fillStyle(isToday ? C.green : C.wood, 1).fillRoundedRect(x - 24, y - 15, 48, 30, 6);
-      txt(this, x, y, `${d}${isToday ? ' ·' : ''}`, { size: 13, bold: true, color: HEX.white, origin: [0.5, 0.5] });
+      g.fillStyle(isToday ? C.green : due ? C.red : C.wood, 1).fillRoundedRect(x - 24, y - 15, 48, 30, 6);
+      txt(this, x, y, `${d}${due ? '🧾' : isToday ? ' ·' : ''}`, { size: 13, bold: true, color: HEX.white, origin: [0.5, 0.5] });
     }
 
     panel(this, 16, 290, W - 32, 278);
     txt(this, 30, 306, 'Sắp tới', { size: 14, bold: true, color: HEX.ink });
-    const active = state.activeEvents.map((event) => ({ name: eventDefinition(event.id)?.name ?? event.id, line: `Đang diễn ra · còn tới ngày ${event.endsDay}` }));
+    const taxLines = openBills(state).sort((a, b) => a.dueDay - b.dueDay).map((bill) => ({
+      name: `🧾 Hạn nộp: ${billLabel(bill)}`,
+      line: `${bill.dueDay < state.day ? `Đã quá hạn ${state.day - bill.dueDay} ngày` : bill.dueDay === state.day ? 'Hạn hôm nay' : `Còn ${bill.dueDay - state.day} ngày (ngày ${date.day + bill.dueDay - state.day} tháng này)`} · ${formatMoney(billTotal(state, bill))}`,
+    }));
+    if (state.tax.registered) taxLines.push({ name: '🧾 Chốt sổ thuế tháng', line: `Sáng ngày 1 tháng sau · thuế tạm tính ${formatMoney(monthTaxEstimate(state))}` });
+    const active = [...taxLines, ...state.activeEvents.map((event) => ({ name: eventDefinition(event.id)?.name ?? event.id, line: `Đang diễn ra · còn tới ngày ${event.endsDay}` }))];
     const upcoming = [...SEASONAL].sort((a, b) => ((a.start.month - date.month + 12) % 12) - ((b.start.month - date.month + 12) % 12)).slice(0, 4)
       .map((event) => ({ name: event.name, line: `Ngày ${event.start.day} tháng ${event.start.month} · nhập: ${(event.items ?? []).map((id) => DATA.products.find((item) => item.id === id)?.name ?? id).join(', ') || 'hàng theo mùa'}` }));
     [...active, ...upcoming].slice(0, 5).forEach((event, i) => {

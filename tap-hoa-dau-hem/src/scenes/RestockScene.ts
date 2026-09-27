@@ -165,7 +165,7 @@ export class RestockScene extends Phaser.Scene {
         : !check.ok && check.reason === 'space' ? 'Kho đầy'
           : !check.ok && check.reason === 'min-order' ? `Đơn tối thiểu ${formatMoney(sp.minOrder)} (thiếu ${formatMoney(check.missing)})`
             : sp.delayDays > 0 && Object.keys(this.cart).length ? `Giao 15:00 ngày ${s.day + sp.delayDays}`
-              : '',
+              : sp.invoice === false ? '⚠️ Chợ không xuất hóa đơn: thanh tra thuế có thể phạt' : '',
     );
     this.buyBtn.setText(sp.delayDays > 0 ? 'Đặt hàng' : 'Nhập hàng');
     this.buyBtn.setEnabled(check.ok && !this.busy);

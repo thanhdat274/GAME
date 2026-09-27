@@ -38,7 +38,7 @@ import {
   spoilFrozenStock,
 } from './stock';
 import { PLAYER, ROLE_TASKS, TaskQueue, type Task } from './tasks';
-import { recordTaxableRevenue, taxKindOfProduct, taxReminders, updateTax } from './tax';
+import { endDayTax, recordTaxableRevenue, taxKindOfProduct, taxReminders, updateTax } from './tax';
 
 /** 'closed' = tiệm đóng cửa sớm, khách chưa lấy gì được mời về (không chấm sao). */
 export type LeaveReason = 'served' | 'patience' | 'nothing' | 'thief' | 'closed';
@@ -102,6 +102,7 @@ export interface DayEvents {
   trayChanged: number[];
   changeResult: { customer: Customer; result: ChangeResult; given: number; tip: number; lost: number; auto: boolean };
   sale: { customer: Customer; amount: number; tip: number };
+  invoice: { customer: Customer; issued: boolean };
   refillStarted: { shelf: number; slot: number };
   refillDone: { shelf: number; slot: number; qty: number };
   zoneRefillDone: { zone: Exclude<Category, 'counter'>; count: number };
@@ -1044,6 +1045,18 @@ export class DaySession {
     return ordinary + (c.comboTipEligible && !automatic && c.shortAttempts === 0 && c.undos === 0 ? DATA.balance.scanTipBonus : 0);
   }
 
+  /** Khách công ty xin hóa đơn: có máy tính tiền thì xuất ngay (thêm sao, EXP); không có thì khách phật ý. */
+  private handleInvoiceRequest(c: Customer): number {
+    if (!c.wantsInvoice) return 0;
+    const cfg = DATA.balance.tax.invoiceCustomer;
+    const ok = this.state.tax.invoiceMachine;
+    if (ok) c.bonusStars = (c.bonusStars ?? 0) + 1;
+    else c.maxStars = Math.min(c.maxStars ?? 5, cfg.noInvoiceMaxStars);
+    this.log(ok ? 'Xuất hóa đơn điện tử cho khách công ty' : 'Khách công ty xin hóa đơn đỏ nhưng tiệm chưa có máy tính tiền');
+    this.events.emit('invoice', { customer: c, issued: ok });
+    return ok ? cfg.bonusExp : 0;
+  }
+
   /** Tách doanh thu một đơn theo nhóm ngành chịu thuế (món chế biến = ăn uống, còn lại = hàng hóa). */
   private recordSaleTax(c: Customer): void {
     let gross = 0;
@@ -1082,8 +1095,9 @@ export class DaySession {
     t.tips += tip;
     t.overpaid += lost;
     t.served++;
+    const invoiceExp = this.handleInvoiceRequest(c);
     const stars = ratingFor(c);
-    let exp = items * b.expPerItem;
+    let exp = items * b.expPerItem + invoiceExp;
     if (stars >= 3) { t.happy++; exp += b.expPerHappy; }
     if (staff) {
       // Chế độ quản lý: chủ tiệm nhận 50% EXP từ việc nhân viên làm.
@@ -1894,6 +1908,9 @@ export function endDay(state: GameState): DaySummary {
   markBadDebts(state);
   const avg = t.ratingCount ? t.ratingSum / t.ratingCount : 0;
   state.lifetime.loveStreak = t.ratingCount && avg >= DATA.balance.loveStreakRating ? state.lifetime.loveStreak + 1 : 0;
+  const preTaxProfit = t.revenue - t.cogs + t.tips - t.overpaid + t.debtCollectedAmount - t.spoiledCost - t.electricity + t.questMoney
+    - t.wages - t.bonuses - t.theftCost + t.fines + t.deliveryFees;
+  const dayTax = endDayTax(state, preTaxProfit);
   const achievements = checkAchievements(state).map((a) => a.id);
   const levelUps = applyLevelUps(state).map((l) => l.level);
   const summary: DaySummary = {
@@ -1921,8 +1938,7 @@ export function endDay(state: GameState): DaySummary {
     debtCollectedAmount: t.debtCollectedAmount,
     debtGiven: t.debtGiven,
     badDebt: t.badDebt,
-    netProfit: t.revenue - t.cogs + t.tips - t.overpaid + t.debtCollectedAmount - t.spoiledCost - t.electricity + t.questMoney
-      - t.wages - t.bonuses - t.theftCost + t.fines + t.deliveryFees - Math.round(t.taxAccrued ?? 0),
+    netProfit: preTaxProfit - dayTax.tax,
     achievements,
     wages: t.wages,
     wageDebt: state.wageDebt,
@@ -1934,7 +1950,9 @@ export function endDay(state: GameState): DaySummary {
     journal: [...t.journal],
     closedEarlyAt: t.closedEarlyAt,
     sentHome: t.sentHome,
-    tax: Math.round(t.taxAccrued ?? 0),
+    tax: dayTax.tax,
+    staffPit: dayTax.staffPit,
+    taxReserved: dayTax.reserved,
   };
   recordDay(state, summary);
   if (t.managerDay) {
