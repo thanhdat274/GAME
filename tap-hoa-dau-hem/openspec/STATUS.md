@@ -51,3 +51,19 @@ Không đánh dấu hoàn thành các task yêu cầu thiết bị thật, Conso
 - Màn bán hàng có mưa hoạt động khi chạy sự kiện mưa, lớp tối và nhãn cúp điện, cùng họa tiết mùa được tạo theo lịch tháng hiện tại.
 - Mini-game bếp tách xúc xích (canh kim), mì ly (rót tới vạch và chờ), bánh mì (thứ tự nguyên liệu), trứng luộc (canh giờ/vớt). Mini-game đồ uống thêm nguyên liệu theo công thức rồi có thao tác khuấy/lắc/xay.
 - Kiểm tra: TypeScript, Vite/PWA build, Vitest 277/277, `validate:events` và `validate:recipes` đều qua. Chưa chơi thử các màn mới trên trình duyệt/điện thoại thật.
+
+## Cập nhật sơ đồ tiệm và góc nhìn trên xuống (26/09/2026)
+
+- Change mới `topdown-store-view`: đã đánh dấu 15/22 task.
+  - **Sơ đồ tiệm:** xem kệ, giá và kho của mọi tiệm trong chuỗi.
+  - **Sơ đồ trực tiếp:** khách và nhân viên đi lại trên sơ đồ trong giờ bán.
+  - **Góc nhìn trên xuống để chơi:** chạm ô để đi, tới kệ mới nạp, ở quầy mới tính tiền. Khi có thu ngân, quầy người chơi tạm đóng lúc người chơi rời quầy.
+- Kiểm tra:
+  - Vitest và build đều qua.
+  - `npm run compare:views`: lãi góc trên xuống bằng 99,8–106,7% góc ngang.
+  - Chơi thử trên trình duyệt ở khung 375×667.
+- Còn mở:
+  - Đo FPS trên điện thoại thật.
+  - Chơi thử bằng người thật để chỉnh tốc độ đi và hệ số kiên nhẫn.
+  - Deploy.
+  - Nhóm việc để lại cho change sau: sprite riêng, bản đồ lớn hơn, tránh va chạm, đồng bộ phiên chung.

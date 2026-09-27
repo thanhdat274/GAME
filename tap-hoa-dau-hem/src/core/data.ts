@@ -100,6 +100,13 @@ export interface Balance {
   maxShoppers: number;
   baseSpawnSeconds: number;
   queuePatienceRate: number;
+  /** Góc nhìn trên xuống (người chơi tự đi lại). */
+  topDown: {
+    /** Tốc độ đi của người chơi (ô/giây). */
+    playerTilesPerSecond: number;
+    /** Hệ số mất kiên nhẫn của khách ở quầy người chơi khi người chơi đang đi nạp kệ. */
+    awayPatienceRate: number;
+  };
   zoneWalkSeconds: number;
   pickSeconds: number;
   shopBudgetFactor: number;

@@ -152,6 +152,7 @@ export interface DaySessionSnapshot {
   incidents?: Incident[];
   fleeing?: Customer[];
   playerAway?: number;
+  playerAtCounter?: boolean;
   counters?: { nextOrderId: number; nextIncidentId: number; nextLaneId: number; taskAcc: number; missedAlerted: string[] };
 }
 
@@ -178,6 +179,11 @@ export class DaySession {
   readonly fleeing: Customer[] = [];
   /** Người chơi đang tự đi giao hàng (giây còn lại); quầy bỏ trống. */
   playerAway = 0;
+  /**
+   * Góc nhìn trên xuống: người chơi phải đứng ở quầy mới quét giỏ / tính tiền được.
+   * Khi rời quầy, khách đầu hàng đứng chờ (vẫn mất kiên nhẫn) cho tới khi người chơi quay lại.
+   */
+  playerAtCounter = true;
   /** Tự phục vụ quầy người chơi (bỏ qua ngày, mô phỏng): quét, thối tiền tự động. */
   autoPlayer = false;
   /** Giây giữa hai thao tác của người chơi tự động (0 = tức thì). */
@@ -227,6 +233,7 @@ export class DaySession {
     session.incidents.push(...structuredClone(snapshot.incidents ?? []));
     session.fleeing.push(...structuredClone(snapshot.fleeing ?? []));
     session.playerAway = snapshot.playerAway ?? 0;
+    session.playerAtCounter = snapshot.playerAtCounter ?? true;
     if (snapshot.counters) {
       session.nextOrderId = snapshot.counters.nextOrderId;
       session.nextIncidentId = snapshot.counters.nextIncidentId;
@@ -263,6 +270,7 @@ export class DaySession {
       incidents: structuredClone(this.incidents),
       fleeing: structuredClone(this.fleeing),
       playerAway: this.playerAway,
+      playerAtCounter: this.playerAtCounter,
       counters: {
         nextOrderId: this.nextOrderId, nextIncidentId: this.nextIncidentId, nextLaneId: this.nextLaneId,
         taskAcc: this.taskAcc, missedAlerted: [...this.missedAlerted],
@@ -344,7 +352,9 @@ export class DaySession {
     const waiting = [...this.queue, ...this.ready, ...inLanes].filter((c) => c.status === 'waiting' || c.status === 'scanning' || c.status === 'paying' || c.status === 'bargain' || c.status === 'credit');
     const cat = hasCat(this.state);
     for (const c of waiting) {
-      const rate = c === this.front || this.lanes.some((l) => l.queue[0] === c) ? 1 : b.queuePatienceRate;
+      let rate = c === this.front || this.lanes.some((l) => l.queue[0] === c) ? 1 : b.queuePatienceRate;
+      // Khách thấy chủ tiệm đang bận nạp kệ thì chờ thong thả hơn.
+      if (!this.playerAtCounter && !this.autoPlayer && c.lane === 0) rate *= b.topDown.awayPatienceRate;
       c.patience -= dt * rate;
       c.waited = (c.waited ?? 0) + dt;
       if (cat && !c.catChecked && c.waited >= b.cat.waitSeconds) {
@@ -582,6 +592,8 @@ export class DaySession {
     if (this.playerAway > 0 && !this.autoPlayer) return false;
     const staffed = this.lanes.some((l) => !l.closing);
     if (this.state.today.managerDay && staffed) return false;
+    // Góc nhìn trên xuống: người chơi rời quầy mà có thu ngân thì quầy người chơi tạm đóng, khách sang quầy thu ngân.
+    if (!this.playerAtCounter && !this.autoPlayer && staffed) return false;
     return true;
   }
 
@@ -602,6 +614,7 @@ export class DaySession {
   private promoteFront(): void {
     const c = this.front;
     if (!c || c.status !== 'waiting') return;
+    if (!this.playerAtCounter && !this.autoPlayer) return;
     c.status = 'scanning';
     this.events.emit('customerFront', c);
     const request = c.order.find((line) => line.counterLine && line.picked === 0 && line.missing === 0);
@@ -669,6 +682,11 @@ export class DaySession {
       const amount = collectDebt(this.state, debt.id);
       if (amount) this.events.emit('debtRepaid', { debtId: debt.id, name: debt.name, amount });
     }
+  }
+
+  /** Kệ người chơi đang tự nạp (ô đầu tiên trong hàng đợi nạp), để sơ đồ trực tiếp vẽ người chơi đứng ở kệ đó. */
+  playerRefillShelf(): number | null {
+    return this.refills[0]?.shelf ?? null;
   }
 
   isRefilling(shelf: number, slot: number): number | null {

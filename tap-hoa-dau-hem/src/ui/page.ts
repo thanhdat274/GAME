@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { Culler, KineticScroll, snap } from './scroll';
 import { Button } from './widgets';
 import { C, H, HEX, W, txt } from './theme';
 
@@ -21,29 +22,19 @@ export class ScrollArea {
   private height = 0;
   private scroll = 0;
 
+  private kinetic: KineticScroll;
+  private culler: Culler;
+
   constructor(private scene: Phaser.Scene, readonly top: number, readonly bottom: number) {
     this.content = scene.add.container(0, top);
     const maskG = scene.make.graphics({}, false).fillRect(0, top, W, bottom - top);
     this.content.setMask(maskG.createGeometryMask());
-    let startY = 0;
-    let startScroll = 0;
-    let active = false;
-    let dragging = false;
-    scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      active = this.inView(p.worldY);
-      dragging = false;
-      startY = p.worldY;
-      startScroll = this.scroll;
-    });
-    scene.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (!active || !p.isDown) return;
-      if (!dragging && Math.abs(p.worldY - startY) < 8) return;
-      dragging = true;
-      this.setScroll(startScroll - (p.worldY - startY));
-    });
-    scene.input.on('pointerup', () => { active = false; });
-    scene.input.on('wheel', (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
-      if (this.inView(p.worldY)) this.setScroll(this.scroll + dy * 0.5);
+    this.culler = new Culler(scene.cameras.main);
+    this.kinetic = new KineticScroll(scene, {
+      inView: (y) => this.inView(y),
+      get: () => this.scroll,
+      set: (v) => this.setScroll(v),
+      max: () => this.maxScroll(),
     });
   }
 
@@ -51,22 +42,28 @@ export class ScrollArea {
     return worldY >= this.top && worldY <= this.bottom;
   }
 
-  /** Bọc hành động chạm: bỏ qua nếu điểm chạm nằm ngoài vùng hiển thị (nút bị cuộn khuất). */
+  /** Bọc hành động chạm: bỏ qua nếu điểm chạm nằm ngoài vùng hiển thị (nút bị cuộn khuất) hoặc là thao tác cuộn. */
   guard(fn: () => void): () => void {
     return () => {
+      if (this.kinetic.blockTap) return;
       if (this.inView(this.scene.input.activePointer.worldY)) fn();
     };
   }
 
   setHeight(h: number): void {
     this.height = h;
+    this.culler.reset();
     this.setScroll(this.scroll);
   }
 
+  private maxScroll(): number {
+    return Math.max(0, this.height - (this.bottom - this.top));
+  }
+
   setScroll(y: number): void {
-    const max = Math.max(0, this.height - (this.bottom - this.top));
-    this.scroll = Phaser.Math.Clamp(y, 0, max);
-    this.content.y = this.top - this.scroll;
+    this.scroll = Phaser.Math.Clamp(y, 0, this.maxScroll());
+    this.content.y = snap(this.top - this.scroll);
+    this.culler.cull(this.content, this.top, this.bottom);
   }
 
   clear(): void {

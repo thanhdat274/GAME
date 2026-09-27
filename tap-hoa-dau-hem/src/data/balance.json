@@ -11,6 +11,7 @@
   "maxShoppers": 3,
   "baseSpawnSeconds": 5.5,
   "queuePatienceRate": 0.5,
+  "topDown": { "playerTilesPerSecond": 4, "awayPatienceRate": 0.6 },
   "zoneWalkSeconds": 1.2,
   "pickSeconds": 0.8,
   "shopBudgetFactor": 1.8,

@@ -272,6 +272,8 @@ export interface Settings {
   autoChange: boolean;
   /** Tự quét toàn bộ giỏ khi khách đến quầy. Mặc định tắt để người chơi làm quen. */
   autoScan: boolean;
+  /** Góc nhìn lúc bán: 'side' = nhìn ngang (mặc định), 'topdown' = sơ đồ trên xuống, tự đi lại. */
+  viewMode?: 'side' | 'topdown';
 }
 
 export interface SaveSync {
