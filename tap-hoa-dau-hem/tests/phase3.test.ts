@@ -229,7 +229,8 @@ describe('chỉ số và tâm trạng nhân viên', () => {
     const a = addStaff(s, 'cashier', { accuracy: 2, speed: 9, stamina: 10 });
     DATA.balance.staff.expPerLevel = 1e9; // giữ nguyên chỉ số (không lên cấp) trong phép đo
     let served = 0;
-    for (let day = 0; day < 40 && a.lifetime.served < 1200; day++) {
+    // Đo trên ~3000 lượt để sai số thống kê nhỏ (≈0.5%), không phụ thuộc cách bày kệ của từng ngày.
+    for (let day = 0; day < 100 && a.lifetime.served < 3000; day++) {
       s.warehouse = [];
       restockAll(s, 60);
       openShop(s);
@@ -241,7 +242,7 @@ describe('chỉ số và tâm trạng nhân viên', () => {
       a.mood = 80;
     }
     const rate = a.lifetime.mistakes / a.lifetime.served;
-    expect(a.lifetime.served).toBeGreaterThan(1000);
+    expect(a.lifetime.served).toBeGreaterThan(2500);
     expect(rate).toBeGreaterThan(0.085);
     expect(rate).toBeLessThan(0.115);
   }, 30_000);
