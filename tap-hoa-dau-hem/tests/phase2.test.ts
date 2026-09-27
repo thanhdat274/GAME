@@ -12,7 +12,7 @@ import { checkAchievements, claimQuest, ensureDailyQuests, questDef, questDone, 
 import { Rng } from '../src/core/rng';
 import { exportBackupCode, importBackupCode, migrate } from '../src/core/save';
 import {
-  assignSlot, buyStock, checkCart, discardLot, electricityCost, expireLots, lineCost, priceFactor, receiveDeliveries,
+  assignCounterSlot, assignSlot, buyStock, checkCart, discardLot, electricityCost, expireLots, lineCost, priceFactor, receiveDeliveries,
   refillSlot, sellFixture, setClearance, slotFreshness, stowHolding, unitCost, upgradeWarehouse, warehouseCapacity,
 } from '../src/core/stock';
 import { createNewGame, lotsFrom, shelfKind, warehouseQty, type GameState } from '../src/core/state';
@@ -440,6 +440,62 @@ describe('phiên bán giai đoạn 2', () => {
     }
     expect(left).toBeGreaterThan(8);
     expect(capped).toBeGreaterThan(8);
+  });
+
+  it('chơi hộ: bớt khi khách xin tới 10%, xin 15% thì không bớt', () => {
+    const answer = (pct: number) => {
+      const t = lvl(9);
+      t.warehouse = lotsFrom({ gao: 20 });
+      assignSlot(t, 0, 0, 'gao');
+      openShop(t);
+      const e = new DaySession(t, 5);
+      forceOrder(e, [line('gao', 1)], { bargainPct: pct, wantsCredit: false });
+      tickUntil(e, () => e.front?.status === 'scanning');
+      e.scanAll();
+      const c = e.front!;
+      expect(c.status).toBe('bargain');
+      e.autoPlayer = true;
+      e.update(0.1);
+      return c;
+    };
+    expect(answer(10).discountPct).toBe(10);
+    const refused = answer(15);
+    expect(refused.bargainResolved).toBe(true);
+    expect(refused.discountPct ?? 0).toBe(0);
+  });
+
+  it('chơi hộ: quầy rảnh thì nạp ô kệ vơi dưới ngưỡng; "Bỏ qua ngày" không tự nạp', () => {
+    const run = (autoRefill: boolean) => {
+      const t = lvl(9);
+      t.warehouse = lotsFrom({ gao: 20 });
+      assignSlot(t, 0, 0, 'gao');
+      t.shelves[0][0].qty = 1;
+      t.shelves[0][0].lots = [{ qty: 1, exp: null }];
+      t.warehouse = lotsFrom({ gao: 20 });
+      openShop(t);
+      const e = new DaySession(t, 5);
+      e.autoPlayer = true;
+      e.autoRefill = autoRefill;
+      for (let i = 0; i < 20; i++) e.update(0.1);
+      return t.shelves[0][0].qty;
+    };
+    expect(run(true)).toBeGreaterThan(1);
+    expect(run(false)).toBe(1);
+  });
+
+  it('chơi hộ: quầy rảnh thì nạp cả ô sau quầy đang vơi', () => {
+    const t = lvl(9);
+    t.warehouse = lotsFrom({ the_cao: 20 });
+    assignCounterSlot(t, 0, 'the_cao');
+    t.counter[0].qty = 1;
+    t.counter[0].lots = [{ qty: 1, exp: null }];
+    t.warehouse = lotsFrom({ the_cao: 20 });
+    openShop(t);
+    const e = new DaySession(t, 5);
+    e.autoPlayer = true;
+    e.autoRefill = true;
+    for (let i = 0; i < 20; i++) e.update(0.1);
+    expect(t.counter[0].qty).toBe(DATA.balance.counterCapacity);
   });
 
   it('khách ghi sổ: cho nợ ghi vào sổ, không cho thì khách bỏ về 2 sao', () => {

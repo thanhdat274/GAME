@@ -123,6 +123,8 @@ export class MorningScene extends Phaser.Scene {
   private pauseLayer: Phaser.GameObjects.Container | null = null;
   private supplierId = 'co_tu';
   private supplierBtns: Record<string, Button> = {};
+  private supplierNote: Phaser.GameObjects.Text | null = null;
+  private listTop = LIST_TOP;
   private menuBtn!: Button;
 
   constructor() {
@@ -351,6 +353,8 @@ export class MorningScene extends Phaser.Scene {
     this.buyLayer = this.add.container(0, 0);
     const supplierLabel = txt(this, 12, 98, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay', { size: 12, color: HEX.muted });
     this.supplierBtns = {};
+    this.supplierNote = null;
+    this.listTop = LIST_TOP;
     if (supplierUnlocked(G.state, 'anh_ba')) {
       supplierLabel.setVisible(false);
       DATA.suppliers.forEach((sp, i) => {
@@ -358,9 +362,13 @@ export class MorningScene extends Phaser.Scene {
         this.supplierBtns[sp.id] = b;
         this.buyLayer.add(b);
       });
+      // Dòng ghi chú mối đang chọn nằm dưới hai nút, đẩy danh sách xuống một chút.
+      this.supplierNote = txt(this, 12, 118, '', { size: 10, color: HEX.muted });
+      this.buyLayer.add(this.supplierNote);
+      this.listTop = LIST_TOP + 14;
     }
-    this.list = this.add.container(0, LIST_TOP + 16);
-    const maskG = this.make.graphics({}, false).fillRect(0, LIST_TOP + 14, W, LIST_BOTTOM - LIST_TOP - 14);
+    this.list = this.add.container(0, this.listTop + 16);
+    const maskG = this.make.graphics({}, false).fillRect(0, this.listTop + 14, W, LIST_BOTTOM - this.listTop - 14);
     this.list.setMask(maskG.createGeometryMask());
     this.buyLayer.add([supplierLabel, this.list]);
 
@@ -422,15 +430,15 @@ export class MorningScene extends Phaser.Scene {
   }
 
   private enableListScroll(): void {
-    const top = LIST_TOP + 16;
-    const viewTop = LIST_TOP + 14;
+    const top = this.listTop + 16;
+    const viewTop = this.listTop + 14;
     const culler = new Culler(this.cameras.main);
     const setList = (offset: number) => {
       this.list.y = snap(top - offset);
       culler.cull(this.list, viewTop, LIST_BOTTOM);
     };
     this.listScroll = new KineticScroll(this, {
-      inView: (y) => y > LIST_TOP && y < LIST_BOTTOM,
+      inView: (y) => y > this.listTop && y < LIST_BOTTOM,
       enabled: () => this.tab === 'buy',
       get: () => top - this.list.y,
       set: setList,
@@ -443,7 +451,7 @@ export class MorningScene extends Phaser.Scene {
     // Nút đã cuộn ra ngoài vùng danh sách (bị che), hoặc chạm là để cuộn / dừng trôi, thì không nhận.
     if (this.listScroll?.blockTap) return;
     const y = this.input.activePointer.worldY;
-    if (y < LIST_TOP + 14 || y > LIST_BOTTOM) return;
+    if (y < this.listTop + 14 || y > LIST_BOTTOM) return;
     const next = Math.max(0, (this.cart[id] ?? 0) + delta);
     const trial = { ...this.cart, [id]: next };
     const check = checkCart(G.state, trial, this.supplierId);
@@ -867,6 +875,7 @@ export class MorningScene extends Phaser.Scene {
     this.hud.refresh();
     if (this.tab === 'buy') {
       for (const [id, b] of Object.entries(this.supplierBtns)) b.setColor(id === this.supplierId ? C.red : C.wood);
+      this.supplierNote?.setText(supplier(this.supplierId).note);
       for (const r of this.rows) {
         const q = this.cart[r.p.id] ?? 0;
         r.qty.setText(String(q));

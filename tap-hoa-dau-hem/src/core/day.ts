@@ -33,7 +33,7 @@ import {
   formatClock,
 } from './state';
 import {
-  assignSlot, canRefill, electricityCost, expireLots, putIntoSlot, receiveDeliveries, refillSlot, shelfCapacity, slotUnitPrice, stowHolding,
+  assignSlot, canRefill, electricityCost, refillCounterSlot, expireLots, putIntoSlot, receiveDeliveries, refillSlot, shelfCapacity, slotUnitPrice, stowHolding,
   findSlotWith, takeLots, takeOneFromSlot, zoneOf, type DeliveryResult,
   spoilFrozenStock,
 } from './stock';
@@ -197,6 +197,8 @@ export class DaySession {
   autoPlayer = false;
   /** Giây giữa hai thao tác của người chơi tự động (0 = tức thì). */
   autoPlayerReact = 0;
+  /** Người chơi tự động nạp kệ lúc quầy rảnh (chơi hộ khi người chơi rảnh tay; "Bỏ qua ngày" không bật). */
+  autoRefill = false;
   private autoCooldown = 0;
 
   private rng: Rng;
@@ -1824,7 +1826,10 @@ export class DaySession {
       return;
     }
     const c = this.front;
-    if (!c || c.status === 'waiting') return;
+    if (!c || c.status === 'waiting') {
+      if (this.autoRefill && this.autoRefillOne()) this.autoCooldown = this.autoPlayerReact;
+      return;
+    }
     this.autoCooldown = this.autoPlayerReact;
     if (c.status === 'scanning' && !c.counterRequestResolved) {
       const line = c.order.find((item) => item.counterLine && item.picked === 0 && item.missing === 0);
@@ -1838,9 +1843,41 @@ export class DaySession {
       if (this.autoPlayerReact > 0 && line) this.scanItem(line.productId);
       else this.scanAll(true);
     }
-    if (c.status === 'bargain') this.resolveBargain(true);
+    // Bớt như nhân viên: chỉ nhận khi khách xin không quá ngưỡng, xin nhiều hơn thì từ chối.
+    if (c.status === 'bargain') this.resolveBargain((c.bargainPct ?? 0) <= DATA.balance.staff.bargainAcceptMax);
     if (c.status === 'credit') this.resolveCredit(canGiveCredit(this.state, orderTotal(c, this.state)));
     if (c.status === 'paying') this.autoChange();
+  }
+
+  /**
+   * Quầy rảnh thì nạp ô vơi nhất (dưới ngưỡng nạp của nhân viên), mỗi lần một ô: ô kệ mất vài giây như người chơi chạm nạp,
+   * ô sau quầy lấy từ kho ngay như lúc người chơi tự bày. Bỏ qua ô kệ nhân viên đã nhận.
+   */
+  private autoRefillOne(): boolean {
+    if (this.refills.length) return false;
+    const threshold = DATA.balance.staff.refillThreshold;
+    let best: { shelf: number; slot: number; fill: number } | null = null;
+    for (const shelf of usableShelves(this.state)) {
+      const capacity = shelfCapacity(this.state, shelf);
+      this.state.shelves[shelf].forEach((item, slot) => {
+        const fill = item.qty / capacity;
+        if (fill >= threshold || !canRefill(this.state, shelf, slot)) return;
+        const claimed = this.tasks.get(`refill:${shelf}:${slot}`)?.claimedBy;
+        if (claimed && claimed !== PLAYER) return;
+        if (!best || fill < best.fill) best = { shelf, slot, fill };
+      });
+    }
+    // Ô sau quầy dùng shelf = -1.
+    this.state.counter.forEach((item, slot) => {
+      if (!item.productId) return;
+      const fill = item.qty / DATA.balance.counterCapacity;
+      if (fill >= threshold || warehouseQty(this.state, item.productId) <= 0) return;
+      if (!best || fill < best.fill) best = { shelf: -1, slot, fill };
+    });
+    const pick = best as { shelf: number; slot: number } | null;
+    if (!pick) return false;
+    if (pick.shelf < 0) return refillCounterSlot(this.state, pick.slot) > 0;
+    return this.startRefill(pick.shelf, pick.slot);
   }
 }
 
