@@ -359,6 +359,15 @@
   "chain": {
     "maxStores": 6
   },
+  "stickyRice": {
+    "soakMinMinutes": 360,
+    "soakMaxMinutes": 1440,
+    "kgPerSoakTank": 10,
+    "portionsPerKg": 5,
+    "warmMinutes": 300,
+    "coldQualityCap": 0.85,
+    "steamSeconds": 10
+  },
   "tax": {
     "yearlyThreshold": 25000000,
     "rates": {

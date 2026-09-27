@@ -1,5 +1,8 @@
 import { DATA, product } from './data';
+import type { Rng } from './rng';
+import { activeShopType } from './shopTypes';
 import { formatMoney, type DiningTableState, type GameState } from './state';
+import { takeLots } from './stock';
 import { recordTaxableRevenue } from './tax';
 
 const TABLE_TYPES = new Set(['food_table_2', 'food_table_4', 'drink_table_2']);
@@ -47,6 +50,36 @@ export function tickDining(state: GameState, seconds: number): DiningTableState[
     }
   }
   return changed;
+}
+
+/**
+ * Khách vừa ngồi gọi thêm đồ uống kèm của loại tiệm (tiệm xôi: trà đá, sữa đậu nành) theo xác suất.
+ * Lấy thẳng từ kho; hết hàng thì ghi thiếu. Trả các món đã phục vụ.
+ */
+export function serveDiningAddOns(state: GameState, table: DiningTableState, rng: Rng): string[] {
+  const served: string[] = [];
+  for (const addOn of activeShopType(state).def.addOns) {
+    if (table.extraOrders >= DATA.balance.dining.maxExtraOrders || rng.next() >= addOn.chance) continue;
+    const item = product(addOn.productId);
+    if (!takeLots(state, item.id, 1).length) {
+      state.today.missed[item.id] = (state.today.missed[item.id] ?? 0) + 1;
+      continue;
+    }
+    const amount = state.prices[item.id] ?? item.price;
+    state.money += amount;
+    state.today.revenue += amount;
+    state.today.cogs += item.cost;
+    state.today.sold[item.id] = (state.today.sold[item.id] ?? 0) + 1;
+    state.today.itemsScanned++;
+    state.exp += DATA.balance.expPerItem;
+    state.today.expGained += DATA.balance.expPerItem;
+    state.lifetime.sold++;
+    table.extraOrders++;
+    table.secondsLeft += DATA.balance.dining.extraOrderSeconds;
+    state.today.journal.push({ m: state.clock, t: `Khách ngồi gọi thêm ${item.name}` });
+    served.push(item.id);
+  }
+  return served;
 }
 
 export function cleanDiningTable(state: GameState, fixtureUid: number): boolean {

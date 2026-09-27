@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import saveV5 from './fixtures/save-v5.json';
 import { branchAvailable, openBranch, visitStore } from '../src/core/branches';
 import { DATA, type ShopTypeDef } from '../src/core/data';
-import { buyFixture } from '../src/core/layout';
+import { buyFixture, checkPaths } from '../src/core/layout';
 import { expirePreparedFood, prepareRecipe } from '../src/core/recipes';
 import { CURRENT_VERSION, PRE_MIGRATE_KEY, SAVE_KEY, loadGame, migrate, saveGame, type KeyValueStore } from '../src/core/save';
 import { activeShopType, shopTypeOf, validateShopTypes } from '../src/core/shopTypes';
@@ -14,23 +14,12 @@ function memoryStore(): KeyValueStore & { data: Map<string, string> } {
   return { data, getItem: (k) => data.get(k) ?? null, setItem: (k, v) => { data.set(k, v); }, removeItem: (k) => { data.delete(k); } };
 }
 
-/** Bật tạm tính năng `shop_xoi` ở L29 (dữ liệu thật được thêm ở đợt B). */
-function withXoiFeature(): () => void {
-  const l29 = DATA.levels.levels[28];
-  const before = l29.features;
-  l29.features = [...(before ?? []), 'shop_xoi'];
-  return () => { l29.features = before; };
-}
-
 function chainState(level = 35): GameState {
   const state = createNewGame();
   state.level = level;
   state.money = 10_000_000;
   return state;
 }
-
-let restore: (() => void) | null = null;
-afterEach(() => { restore?.(); restore = null; });
 
 describe('storeView: đọc/ghi tiệm không đứng', () => {
   it('tiệm đang đứng trả chính state; tiệm khác trả snapshot sống', () => {
@@ -105,7 +94,9 @@ describe('shopTypes.json', () => {
     const grocery = activeShopType(state);
     expect(grocery.def.sim).toBe('profit_average');
     expect(grocery.densityAt(500)).toBeNull();
-    expect(DATA.furniture.every((f) => grocery.allowsFixture(f.id))).toBe(true);
+    const xoiOnly = ['thung_ngam', 'xung_hap', 'quay_xoi'];
+    expect(DATA.furniture.filter((f) => !xoiOnly.includes(f.id)).every((f) => grocery.allowsFixture(f.id))).toBe(true);
+    expect(xoiOnly.some((id) => grocery.allowsFixture(id))).toBe(false);
     const all = unlockedProducts(40, state).map((p) => p.id);
     const unfiltered = DATA.products.filter((p) => !p.recipeOnly && !p.eventOnly && p.unlockLevel <= 40).map((p) => p.id);
     expect(all).toEqual(unfiltered);
@@ -121,12 +112,12 @@ describe('shopTypes.json', () => {
 });
 
 describe('mở tiệm theo loại, giới hạn chuỗi', () => {
-  it('Tiệm xôi chỉ hiện và mở được khi có tính năng shop_xoi', () => {
-    const state = chainState(29);
+  it('Tiệm xôi mở từ L29 nhờ tính năng shop_xoi', () => {
+    const state = chainState(28);
     const def = DATA.branches.find((b) => b.id === 'xoi')!;
     expect(branchAvailable(state, def)).toBe(false);
     expect(openBranch(state, 'xoi')).toEqual({ ok: false, reason: 'locked' });
-    restore = withXoiFeature();
+    state.level = 29;
     expect(branchAvailable(state, def)).toBe(true);
     const result = openBranch(state, 'xoi');
     expect(result.ok).toBe(true);
@@ -134,18 +125,22 @@ describe('mở tiệm theo loại, giới hạn chuỗi', () => {
     const store = state.stores.find((s) => s.id === 'xoi')!;
     expect(store.shopType).toBe('xoi');
     expect(state.stores.find((s) => s.id === 'main')!.shopType).toBe('grocery');
-    expect(state.fixtures.map((f) => f.type)).toEqual(['counter', 'food_table_2']);
+    expect(state.fixtures.map((f) => f.type)).toEqual(['counter', 'thung_ngam', 'xung_hap', 'quay_xoi', 'food_table_2']);
+    expect(checkPaths(state).ok).toBe(true);
     expect(state.diningTables).toHaveLength(1);
-    expect(state.soakBatches).toEqual([]);
+    expect(state.soakBatches).toEqual([{ id: 'soak-starter', kg: 3, startDay: state.day - 1, startMinute: 1200 }]);
+    expect(state.morningNotes.some((note) => note.includes('ngâm sẵn'))).toBe(true);
     expect(activeShopType(state).def.id).toBe('xoi');
   });
 
   it('ở tiệm xôi: Sắp xếp và Nhập hàng chỉ có món loại tiệm cho phép', () => {
-    restore = withXoiFeature();
     const state = chainState(35);
     openBranch(state, 'xoi');
     expect(buyFixture(state, 'freezer', 0, 5, 0)).toBe('shop');
-    expect(unlockedProducts(state.level, state).map((p) => p.id)).toEqual(['trung_ga']);
+    expect(unlockedProducts(state.level, state).map((p) => p.id).sort()).toEqual(
+      ['bao_goi', 'cha_bong', 'dau_xanh', 'dua_nao', 'hanh_phi', 'lap_xuong', 'nep', 'sua_dau_nanh', 'tra_da', 'trung_ga'],
+    );
+    expect(buyFixture(state, 'food_table_2', 3, 6, 0)).not.toBe('plot'); // tiệm xôi không dùng mảnh đất
     visitStore(state, 'main');
     expect(buyFixture(state, 'freezer', 3, 5, 0)).not.toBe('shop');
     expect(unlockedProducts(state.level, state).length).toBeGreaterThan(20);
@@ -195,11 +190,10 @@ describe('bản lưu v6', () => {
   });
 
   it('mẻ ngâm, nếp chín và đơn định kỳ được lưu/tải nguyên vẹn; 6 tiệm < 1 MB', () => {
-    restore = withXoiFeature();
     const state = chainState(40);
     for (const id of ['xoi', 'market', 'school', 'industrial']) { openBranch(state, id); visitStore(state, 'main'); }
     activateStore(state, 'xoi');
-    state.soakBatches.push({ id: 'soak-1', kg: 5, startDay: state.day, startMinute: 1200 });
+    state.soakBatches = [{ id: 'soak-1', kg: 5, startDay: state.day, startMinute: 1200 }];
     state.cookedRice.push({ portions: 18, cookedDay: state.day, cookedMinute: 360, quality: 0.9 });
     state.recurringOrders.push({ id: 'rec-1', fromStoreId: 'xoi', toStoreId: 'main', items: { trung_ga: 10 }, active: true, shortStreak: 0 });
     activateStore(state, 'main');

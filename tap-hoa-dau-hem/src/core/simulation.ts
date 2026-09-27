@@ -62,7 +62,8 @@ export function createMaxLevelSimulation(): GameState {
     state.zones[index] = category;
   });
 
-  for (const branch of DATA.branches) openBranch(state, branch.id);
+  // Tiệm xôi (mô phỏng sản xuất) được thêm vào hồ sơ này ở đợt C.
+  for (const branch of DATA.branches.filter((b) => (b.shopType ?? 'grocery') === 'grocery')) openBranch(state, branch.id);
   visitStore(state, 'main');
   ensureDiningTables(state);
   state.phase = 'morning';

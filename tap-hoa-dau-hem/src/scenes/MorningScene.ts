@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DATA, hasFeature, product, supplier, type Category, type Product } from '../core/data';
+import { activeShopType } from '../core/shopTypes';
 import { openShop, setManagerMode } from '../core/day';
 import { shiftsWithoutCashier } from '../core/schedule';
 import { letGo, retainStaff } from '../core/staff';
@@ -309,8 +310,9 @@ export class MorningScene extends Phaser.Scene {
     if (hasFeature(s.level, 'stocker') || hasFeature(s.level, 'autorestock')) items.push({ label: '⚙️ Quy tắc', color: C.blue, onTap: go('Rules') });
     if (hasFeature(s.level, 'analytics')) items.push({ label: '📊 Phân tích', color: C.blue, onTap: go('Analytics') });
     if (hasFeature(s.level, 'calendar')) items.push({ label: '🗓️ Lịch', color: C.blue, onTap: go('Calendar') });
-    if (hasFeature(s.level, 'food_corner')) items.push({ label: '🍳 Bếp & quầy nước', color: C.green, onTap: go('Kitchen') });
-    if (hasFeature(s.level, 'branches')) items.push({ label: '🗺️ Bản đồ thành phố', color: C.blue, onTap: go('Branches') });
+    const xoiShop = s.stores.find((store) => store.id === s.activeStoreId)?.shopType === 'xoi';
+    if (hasFeature(s.level, 'food_corner') || xoiShop) items.push({ label: xoiShop ? '🍙 Bếp xôi' : '🍳 Bếp & quầy nước', color: C.green, onTap: go('Kitchen') });
+    if (hasFeature(s.level, 'branches') || hasFeature(s.level, 'shop_xoi')) items.push({ label: '🗺️ Bản đồ thành phố', color: C.blue, onTap: go('Branches') });
     items.push({ label: '📖 Hành trình', color: C.blue, onTap: go('Story') });
     if (hasFeature(s.level, 'prestige')) items.push({ label: '🏆 Danh hiệu', color: C.yellow, onTap: go('Prestige') });
     const L = this.add.container(0, 0).setDepth(2000);
@@ -914,6 +916,25 @@ export class MorningScene extends Phaser.Scene {
       play('door');
       this.scene.start('Shop');
     };
+    // Tiệm chỉ bán ở quầy (tiệm xôi): cần món đang mở bán và có sẵn ở quầy thay vì hàng trên kệ.
+    if (activeShopType(G.state).def.service === 'counter') {
+      const menu = G.state.activeRecipes.filter((id) => activeShopType(G.state).allowsRecipe(id) && !DATA.recipes.find((r) => r.id === id)?.packaged);
+      const ready = G.state.counter.some((slot) => slot.qty > 0 && DATA.recipes.some((r) => r.output === slot.productId));
+      if (!menu.length || !ready) {
+        dialog(this, {
+          icon: '🍙',
+          title: !menu.length ? 'Chưa mở bán món nào' : 'Quầy chưa có xôi',
+          body: !menu.length ? 'Chưa mở bán món nào thì không có khách ghé. Vào Bếp xôi để mở bán món.' : 'Khách gọi mà quầy chưa có xôi sẽ phải chờ. Vào Bếp xôi hấp nếp và làm sẵn vài phần?',
+          buttons: [
+            { label: 'Vào bếp', color: C.green, onTap: () => this.scene.start('Kitchen') },
+            { label: 'Vẫn mở', color: C.red, onTap: go },
+          ],
+        });
+        return;
+      }
+      go();
+      return;
+    }
     if (!onShelf) {
       dialog(this, {
         icon: '🤔',

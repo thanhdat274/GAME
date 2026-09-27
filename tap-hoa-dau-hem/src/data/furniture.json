@@ -15,5 +15,8 @@
   { "id": "blender", "name": "Máy xay", "icon": "🌀", "kind": "drink", "w": 1, "h": 1, "slots": 0, "cost": 180000, "unlockLevel": 25, "power": 4000, "limit": 1, "requiresPlot": "F" },
   { "id": "sugarcane_press", "name": "Máy ép mía", "icon": "🎋", "kind": "drink", "w": 2, "h": 1, "slots": 0, "cost": 240000, "unlockLevel": 25, "power": 5000, "limit": 1, "requiresPlot": "F" },
   { "id": "drink_table_2", "name": "Bàn nước 2 chỗ", "icon": "🪑", "kind": "seating", "w": 1, "h": 1, "slots": 0, "cost": 50000, "unlockLevel": 25, "power": 0, "requiresPlot": "F" },
-  { "id": "generator", "name": "Máy phát điện", "icon": "⚡", "kind": "generator", "w": 2, "h": 1, "slots": 0, "cost": 360000, "unlockLevel": 21, "power": 0, "limit": 1 }
+  { "id": "generator", "name": "Máy phát điện", "icon": "⚡", "kind": "generator", "w": 2, "h": 1, "slots": 0, "cost": 360000, "unlockLevel": 21, "power": 0, "limit": 1 },
+  { "id": "thung_ngam", "name": "Thùng ngâm nếp", "icon": "🪣", "kind": "food", "w": 1, "h": 1, "slots": 0, "cost": 120000, "unlockLevel": 29, "power": 0, "limit": 3 },
+  { "id": "xung_hap", "name": "Xửng hấp xôi", "icon": "♨️", "kind": "food", "w": 1, "h": 1, "slots": 0, "cost": 320000, "unlockLevel": 29, "power": 4000, "limit": 2 },
+  { "id": "quay_xoi", "name": "Quầy xôi", "icon": "🍙", "kind": "food", "w": 1, "h": 1, "slots": 0, "cost": 180000, "unlockLevel": 29, "power": 1000, "limit": 1 }
 ]

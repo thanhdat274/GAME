@@ -131,5 +131,22 @@
   {"id": "gia_do", "name": "Giá đỗ", "category": "fresh", "icon": "🌱", "color": "#f1f8e9", "cost": 4000, "price": 6000, "size": 1, "unlockLevel": 9, "requiresCold": "fridge", "shelfLifeDays": 1},
   {"id": "kem_oc_que", "name": "Kem ốc quế", "category": "frozen", "icon": "🍦", "color": "#ffe082", "cost": 9000, "price": 13000, "size": 1, "unlockLevel": 10, "requiresCold": "freezer", "shelfLifeDays": 30},
   {"id": "banh_bao", "name": "Bánh bao đông lạnh", "category": "frozen", "icon": "🥟", "color": "#fffde7", "cost": 20000, "price": 27000, "size": 2, "unlockLevel": 12, "requiresCold": "freezer", "shelfLifeDays": 30},
-  {"id": "ca_basa", "name": "Cá basa phi lê", "category": "frozen", "icon": "🐟", "color": "#ffab91", "cost": 45000, "price": 58000, "size": 2, "unlockLevel": 14, "requiresCold": "freezer", "shelfLifeDays": 30}
+  {"id": "ca_basa", "name": "Cá basa phi lê", "category": "frozen", "icon": "🐟", "color": "#ffab91", "cost": 45000, "price": 58000, "size": 2, "unlockLevel": 14, "requiresCold": "freezer", "shelfLifeDays": 30},
+  {"id": "nep", "name": "Nếp cái (1kg)", "category": "dry", "icon": "🌾", "color": "#f5f0dc", "cost": 28000, "price": 36000, "size": 2, "unlockLevel": 29, "shelfLifeDays": 180},
+  {"id": "dau_xanh", "name": "Đậu xanh cà vỏ", "category": "dry", "icon": "🫘", "color": "#e6c35c", "cost": 2500, "price": 4000, "size": 1, "unlockLevel": 29, "shelfLifeDays": 90},
+  {"id": "hanh_phi", "name": "Hành phi", "category": "dry", "icon": "🧅", "color": "#c98b3c", "cost": 1500, "price": 2500, "size": 1, "unlockLevel": 29, "shelfLifeDays": 60},
+  {"id": "cha_bong", "name": "Chà bông", "category": "dry", "icon": "🥩", "color": "#d99a5b", "cost": 4000, "price": 6000, "size": 1, "unlockLevel": 29, "shelfLifeDays": 30},
+  {"id": "lap_xuong", "name": "Lạp xưởng", "category": "dry", "icon": "🌭", "color": "#b23a3a", "cost": 4000, "price": 6000, "size": 1, "unlockLevel": 29, "shelfLifeDays": 60},
+  {"id": "dua_nao", "name": "Dừa nạo", "category": "fresh", "icon": "🥥", "color": "#f7f4ee", "cost": 2500, "price": 4000, "size": 1, "unlockLevel": 29, "shelfLifeDays": 2},
+  {"id": "bao_goi", "name": "Lá chuối & hộp giấy", "category": "household", "icon": "🍃", "color": "#7cb342", "cost": 1000, "price": 2000, "size": 1, "unlockLevel": 29},
+  {"id": "tra_da", "name": "Trà đá (ly)", "category": "drink", "icon": "🧊", "color": "#c8a165", "cost": 1000, "price": 3000, "size": 1, "unlockLevel": 29, "prefersCold": true, "shelfLifeDays": 1},
+  {"id": "nep_chin", "name": "Nếp chín (phần)", "category": "dry", "icon": "🍚", "color": "#fffde7", "cost": 5600, "price": 5600, "size": 1, "unlockLevel": 29, "recipeOnly": true, "shelfLifeDays": 1},
+  {"id": "xoi_dau_xanh_tp", "name": "Xôi đậu xanh", "category": "counter", "icon": "🍙", "color": "#e8d27a", "cost": 8100, "price": 15000, "size": 1, "unlockLevel": 29, "behindCounter": true, "recipeOnly": true, "shelfLifeDays": 1},
+  {"id": "xoi_dau_xanh_goi", "name": "Xôi đậu xanh gói", "category": "counter", "icon": "🍙", "color": "#e8d27a", "cost": 9100, "price": 15000, "size": 1, "unlockLevel": 29, "behindCounter": true, "recipeOnly": true, "shelfLifeDays": 1},
+  {"id": "xoi_man_tp", "name": "Xôi mặn", "category": "counter", "icon": "🍱", "color": "#d98c5f", "cost": 15100, "price": 25000, "size": 1, "unlockLevel": 29, "behindCounter": true, "recipeOnly": true, "shelfLifeDays": 1},
+  {"id": "xoi_man_goi", "name": "Xôi mặn gói", "category": "counter", "icon": "🍱", "color": "#d98c5f", "cost": 16100, "price": 22000, "size": 1, "unlockLevel": 29, "behindCounter": true, "recipeOnly": true, "shelfLifeDays": 1},
+  {"id": "xoi_trung_tp", "name": "Xôi trứng", "category": "counter", "icon": "🍳", "color": "#ffd54f", "cost": 9600, "price": 18000, "size": 1, "unlockLevel": 29, "behindCounter": true, "recipeOnly": true, "shelfLifeDays": 1},
+  {"id": "xoi_trung_goi", "name": "Xôi trứng gói", "category": "counter", "icon": "🍳", "color": "#ffd54f", "cost": 10600, "price": 18000, "size": 1, "unlockLevel": 29, "behindCounter": true, "recipeOnly": true, "shelfLifeDays": 1},
+  {"id": "xoi_dua_tp", "name": "Xôi dừa", "category": "counter", "icon": "🥥", "color": "#fbf8f0", "cost": 8100, "price": 12000, "size": 1, "unlockLevel": 29, "behindCounter": true, "recipeOnly": true, "shelfLifeDays": 1},
+  {"id": "xoi_dua_goi", "name": "Xôi dừa gói", "category": "counter", "icon": "🥥", "color": "#fbf8f0", "cost": 9100, "price": 15000, "size": 1, "unlockLevel": 29, "behindCounter": true, "recipeOnly": true, "shelfLifeDays": 1}
 ]

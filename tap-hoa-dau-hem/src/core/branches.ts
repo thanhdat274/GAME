@@ -77,6 +77,11 @@ export function openBranch(state: GameState, id: string): OpenBranchResult {
   state.activeRecipes = [];
   state.soakBatches = [];
   state.cookedRice = [];
+  if ((branch.shopType ?? 'grocery') === 'xoi') {
+    // Quà mở tiệm: một mẻ nếp đã ngâm từ tối qua để hấp được ngay sáng nay.
+    state.soakBatches = [{ id: 'soak-starter', kg: 3, startDay: state.day - 1, startMinute: 20 * 60 }];
+    state.morningNotes.push('🍙 Bà ngâm sẵn 3 kg nếp từ tối qua. Vào ☰ Tiệm › Bếp để hấp, mở bán món xôi rồi mở cửa. Nhớ nhập nếp và topping ở màn Nhập hàng.');
+  }
   state.branchLastSimDay[id] = state.day - 1;
   const saved = state.stores.find((store) => store.id === id)!;
   saved.simDay = state.day - 1;

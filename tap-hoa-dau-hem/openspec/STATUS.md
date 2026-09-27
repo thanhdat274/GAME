@@ -11,10 +11,10 @@
 | `phase-2-shop-expansion` | 41 | 1 | 8.2 điện thoại thật. |
 | `phase-3-staff-and-manager` | 39 | 2 | 9.3 điện thoại thật, 9.4 deploy. |
 | `topdown-store-view` | 15 | 7 | 4.2–4.4 điện thoại/người chơi/deploy; 5.1–5.4 để cho change sau. |
-| `sticky-rice-shop` | 6 | 31 | Đợt A xong (storeView, shopTypes, save v6, giới hạn 6 tiệm); tiếp Đợt B (nguyên liệu, ngâm/hấp, món). |
+| `sticky-rice-shop` | 19 | 18 | Đợt A, B (trừ 3.9 chơi thử một ngày trên điện thoại) xong; tiếp Đợt C (đặt hàng nội bộ, thợ nấu xôi, mô phỏng sản xuất). |
 | `phase-4-events-food-branches` | — | — | Đã lưu trữ (`archive/2026-09-27-…`). |
 
-Tổng còn mở: 60 task (27/09/2026).
+Tổng còn mở: 47 task (27/09/2026).
 
 ## Kiểm tra trong repo
 
@@ -86,3 +86,12 @@ Không đánh dấu hoàn thành các task yêu cầu thiết bị thật, Conso
 - Bản lưu v6 (`shopType`, `internalOrders`, `recurringOrders`, `soakBatches`, `cookedRice`) + migrate v5→v6, fixture `tests/fixtures/save-v5.json` 3 tiệm.
 - Giới hạn chuỗi đọc từ `balance.json › chain.maxStores` = 6. Khu Tiệm xôi đã có trong `branches.json` nhưng khóa bằng tính năng `shop_xoi` (thêm vào L29 ở Đợt B), nên người chơi chưa thấy thay đổi.
 - Vitest 441/441, build, `validate:events`, `validate:recipes` qua; chạy bản build ở 375×812 với bản lưu v5 thấy tạp hóa như cũ.
+
+## Tiệm xôi — Đợt B (27/09/2026)
+
+- Dữ liệu: nguyên liệu xôi mở ở L29 (bán cả ở tạp hóa), trà đá, 4 món xôi + 4 món xôi gói, biến thể "Thêm topping" tốn thêm nguyên liệu, thùng ngâm/xửng hấp/quầy xôi, `balance.stickyRice`, L29 thêm `shop_xoi`.
+- Core `stickyRice.ts`: ngâm (≥ 6 giờ, chua sau 24 giờ), hấp ra nếp chín (5 phần/kg), giữ nóng 5 giờ, nếp nguội chặn chất lượng, bỏ nếp thừa cuối ngày; `prepareRecipe` lấy `nep_chin` từ mẻ hấp cũ nhất.
+- Khách tiệm xôi gọi 1–3 món ở quầy theo đường cong mật độ riêng; 40% ngồi ăn nếu còn bàn sạch và có thể gọi thêm trà đá/sữa đậu nành. Tạp hóa không nấu được xôi.
+- UI: màn Bếp xôi (ngâm, hấp, nếp chín, menu), mini-game hấp và gói, nút Bếp xôi trong bảng tạm dừng, Bản đồ mở từ L29, "Ngâm cho mai" ở tổng kết.
+- Kiểm tra: Vitest (thêm `tests/stickyRice.test.ts`, gồm một ngày tiệm xôi chạy tự động), build, validator. Trên trình duyệt 375×812 đã xem Bản đồ, Bếp xôi (ngâm thật), mở cửa và mở Bếp giữa giờ bán; trình duyệt nhúng chỉ đạt 1 FPS nên chưa chơi thử mini-game và phục vụ khách thời gian thực (task 3.9 còn mở).
+- Khác spec: tiệm xôi mở cùng giờ chung 8h–20h nên cao điểm là 8h–10h thay vì 5h–10h.

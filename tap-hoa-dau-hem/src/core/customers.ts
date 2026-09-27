@@ -2,6 +2,7 @@ import { DATA, type Category, type CustomerType } from './data';
 import type { Rng } from './rng';
 import { priceOf, unlockedCategories, unlockedProducts, usableShelves, type GameState } from './state';
 import { EffectStack } from './effects';
+import { activeShopType } from './shopTypes';
 import { customerWantsInvoice } from './tax';
 
 export interface OrderLine {
@@ -97,9 +98,14 @@ export function densityAt(minute: number): number {
   return seg ? seg.mul : 1;
 }
 
+/** Mật độ khách của tiệm đang đứng: loại tiệm có đường cong riêng (tiệm xôi đông buổi sáng). */
+export function shopDensityAt(state: GameState, minute: number): number {
+  return activeShopType(state).densityAt(minute) ?? densityAt(minute);
+}
+
 /** Thời gian trung bình (giây thật) giữa hai khách. */
-export function meanSpawnSeconds(minute: number, ratingMul: number, day = 99, eventTrafficMul = 1): number {
-  return DATA.balance.baseSpawnSeconds / (densityAt(minute) * ratingMul * newShopMultiplier(day) * eventTrafficMul);
+export function meanSpawnSeconds(minute: number, ratingMul: number, day = 99, eventTrafficMul = 1, density = densityAt(minute)): number {
+  return DATA.balance.baseSpawnSeconds / (density * ratingMul * newShopMultiplier(day) * eventTrafficMul);
 }
 
 /** Tiệm mới mở ít người biết: ngày đầu ít khách hơn. */
@@ -112,8 +118,29 @@ export function pickCustomerType(rng: Rng, types: CustomerType[] = DATA.customer
   return pool[rng.weightedIndex(pool.map((t) => t.weight))];
 }
 
+/**
+ * Tiệm chỉ bán ở quầy (tiệm xôi): khách gọi 1–3 món khác nhau trong menu đang mở bán, ưu tiên món còn ở quầy.
+ * Món hết vẫn có thể được gọi (khách sẽ thiếu món và trừ sao), giống món quầy của tạp hóa.
+ */
+export function generateCounterOrder(type: CustomerType, rng: Rng, state: GameState): OrderLine[] {
+  const shop = activeShopType(state);
+  const dishes = DATA.recipes.filter((r) => shop.allowsRecipe(r.id) && !r.packaged && r.unlockLevel <= state.level && state.activeRecipes.includes(r.id));
+  if (!dishes.length) return [];
+  const weights = [0.6, 0.3, 0.1].slice(0, Math.max(1, Math.min(3, type.maxItems)));
+  const count = Math.min(dishes.length, rng.weightedIndex(weights) + 1);
+  const lines: OrderLine[] = [];
+  for (let i = 0; i < count; i++) {
+    const pool = dishes.filter((r) => !lines.some((l) => l.productId === r.output));
+    const inStock = (id: string) => state.counter.some((slot) => slot.productId === id && slot.qty > 0);
+    const pick = pool[rng.weightedIndex(pool.map((r) => (inStock(r.output) ? 3 : 1)))];
+    lines.push({ productId: pick.output, qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [] });
+  }
+  return lines;
+}
+
 /** Sinh giỏ hàng thông thường; hàng sau quầy được thêm riêng theo xác suất của khách. */
 export function generateOrder(type: CustomerType, level: number, rng: Rng, state?: GameState, cartUnits = 0): OrderLine[] {
+  if (state && activeShopType(state).def.service === 'counter') return generateCounterOrder(type, rng, state);
   const cats = unlockedCategories(level);
   const products = unlockedProducts(level, state).filter((p) => !p.behindCounter);
   // Món đang bán xả được chọn nhiều hơn.
@@ -164,7 +191,9 @@ export function hasCarts(state: GameState | undefined, level: number): boolean {
 }
 
 export function createCustomer(id: number, level: number, rng: Rng, state?: GameState): Customer {
-  const type = pickCustomerType(rng, DATA.customers, level);
+  const allowed = state ? activeShopType(state).def.customers : null;
+  const types = allowed ? DATA.customers.filter((t) => allowed.includes(t.id)) : DATA.customers;
+  const type = pickCustomerType(rng, types, level);
   const cartCfg = DATA.balance.cart;
   const cart = hasCarts(state, level) && cartCfg.types.includes(type.id) && rng.next() < cartCfg.chance;
   const order = generateOrder(type, level, rng, state, cart ? rng.int(cartCfg.minItems, cartCfg.maxItems) : 0);

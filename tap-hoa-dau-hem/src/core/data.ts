@@ -170,6 +170,16 @@ export interface Balance {
   dining: { mealSeconds: number; extraOrderSeconds: number; maxExtraOrders: number };
   /** Giới hạn số cửa hàng trong chuỗi (tính cả tiệm chính). */
   chain: { maxStores: number };
+  /** Tiệm xôi: phút game ngâm tối thiểu/tối đa, kg mỗi thùng, phần mỗi kg, phút giữ nóng, trần chất lượng nếp nguội. */
+  stickyRice: {
+    soakMinMinutes: number;
+    soakMaxMinutes: number;
+    kgPerSoakTank: number;
+    portionsPerKg: number;
+    warmMinutes: number;
+    coldQualityCap: number;
+    steamSeconds: number;
+  };
   tax: TaxBalance;
 }
 
@@ -450,6 +460,10 @@ export interface ShopTypeDef {
   sourcesFrom: string[];
   dineInChance: number;
   addOns: { productId: string; chance: number }[];
+  /** `shelves`: khách tự lấy hàng trên kệ; `counter`: khách chỉ gọi món ở quầy (tiệm xôi). */
+  service: 'shelves' | 'counter';
+  /** Có dùng các mảnh đất mở rộng (land.json) và điều kiện `requiresPlot` của nội thất không. */
+  landPlots: boolean;
 }
 
 export interface BranchDef {
@@ -482,6 +496,8 @@ export interface RecipeDef {
   shelfLifeDays: number;
   steps: string[];
   variants?: RecipeVariant[];
+  /** Đầu ra đóng gói để bán qua tiệm khác (xôi gói); khách tại tiệm không gọi món này. */
+  packaged?: boolean;
 }
 
 export interface RecipeVariant {
@@ -489,6 +505,8 @@ export interface RecipeVariant {
   name: string;
   priceDelta: number;
   qualityDelta: number;
+  /** Nguyên liệu tốn thêm khi chọn biến thể (vd. "Thêm topping"). */
+  extraIngredients?: Record<string, number>;
 }
 
 const CATEGORIES: Category[] = ['dry', 'snack', 'household', 'drink', 'fresh', 'frozen', 'counter'];

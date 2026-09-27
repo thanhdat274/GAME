@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { DATA, product } from '../core/data';
 import { questDef, questDone } from '../core/quests';
 import { startNextDay } from '../core/day';
+import { activeShopType } from '../core/shopTypes';
+import { startSoak, suggestSoakKg } from '../core/stickyRice';
 import { formatClock, formatMoney, formatNumber, type JournalEntry } from '../core/state';
 import { G, persist } from '../game';
 import { ScrollArea, card } from '../ui/page';
@@ -184,16 +186,30 @@ export class SummaryScene extends Phaser.Scene {
         this.input.once('pointerdown', () => auto.stop());
       }
     }
+    // Tiệm xôi: ngâm nếp cho sáng mai ngay ở màn tổng kết.
+    const soakKg = !G.liveSnapshot && activeShopType(G.state).def.id === 'xoi' ? suggestSoakKg(G.state) : 0;
+    const lift = soakKg > 0 ? 46 : 0;
+    if (soakKg > 0) {
+      const soakBtn: Button = new Button(this, W / 2, H - 100, {
+        w: 220, h: 38, size: 13, color: C.green, label: `🪣 Ngâm ${soakKg} kg nếp cho mai`,
+        onTap: () => {
+          if (!startSoak(G.state, G.state, soakKg).ok) return;
+          persist();
+          soakBtn.label.setText(`✓ Đã ngâm ${soakKg} kg`);
+          soakBtn.setEnabled(false);
+        },
+      });
+    }
     if (fresh.length) {
       const bad = fresh.filter((r) => r.stars <= 2).length;
-      new Button(this, W / 2, H - (unclaimed ? 146 : 100), {
+      new Button(this, W / 2, H - (unclaimed ? 146 : 100) - lift, {
         w: 220, h: 38, size: 13, color: bad ? C.redDark : C.blue,
         label: `✍️ ${fresh.length} đánh giá mới${bad ? ` · ${bad} chê` : ''}`,
         onTap: () => this.scene.start('Reviews', { back: 'Summary' }),
       });
     }
     if (unclaimed) {
-      new Button(this, W / 2, H - 100, { w: 220, h: 40, label: `🎯 Nhận ${unclaimed} thưởng nhiệm vụ`, color: C.green, size: 13, onTap: () => this.scene.start('Quests', { back: 'Summary' }) });
+      new Button(this, W / 2, H - 100 - lift, { w: 220, h: 40, label: `🎯 Nhận ${unclaimed} thưởng nhiệm vụ`, color: C.green, size: 13, onTap: () => this.scene.start('Quests', { back: 'Summary' }) });
     }
 
     new Button(this, W / 2, H - 42, {

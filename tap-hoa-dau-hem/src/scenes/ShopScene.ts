@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { Customer } from '../core/customers';
 import type { CustomerType } from '../core/data';
 import { DATA, hasFeature, product, type Category } from '../core/data';
+import { activeShopType } from '../core/shopTypes';
 import { DaySession, endDay, runDayHeadless } from '../core/day';
 import { orderShortfall, orderUnits, tripSeconds, type PhoneOrder } from '../core/delivery';
 import { roleDef, moodLabel } from '../core/staff';
@@ -1345,7 +1346,8 @@ export class ShopScene extends Phaser.Scene {
     L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
     const hasDining = !G.liveSnapshot && ensureDiningTables(G.state).length > 0;
     const hasCloud = cloudSaveEnabled();
-    const panelH = 500 + (hasDining ? 54 : 0) + (hasCloud ? 54 : 0);
+    const hasXoiKitchen = !G.liveSnapshot && activeShopType(G.state).def.service === 'counter';
+    const panelH = 500 + (hasDining ? 54 : 0) + (hasCloud ? 54 : 0) + (hasXoiKitchen ? 54 : 0);
     const panelTop = Math.round((H - panelH) / 2);
     L.add(panel(this, 50, panelTop, W - 100, panelH));
     let y = panelTop + 32;
@@ -1447,6 +1449,17 @@ export class ShopScene extends Phaser.Scene {
       color: C.woodDark,
       onTap: () => { void checkForUpdate().then((r) => toast(this, manualCheckMessage(r))); },
     }));
+    if (hasXoiKitchen) {
+      y += 54;
+      L.add(new Button(this, W / 2, y, {
+        w: 220,
+        h: 44,
+        label: '🍙 Bếp xôi (ngâm, hấp, làm món)',
+        size: 12,
+        color: C.green,
+        onTap: () => this.openKitchen(),
+      }));
+    }
     if (hasDining) {
       y += 54;
       L.add(new Button(this, W / 2, y, {
@@ -1526,6 +1539,17 @@ export class ShopScene extends Phaser.Scene {
     setPlayClockRunning(false);
     this.scene.pause('Shop');
     this.scene.launch('Restock');
+  }
+
+  /** Tiệm xôi: màn Bếp (ngâm, hấp, làm món) phủ lên tiệm; tiệm đứng yên tới khi quay lại. */
+  private openKitchen(): void {
+    if (this.ending || G.liveSnapshot) return;
+    this.pauseLayer?.destroy();
+    this.pauseLayer = null;
+    this.session.paused = true;
+    setPlayClockRunning(false);
+    this.scene.pause('Shop');
+    this.scene.launch('Kitchen', { fromShop: true });
   }
 
   /** Nấu kỹ (mini-game) từ góc nhìn trên xuống: màn Bếp phủ lên, tiệm đứng yên tới khi quay lại. */

@@ -1,5 +1,5 @@
 import { computeTip, customerPayment, judgeChange, type ChangeResult } from './change';
-import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, type Customer, type OrderLine } from './customers';
+import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, shopDensityAt, type Customer, type OrderLine } from './customers';
 import { recordDay } from './analytics';
 import { applyPlanogram, planogramProduct, runRestockRules } from './autorestock';
 import { DATA, hasFeature, product, type Category } from './data';
@@ -12,7 +12,9 @@ import { calendarDate } from './calendar';
 import { deliverBranchShipments, simulateBranches } from './branches';
 import { prestigeRevenueMultiplier } from './prestige';
 import { prepareRecipe } from './recipes';
-import { cleanDiningTable, seatDiner, serveExtraDiningOrder, tickDining } from './dining';
+import { cleanDiningTable, seatDiner, serveDiningAddOns, serveExtraDiningOrder, tickDining } from './dining';
+import { activeShopType } from './shopTypes';
+import { discardSpoiledSoaks, spoilRiceEndOfDay } from './stickyRice';
 import { counterFixture, counterFixtures, maxQueueFor, maxShoppersFor, walkTiles, walkableGrid } from './layout';
 import { canGiveCredit, collectDebt, markBadDebts, recordDebt, repaymentsToday } from './ledger';
 import { cheapSpawnMultiplier, keepChance } from './pricing';
@@ -336,7 +338,7 @@ export class DaySession {
           const mul = ratingSpawnMultiplier(averageRating(this.state)) * attractionMultiplier(this.state) * cheapSpawnMultiplier(this.state)
             * trafficMultiplier(this.state.level);
           const effects = EffectStack.forDay(this.state.day, this.state.calendarStartMonth, this.state.calendarStartYear, this.state.activeEvents);
-          const mean = meanSpawnSeconds(this.state.clock, mul, this.state.day, effects.multiply('trafficMul'));
+          const mean = meanSpawnSeconds(this.state.clock, mul, this.state.day, effects.multiply('trafficMul'), shopDensityAt(this.state, this.state.clock));
           this.nextSpawnIn = Math.max(1, this.rng.exponential(mean));
         } else this.nextSpawnIn = 0.5;
       }
@@ -402,6 +404,8 @@ export class DaySession {
 
   private spawn(): void {
     const c = createCustomer(this.nextId++, this.state.level, this.rng, this.state);
+    // Tiệm chỉ bán ở quầy mà chưa mở bán món nào: không có khách ghé.
+    if (!c.order.length) return;
     if (hasFeature(this.state.level, 'thief') && this.rng.next() < DATA.balance.security.thiefChance) {
       c.thief = true;
       delete c.name;
@@ -873,6 +877,12 @@ export class DaySession {
 
   private maybeStartPayment(c: Customer): void {
     if (c !== this.front || c.status !== 'scanning') return;
+    // Khách gọi nhiều món ở quầy (tiệm xôi): phục vụ lần lượt từng món.
+    while (c.counterRequestResolved) {
+      const next = c.order.find((line) => line.counterLine && line.picked === 0 && line.missing === 0);
+      if (!next) break;
+      this.beginCounterRequest(c, next);
+    }
     if (!c.counterRequestResolved) return;
     if (c.order.some((line) => line.picked > line.scanned)) return;
     const total = orderTotal(c, this.state);
@@ -1117,7 +1127,10 @@ export class DaySession {
     this.state.exp += exp;
     t.expGained += exp;
     const dineTable = c.order.find((line) => line.scanned > 0 && DATA.recipes.some((recipe) => recipe.output === line.productId));
-    const seated = dineTable ? seatDiner(this.state, c.id, dineTable.productId) : null;
+    const dineChance = activeShopType(this.state).def.dineInChance;
+    const wantsSeat = !!dineTable && (dineChance >= 1 || this.rng.next() < dineChance);
+    const seated = wantsSeat ? seatDiner(this.state, c.id, dineTable!.productId) : null;
+    if (seated) serveDiningAddOns(this.state, seated, this.rng);
     this.finish(c, 'served', stars);
     if (seated) this.events.emit('diningChanged', [seated]);
     this.events.emit('sale', { customer: c, amount: c.total, tip });
@@ -1935,6 +1948,8 @@ export function endDay(state: GameState): DaySummary {
   if (outage && Number(outage.params?.outageHours ?? 0) > 3) spoilFrozenStock(state);
   receiveDeliveries(state, state.day, DATA.balance.closeMinute);
   expireLots(state, state.day);
+  // Tiệm xôi: nếp chín thừa và mẻ ngâm quá hạn bị bỏ cuối ngày.
+  spoilRiceEndOfDay(state, state);
   const power = electricityCost(state);
   state.money -= power;
   t.electricity += power;
@@ -2068,6 +2083,7 @@ export function startNextDay(state: GameState): number {
   state.clock = DATA.balance.openMinute;
   state.today = emptyStats();
   state.lastSummary = null;
+  discardSpoiledSoaks(state, state);
   updateTax(state);
   state.morningNotes.push(...taxReminders(state));
   scheduleEvents(state);

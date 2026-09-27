@@ -248,7 +248,7 @@ export function buyFixture(state: GameState, type: string, x: number, y: number,
   if (def.fixed) return 'level';
   if (!activeShopType(state).allowsFixture(type)) return 'shop';
   if (state.level < def.unlockLevel) return 'level';
-  if (def.requiresPlot && !state.land.includes(def.requiresPlot)) return 'plot';
+  if (def.requiresPlot && activeShopType(state).def.landPlots && !state.land.includes(def.requiresPlot)) return 'plot';
   if (def.limit !== undefined && state.fixtures.filter((f) => f.type === type).length >= def.limit) return 'limit';
   if (state.money < def.cost) return 'money';
   const error = placementError(state, type, x, y, rot);

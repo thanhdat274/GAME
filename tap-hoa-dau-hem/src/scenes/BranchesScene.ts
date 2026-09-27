@@ -21,8 +21,8 @@ export class BranchesScene extends Phaser.Scene {
     const s = G.state;
     let y = 6;
     this.list.add(txt(this, 14, y, `Đang ghé: ${s.stores.find((store) => store.id === s.activeStoreId)?.name ?? 'Tiệm chính'}`, { size: 13, bold: true })); y += 28;
-    // Khu cần tính năng riêng (vd. Tiệm xôi cần `shop_xoi`) chỉ hiện khi đã mở tính năng đó hoặc đã có tiệm.
-    const branches = DATA.branches.filter((def) => !def.feature || branchAvailable(s, def) || s.stores.some((store) => store.id === def.id));
+    // Chỉ hiện khu đã đủ level (và tính năng riêng, vd. Tiệm xôi cần `shop_xoi`) hoặc đã có tiệm.
+    const branches = DATA.branches.filter((def) => branchAvailable(s, def) || s.stores.some((store) => store.id === def.id));
     const defs = [{ id: 'main', name: 'Tiệm chính', icon: '🏪', unlockLevel: 1, cost: 0, description: 'Cửa hàng gốc của bạn.' }, ...branches];
     for (const def of defs) {
       const store = s.stores.find((item) => item.id === def.id);
