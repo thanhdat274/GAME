@@ -59,6 +59,8 @@ export class RestockScene extends Phaser.Scene {
   private hint!: Phaser.GameObjects.Text;
   private arrangeBusy = false;
   private arrangeButton!: Button;
+  private renderingBuy = false;
+  private buyRenderedStart = -1;
 
   private get shelfRows(): number {
     return SHELF_VIEW_ROWS;
@@ -170,7 +172,9 @@ export class RestockScene extends Phaser.Scene {
       this.buyLayer.add(button);
     });
     const listTop = gridTop + 2 * 27 + 1;
-    this.list = new ScrollArea(this, listTop, FOOT_Y - 4);
+    this.list = new ScrollArea(this, listTop, FOOT_Y - 4, () => {
+      if (!this.renderingBuy && this.tab === 'buy' && this.buyWindowStart() !== this.buyRenderedStart) this.renderBuy();
+    });
 
     const foot = this.add.graphics();
     foot.fillStyle(C.hud, 1).fillRoundedRect(0, FOOT_Y, W, FOOT_H, { tl: 8, tr: 8, bl: 0, br: 0 });
@@ -207,6 +211,9 @@ export class RestockScene extends Phaser.Scene {
   }
 
   private renderBuy(): void {
+    if (this.renderingBuy) return;
+    this.renderingBuy = true;
+    try {
     const s = G.state;
     for (const [id, b] of Object.entries(this.supplierBtns)) b.setColor(id === this.supplierId ? C.red : C.wood);
     for (const { filter, button } of this.categoryBtns) button.setColor(filter === this.categoryFilter ? C.red : C.wood);
@@ -216,10 +223,16 @@ export class RestockScene extends Phaser.Scene {
     const items = this.products()
       .filter((p) => this.categoryFilter === 'all' || p.category === this.categoryFilter)
       .sort((a, b) => (this.suggested.has(b.id) ? 1 : 0) - (this.suggested.has(a.id) ? 1 : 0) || (s.today.missed[b.id] ?? 0) - (s.today.missed[a.id] ?? 0));
+    const viewportRows = Math.ceil((this.list.bottom - this.list.top) / ROW_H);
+    const start = items.length ? Math.max(0, Math.floor(this.list.scrollOffset / ROW_H) - 2) : 0;
+    const end = Math.min(items.length, start + viewportRows + 4);
+    this.list.setHeight(items.length ? items.length * ROW_H + 8 : 56);
+    this.buyRenderedStart = start;
     if (!items.length) {
       this.list.add(txt(this, W / 2, 28, 'Chưa có sản phẩm khả dụng trong nhóm này.', { size: 12, color: HEX.muted, origin: [0.5, 0.5] }));
     }
-    items.forEach((p, i) => {
+    items.slice(start, end).forEach((p, offset) => {
+      const i = start + offset;
       const y = i * ROW_H;
       const missed = s.today.missed[p.id] ?? 0;
       const onShelf = p.behindCounter ? s.counter.filter((slot) => slot.productId === p.id).reduce((sum, slot) => sum + slot.qty, 0) : shelfQty(s, p.id);
@@ -262,7 +275,6 @@ export class RestockScene extends Phaser.Scene {
 
       this.list.add(itemsToAdd);
     });
-    this.list.setHeight(items.length ? items.length * ROW_H + 8 : 56);
 
     const check = checkCart(s, this.cart, this.supplierId);
     const sp = supplier(this.supplierId);
@@ -277,6 +289,13 @@ export class RestockScene extends Phaser.Scene {
     );
     this.buyBtn.setText(sp.delayDays > 0 ? 'Đặt hàng' : 'Nhập hàng');
     this.buyBtn.setEnabled(!this.busy);
+    } finally {
+      this.renderingBuy = false;
+    }
+  }
+
+  private buyWindowStart(): number {
+    return Math.max(0, Math.floor(this.list.scrollOffset / ROW_H) - 2);
   }
 
   private changeQty(id: string, delta: number): void {
@@ -293,6 +312,7 @@ export class RestockScene extends Phaser.Scene {
   }
 
   private async buy(): Promise<void> {
+    if (this.busy) return;
     const sp = supplier(this.supplierId);
     const cart = { ...this.cart };
     const check = checkCart(G.state, cart, this.supplierId);
@@ -310,6 +330,7 @@ export class RestockScene extends Phaser.Scene {
     const total = check.total;
     if (G.liveSnapshot) {
       this.busy = true;
+      this.buyBtn.setEnabled(false);
       const ok = await this.liveCommand({ type: 'buyStock', cart, supplierId: this.supplierId });
       this.busy = false;
       if (!ok) { this.renderBuy(); return; }

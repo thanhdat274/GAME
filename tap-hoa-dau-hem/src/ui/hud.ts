@@ -3,7 +3,7 @@ import { averageRating, levelProgress } from '../core/progression';
 import { openLevelRoadmap } from './levelRoadmap';
 import { formatClock, formatMoney, type GameState } from '../core/state';
 import { Bar, toast } from './widgets';
-import { C, HEX, W, txt } from './theme';
+import { C, HEX, W, txt, SAFE_TOP } from './theme';
 import { cloudSaveEnabled } from '../services/firebase';
 import { getSyncStatus, onSyncStatus, syncNow, type SyncStatus } from '../services/sync';
 import { calendarDate } from '../core/calendar';
@@ -24,18 +24,18 @@ export class Hud extends Phaser.GameObjects.Container {
   constructor(scene: Phaser.Scene, private gs: GameState, private opts: { onPause?: () => void; subtitle?: string; onOverlay?: (open: boolean) => void } = {}) {
     super(scene, 0, 0);
     const bg = scene.add.graphics();
-    bg.fillStyle(C.hud, 1).fillRect(0, 0, W, HUD_H);
-    bg.fillStyle(0x000000, 0.25).fillRect(0, HUD_H, W, 3);
-    this.money = txt(scene, 10, 6, '', { size: 16, bold: true, color: HEX.yellow });
-    this.day = txt(scene, W / 2 + 18, 7, '', { size: 9.5, bold: true, color: HEX.cream, origin: [0.5, 0], align: 'center' });
-    this.stars = txt(scene, opts.onPause ? W - 48 : W - 10, 7, '', { size: 14, bold: true, color: HEX.cream, origin: [1, 0] });
-    this.lv = txt(scene, 10, 29, '', { size: 12, bold: true, color: HEX.cream });
-    this.bar = new Bar(scene, 50, 33, cloudSaveEnabled() ? W - 95 : W - 60, 9, C.yellow, 0xffffff);
+    bg.fillStyle(C.hud, 1).fillRect(0, 0, W, HUD_H + SAFE_TOP);
+    bg.fillStyle(0x000000, 0.25).fillRect(0, HUD_H + SAFE_TOP, W, 3);
+    this.money = txt(scene, 10, 6 + SAFE_TOP, '', { size: 16, bold: true, color: HEX.yellow });
+    this.day = txt(scene, W / 2 + 18, 7 + SAFE_TOP, '', { size: 9.5, bold: true, color: HEX.cream, origin: [0.5, 0], align: 'center' });
+    this.stars = txt(scene, opts.onPause ? W - 48 : W - 10, 7 + SAFE_TOP, '', { size: 14, bold: true, color: HEX.cream, origin: [1, 0] });
+    this.lv = txt(scene, 10, 29 + SAFE_TOP, '', { size: 12, bold: true, color: HEX.cream });
+    this.bar = new Bar(scene, 50, 33 + SAFE_TOP, cloudSaveEnabled() ? W - 95 : W - 60, 9, C.yellow, 0xffffff);
     this.add([bg, this.money, this.day, this.stars, this.lv, this.bar]);
 
     if (cloudSaveEnabled()) {
-      this.cloudIcon = txt(scene, W - 22, 33, '', { size: 14, color: HEX.cream, origin: [0.5, 0.5] });
-      const cloudZone = scene.add.zone(W - 22, 33, 36, 30).setInteractive({ useHandCursor: true });
+      this.cloudIcon = txt(scene, W - 22, 33 + SAFE_TOP, '', { size: 14, color: HEX.cream, origin: [0.5, 0.5] });
+      const cloudZone = scene.add.zone(W - 22, 33 + SAFE_TOP, 36, 30).setInteractive({ useHandCursor: true });
       cloudZone.on('pointerup', () => {
         const current = getSyncStatus();
         if (current === 'pending' || current === 'error') void syncNow(true);
@@ -47,17 +47,17 @@ export class Hud extends Phaser.GameObjects.Container {
     }
 
     // Chạm "Lv" hoặc thanh EXP để mở lộ trình level (tiến độ + các mốc mở khóa).
-    const zone = scene.add.zone(W / 2 - 20, 37, W - 40, 24).setInteractive({ useHandCursor: true });
+    const zone = scene.add.zone(W / 2 - 20, 37 + SAFE_TOP, W - 40, 24).setInteractive({ useHandCursor: true });
     zone.on('pointerup', (p: Phaser.Input.Pointer) => { if (p.getDistance() < 10) this.showRoadmap(); });
     this.add(zone);
 
     if (opts.onPause) {
       const btnG = scene.add.graphics();
-      btnG.fillStyle(0x000000, 0.25).fillRoundedRect(W - 36, 4, 28, 22, 6);
-      btnG.fillStyle(0x4a2e1b, 1).fillRoundedRect(W - 36, 3, 28, 22, 6);
-      btnG.lineStyle(1.2, 0x8a5a32, 1).strokeRoundedRect(W - 36, 3, 28, 22, 6);
-      const icon = txt(scene, W - 22, 14, '⏸', { size: 13, color: HEX.cream, origin: [0.5, 0.5] });
-      const pz = scene.add.zone(W - 22, 14, 38, 28).setInteractive({ useHandCursor: true });
+      btnG.fillStyle(0x000000, 0.25).fillRoundedRect(W - 36, 4 + SAFE_TOP, 28, 22, 6);
+      btnG.fillStyle(0x4a2e1b, 1).fillRoundedRect(W - 36, 3 + SAFE_TOP, 28, 22, 6);
+      btnG.lineStyle(1.2, 0x8a5a32, 1).strokeRoundedRect(W - 36, 3 + SAFE_TOP, 28, 22, 6);
+      const icon = txt(scene, W - 22, 14 + SAFE_TOP, '⏸', { size: 13, color: HEX.cream, origin: [0.5, 0.5] });
+      const pz = scene.add.zone(W - 22, 14 + SAFE_TOP, 38, 28).setInteractive({ useHandCursor: true });
       pz.on('pointerdown', () => btnG.setAlpha(0.7));
       pz.on('pointerout', () => btnG.setAlpha(1));
       pz.on('pointerup', () => {

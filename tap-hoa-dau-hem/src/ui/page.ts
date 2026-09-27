@@ -29,7 +29,7 @@ export class ScrollArea {
   private kinetic: KineticScroll;
   private culler: Culler;
 
-  constructor(private scene: Phaser.Scene, readonly top: number, readonly bottom: number) {
+  constructor(private scene: Phaser.Scene, readonly top: number, readonly bottom: number, private onScroll?: () => void) {
     this.content = scene.add.container(0, top);
     const maskG = scene.make.graphics({}, false).fillRect(0, top, W, bottom - top);
     this.content.setMask(maskG.createGeometryMask());
@@ -65,10 +65,14 @@ export class ScrollArea {
   }
 
   setScroll(y: number): void {
+    const previous = this.scroll;
     this.scroll = Phaser.Math.Clamp(y, 0, this.maxScroll());
     this.content.y = snap(this.top - this.scroll);
     this.culler.cull(this.content, this.top, this.bottom);
+    if (this.scroll !== previous) this.onScroll?.();
   }
+
+  get scrollOffset(): number { return this.scroll; }
 
   clear(): void {
     this.content.removeAll(true);

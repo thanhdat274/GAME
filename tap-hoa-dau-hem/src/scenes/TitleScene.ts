@@ -6,7 +6,7 @@ import { isMaxLevelSimulation } from '../core/simulationMode';
 import { drawStorefront } from '../ui/art';
 import { play, setSoundEnabled, startMusic, stopMusic } from '../ui/sound';
 import { Button, dialog, toast, type DialogButton } from '../ui/widgets';
-import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
+import { C, H, HEX, W, setupCamera, txt, SAFE_TOP, SAFE_BOTTOM } from '../ui/theme';
 import { currentAccount, deleteCurrentAccount, googleSignInErrorMessage, signInWithGoogle, signOutGoogle, type AccountUser } from '../services/auth';
 import { chromeIntentUrl, detectInAppBrowser } from '../services/inAppBrowser';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
@@ -66,15 +66,15 @@ export class TitleScene extends Phaser.Scene {
 
     // Nút Âm thanh nhanh góc trên bên trái
     const soundBtnG = this.add.graphics();
-    soundBtnG.fillStyle(0x000000, 0.25).fillCircle(28, 23, 16);
-    soundBtnG.fillStyle(0x3e2314, 1).fillCircle(28, 22, 16);
-    soundBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(28, 22, 16);
-    const soundIcon = txt(this, 28, 22, G.state.settings.sound ? '🔊' : '🔇', {
+    soundBtnG.fillStyle(0x000000, 0.25).fillCircle(28, 23 + SAFE_TOP, 16);
+    soundBtnG.fillStyle(0x3e2314, 1).fillCircle(28, 22 + SAFE_TOP, 16);
+    soundBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(28, 22 + SAFE_TOP, 16);
+    const soundIcon = txt(this, 28, 22 + SAFE_TOP, G.state.settings.sound ? '🔊' : '🔇', {
       size: 14,
       emoji: true,
       origin: [0.5, 0.5],
     });
-    const soundZone = this.add.zone(28, 22, 34, 34).setInteractive({ useHandCursor: true });
+    const soundZone = this.add.zone(28, 22 + SAFE_TOP, 34, 34).setInteractive({ useHandCursor: true });
     soundZone.on('pointerup', () => {
       G.state.settings.sound = !G.state.settings.sound;
       setSoundEnabled(G.state.settings.sound);
@@ -84,12 +84,12 @@ export class TitleScene extends Phaser.Scene {
 
     // Nút Kiểm tra cập nhật cạnh nút âm thanh
     const updateBtnG = this.add.graphics();
-    updateBtnG.fillStyle(0x000000, 0.25).fillCircle(66, 23, 16);
-    updateBtnG.fillStyle(0x3e2314, 1).fillCircle(66, 22, 16);
-    updateBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(66, 22, 16);
-    txt(this, 66, 22, '🔄', { size: 14, emoji: true, origin: [0.5, 0.5] });
+    updateBtnG.fillStyle(0x000000, 0.25).fillCircle(66, 23 + SAFE_TOP, 16);
+    updateBtnG.fillStyle(0x3e2314, 1).fillCircle(66, 22 + SAFE_TOP, 16);
+    updateBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(66, 22 + SAFE_TOP, 16);
+    txt(this, 66, 22 + SAFE_TOP, '🔄', { size: 14, emoji: true, origin: [0.5, 0.5] });
     let checkingUpdate = false;
-    const updateZone = this.add.zone(66, 22, 34, 34).setInteractive({ useHandCursor: true });
+    const updateZone = this.add.zone(66, 22 + SAFE_TOP, 34, 34).setInteractive({ useHandCursor: true });
     updateZone.on('pointerup', () => {
       if (checkingUpdate) return;
       checkingUpdate = true;
@@ -102,11 +102,11 @@ export class TitleScene extends Phaser.Scene {
 
     // Nút Mã sao lưu (xuất / nhập tiến trình để chuyển máy) cạnh nút cập nhật
     const backupBtnG = this.add.graphics();
-    backupBtnG.fillStyle(0x000000, 0.25).fillCircle(104, 23, 16);
-    backupBtnG.fillStyle(0x3e2314, 1).fillCircle(104, 22, 16);
-    backupBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(104, 22, 16);
-    txt(this, 104, 22, '💾', { size: 14, emoji: true, origin: [0.5, 0.5] });
-    const backupZone = this.add.zone(104, 22, 34, 34).setInteractive({ useHandCursor: true });
+    backupBtnG.fillStyle(0x000000, 0.25).fillCircle(104, 23 + SAFE_TOP, 16);
+    backupBtnG.fillStyle(0x3e2314, 1).fillCircle(104, 22 + SAFE_TOP, 16);
+    backupBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(104, 22 + SAFE_TOP, 16);
+    txt(this, 104, 22 + SAFE_TOP, '💾', { size: 14, emoji: true, origin: [0.5, 0.5] });
+    const backupZone = this.add.zone(104, 22 + SAFE_TOP, 34, 34).setInteractive({ useHandCursor: true });
     backupZone.on('pointerup', () => openBackupMenu(this, () => this.scene.restart()));
 
     // Pill tài khoản Google góc trên bên phải
@@ -115,7 +115,7 @@ export class TitleScene extends Phaser.Scene {
       const pillH = 32;
       const pillR = 16;
       const pillX = W - 14 - pillW / 2;
-      const pillY = 22;
+      const pillY = 22 + SAFE_TOP;
 
       const pillG = this.add.graphics();
       pillG.fillStyle(0x000000, 0.25).fillRoundedRect(pillX - pillW / 2, pillY - pillH / 2 + 1.5, pillW, pillH, pillR);
@@ -169,7 +169,7 @@ export class TitleScene extends Phaser.Scene {
     // Các nút chức năng chính trên vỉa hè (tự canh đều theo chiều cao màn hình)
     const saved = hasSave();
     const btnW = 268;
-    const extraY = Math.max(0, (H - 640) * 0.45);
+    const extraY = Math.max(0, (H - 640) * 0.9 - SAFE_BOTTOM);
 
     if (saved) {
       // 1. Nút Chơi tiếp (chính, nổi bật có hiệu ứng nhịp thở nhẹ)
@@ -353,7 +353,7 @@ export class TitleScene extends Phaser.Scene {
     // Chân trang hoài niệm
     const version = import.meta.env.VITE_APP_VERSION ?? '0.1.0';
     const buildTime = import.meta.env.VITE_BUILD_TIME;
-    txt(this, W / 2, H - 24, `★  Tiệm Tạp Hóa Đầu Hẻm · v${version}${buildTime ? ` (${buildTime})` : ''}  ★`, {
+    txt(this, W / 2, H - 24 - SAFE_BOTTOM, `★  Tiệm Tạp Hóa Đầu Hẻm · v${version}${buildTime ? ` (${buildTime})` : ''}  ★`, {
       size: 10,
       color: '#dfc7a8',
       origin: [0.5, 0.5],
