@@ -3,6 +3,7 @@ import type { Customer } from '../core/customers';
 import { DATA, furniture, product, type CustomerType } from '../core/data';
 import type { DaySession } from '../core/day';
 import { findPath, fixtureCells, walkableGrid, type Cell } from '../core/layout';
+import { clampCam, maxZoom, panBy, toLocal, toScreen, zoomAt, type MapCam, type Rect } from '../core/mapView';
 import { customerGoal, goalCells, goalKey, laneCounter, queueLine, staffGoal, type Goal } from '../core/liveMap';
 import { roleDef } from '../core/staff';
 import { formatClock, formatMoney, type Fixture } from '../core/state';
@@ -113,6 +114,21 @@ export class LiveMap {
   private slotViews: SlotView[] = [];
   private note = '';
   private noteLeft = 0;
+  // ---------- Phóng to / kéo sơ đồ ----------
+  /** Lớp chứa mặt bằng + người + hiệu ứng; được phóng/dịch theo `cam`. */
+  private world: Phaser.GameObjects.Container;
+  private cam: MapCam = { zoom: 1, tx: 0, ty: 0 };
+  /** Khung màn hình hiển thị sơ đồ. */
+  private readonly view: Rect;
+  /** Mặt bằng theo tọa độ gốc (zoom 1). */
+  private readonly content: Rect;
+  private readonly camMax: number;
+  /** Các ngón tay / chuột đang giữ trên sơ đồ. */
+  private touches = new Map<number, { x: number; y: number }>();
+  /** Lần chạm hiện tại đã thành kéo / phóng (nhả tay không tính là chạm ô). */
+  private gestured = false;
+  private dragFrom: { x: number; y: number } | null = null;
+  private zoomBtns: Button[] = [];
 
   constructor(private scene: Phaser.Scene, private session: DaySession, private opts: LiveMapOptions) {
     const s = scene;
@@ -130,11 +146,19 @@ export class LiveMap {
       this.personH = Math.round(cell * 0.75);
     }
     this.infoY = this.geom.gy + DATA.land.rows * this.geom.cell + 6;
+    const { gx, gy, cell } = this.geom;
+    this.content = { x: gx, y: gy, w: DATA.land.cols * cell, h: DATA.land.rows * cell };
+    this.view = this.mode === 'watch'
+      ? { x: 10, y: gy - 2, w: W - 20, h: DATA.land.rows * cell + 4 }
+      // Cột phải (46 điểm) dành cho nút nổi; dải trạng thái ngay dưới sơ đồ.
+      : { x: 0, y: top, w: W - 46, h: this.infoY - 3 - top };
+    this.camMax = maxZoom(cell);
     this.root = s.add.container(0, 0).setDepth(opts.depth ?? 5000).setVisible(false);
     if (this.mode === 'watch') {
       // Chặn chạm xuống màn bán hàng phía dưới.
       const blocker = s.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.7).setInteractive();
-      blocker.on('pointerup', (p: Phaser.Input.Pointer) => { if (p.getDistance() < 10) this.onTap(p.worldX, p.worldY); });
+      blocker.on('pointerdown', (p: Phaser.Input.Pointer) => this.touchDown(p));
+      blocker.on('pointerup', (p: Phaser.Input.Pointer) => { if (!this.gestured && p.getDistance() < 10) this.tapScreen(p.worldX, p.worldY); });
       this.root.add(blocker);
       this.root.add(panel(s, 6, 6, W - 12, H - 12, C.wall));
       this.title = txt(s, 18, 22, '', { size: 15, bold: true });
@@ -146,7 +170,8 @@ export class LiveMap {
       }
     } else {
       const bg = s.add.rectangle(W / 2, (top + bottom) / 2, W, bottom - top, C.bg, 1).setInteractive();
-      bg.on('pointerup', (p: Phaser.Input.Pointer) => { if (p.getDistance() < 12) this.onTap(p.worldX, p.worldY); });
+      bg.on('pointerdown', (p: Phaser.Input.Pointer) => this.touchDown(p));
+      bg.on('pointerup', (p: Phaser.Input.Pointer) => { if (!this.gestured && p.getDistance() < 12) this.tapScreen(p.worldX, p.worldY); });
       this.root.add(bg);
       if (opts.onSwitchMode) {
         this.root.add(new Button(s, W - 42, bottom - 20, { w: 76, h: 28, label: '👀 Nhìn ngang', size: 10, color: C.wood, onTap: () => opts.onSwitchMode?.() }));
@@ -157,7 +182,23 @@ export class LiveMap {
     this.fx = s.add.container(0, 0);
     this.info = s.add.container(0, 0);
     this.sheet = s.add.container(0, 0);
-    this.root.add([this.fixtureLayer, this.people, this.fx, this.info, this.sheet]);
+    this.world = s.add.container(0, 0, [this.fixtureLayer, this.people, this.fx]);
+    const maskG = s.make.graphics({}, false).fillRect(this.view.x, this.view.y, this.view.w, this.view.h);
+    this.world.setMask(maskG.createGeometryMask());
+    this.root.add([this.world, this.info, this.sheet]);
+    if (this.mode === 'play') {
+      // Nút phóng cho ai không tiện kéo 2 ngón / lăn chuột.
+      const bx = W - 23;
+      const mk = (y: number, label: string, onTap: () => void) => new Button(s, bx, y, { w: 38, h: 30, label, size: 14, color: C.wood, onTap });
+      this.zoomBtns = [
+        mk(top + 22, '+', () => this.zoomBy(1.4)),
+        mk(top + 58, '−', () => this.zoomBy(1 / 1.4)),
+        mk(top + 94, '1x', () => this.setCam({ zoom: 1, tx: 0, ty: 0 })),
+      ];
+      this.root.add(this.zoomBtns);
+    }
+    this.bindCamInput();
+    this.updateZoomBtns();
 
     const ev = session.events;
     this.unsub.push(
@@ -532,6 +573,99 @@ export class LiveMap {
     return this.session.state.fixtures.find((item) => fixtureCells(item).some((c) => c.x === cell.x && c.y === cell.y));
   }
 
+  /** Chạm trên màn hình → đổi sang tọa độ gốc của sơ đồ (đã tính phóng / kéo). */
+  private tapScreen(x: number, y: number): void {
+    if (!this.inView(x, y)) return;
+    const p = toLocal(this.cam, x, y);
+    this.onTap(p.x, p.y);
+  }
+
+  // ---------- Phóng to / kéo ----------
+
+  private inView(x: number, y: number): boolean {
+    const v = this.view;
+    return x >= v.x && x <= v.x + v.w && y >= v.y && y <= v.y + v.h;
+  }
+
+  private setCam(cam: MapCam): void {
+    this.cam = clampCam(cam, this.content, this.view, this.camMax);
+    this.world.setScale(this.cam.zoom).setPosition(this.cam.tx, this.cam.ty);
+    this.updateZoomBtns();
+  }
+
+  private updateZoomBtns(): void {
+    if (!this.zoomBtns.length) return;
+    const [plus, minus, reset] = this.zoomBtns;
+    plus.setEnabled(this.cam.zoom < this.camMax - 0.01);
+    minus.setEnabled(this.cam.zoom > 1.01);
+    reset.setEnabled(this.cam.zoom > 1.01);
+  }
+
+  /** Phóng quanh tâm khung nhìn (nút +/−). */
+  private zoomBy(factor: number): void {
+    const v = this.view;
+    this.cam = zoomAt(this.cam, factor, v.x + v.w / 2, v.y + v.h / 2, this.content, this.view, this.camMax);
+    this.setCam(this.cam);
+  }
+
+  private touchDown(p: Phaser.Input.Pointer): void {
+    if (!this.inView(p.worldX, p.worldY)) return;
+    if (!this.touches.size) { this.gestured = false; this.dragFrom = { x: p.worldX, y: p.worldY }; }
+    this.touches.set(p.id, { x: p.worldX, y: p.worldY });
+    // Ngón thứ hai đặt xuống: bắt đầu phóng, không còn là chạm ô.
+    if (this.touches.size > 1) this.gestured = true;
+  }
+
+  private touchMove(p: Phaser.Input.Pointer): void {
+    const prev = this.touches.get(p.id);
+    if (!prev || !p.isDown) return;
+    const pts = [...this.touches.entries()];
+    if (pts.length >= 2) {
+      const [a, b] = pts.map(([id, pt]) => (id === p.id ? { x: p.worldX, y: p.worldY } : pt));
+      const [a0, b0] = pts.map(([, pt]) => pt);
+      const d0 = Math.hypot(a0.x - b0.x, a0.y - b0.y);
+      const d1 = Math.hypot(a.x - b.x, a.y - b.y);
+      const m0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 };
+      const m1 = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      let cam = d0 > 4 ? zoomAt(this.cam, d1 / d0, m0.x, m0.y, this.content, this.view, this.camMax) : this.cam;
+      cam = panBy(cam, m1.x - m0.x, m1.y - m0.y, this.content, this.view, this.camMax);
+      this.setCam(cam);
+    } else {
+      // Kéo một ngón / chuột: quá ngưỡng mới tính là kéo (để chạm hơi rung tay vẫn là chạm).
+      if (!this.gestured && this.dragFrom && Math.hypot(p.worldX - this.dragFrom.x, p.worldY - this.dragFrom.y) < 8) return;
+      this.gestured = true;
+      this.setCam(panBy(this.cam, p.worldX - prev.x, p.worldY - prev.y, this.content, this.view, this.camMax));
+    }
+    this.touches.set(p.id, { x: p.worldX, y: p.worldY });
+  }
+
+  private touchUp(p: Phaser.Input.Pointer): void {
+    this.touches.delete(p.id);
+    if (!this.touches.size) this.dragFrom = null;
+  }
+
+  private bindCamInput(): void {
+    const input = this.scene.input;
+    const move = (p: Phaser.Input.Pointer) => { if (this.root.visible) this.touchMove(p); };
+    const up = (p: Phaser.Input.Pointer) => this.touchUp(p);
+    const wheel = (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
+      if (!this.root.visible || !this.inView(p.worldX, p.worldY)) return;
+      // Lăn chuột / vuốt 2 ngón trên touchpad: phóng quanh con trỏ.
+      const factor = Math.min(1.5, Math.max(1 / 1.5, Math.exp(-dy * 0.0015)));
+      this.setCam(zoomAt(this.cam, factor, p.worldX, p.worldY, this.content, this.view, this.camMax));
+    };
+    input.on('pointermove', move);
+    input.on('pointerup', up);
+    input.on('pointerupoutside', up);
+    input.on('wheel', wheel);
+    this.unsub.push(() => {
+      input.off('pointermove', move);
+      input.off('pointerup', up);
+      input.off('pointerupoutside', up);
+      input.off('wheel', wheel);
+    });
+  }
+
   private onTap(worldX: number, worldY: number): void {
     if (this.mode === 'play') { this.onTapPlay(worldX, worldY); return; }
     // Người trước (hình nhỏ nên chạm gần là được), rồi mới tới nội thất.
@@ -614,10 +748,14 @@ export class LiveMap {
     this.closeSheet();
     const s = this.scene;
     const { gx, gy, cell } = this.geom;
-    const x0 = Math.max(4, Math.min(W - 4 - w, gx + (f.x + 0.5) * cell - w / 2));
-    const mapBottom = gy + DATA.land.rows * cell;
-    const fy = gy + f.y * cell;
-    const y0 = fy - h - 4 >= gy ? fy - h - 4 : Math.max(gy, Math.min(mapBottom - h, fy + cell * 2));
+    // Bảng không phóng theo sơ đồ: đặt theo vị trí nội thất trên màn hình (sau khi phóng / kéo).
+    const at = toScreen(this.cam, gx + (f.x + 0.5) * cell, gy + f.y * cell);
+    const size = cell * this.cam.zoom;
+    const top = Math.max(this.view.y, gy);
+    const bottom = Math.min(this.view.y + this.view.h, gy + DATA.land.rows * cell);
+    const x0 = Math.max(4, Math.min(W - 4 - w, at.x - w / 2));
+    const fy = at.y;
+    const y0 = fy - h - 4 >= top ? fy - h - 4 : Math.max(top, Math.min(bottom - h, fy + size * 2));
     this.sheet.add(s.add.rectangle(x0 + w / 2, y0 + h / 2, w, h, 0xffffff, 0.001).setInteractive());
     this.sheet.add(panel(s, x0, y0, w, h));
     this.sheet.add(txt(s, x0 + 10, y0 + 8, title, { size: 11, bold: true, wrap: w - 110 }));
