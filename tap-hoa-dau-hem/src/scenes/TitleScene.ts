@@ -57,6 +57,7 @@ export class TitleScene extends Phaser.Scene {
     setupCamera(this);
     if (typeof document !== 'undefined') {
       document.body.style.setProperty('--thdh-bg', 'linear-gradient(to bottom, #eb6434 0%, #eb6434 50%, #473b35 50%, #473b35 100%)');
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#eb6434');
     }
 
     // Vẽ toàn bộ phối cảnh tiệm tạp hóa hoài niệm (bầu trời, mây trôi, ánh nắng, tiệm cổ xưa, dây đèn vàng, mèo tam thể, vỉa hè)

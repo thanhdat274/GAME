@@ -95,7 +95,10 @@ export const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Em
 /** Đặt camera để hệ tọa độ luôn là 360x640 dù canvas thật lớn gấp đôi. */
 export function setupCamera(scene: Phaser.Scene): void {
   scene.cameras.main.setZoom(ZOOM).centerOn(W / 2, H / 2).setBackgroundColor(C.bg);
-  if (typeof document !== 'undefined') document.body.style.setProperty('--thdh-bg', '#2b1d14');
+  if (typeof document !== 'undefined') {
+    document.body.style.setProperty('--thdh-bg', '#2b1d14');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#2b1d14');
+  }
 }
 
 export interface TextOpts {

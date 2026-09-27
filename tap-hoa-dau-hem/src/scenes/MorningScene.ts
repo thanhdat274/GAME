@@ -175,6 +175,7 @@ export class MorningScene extends Phaser.Scene {
     setupCamera(this);
     if (typeof document !== 'undefined') {
       document.body.style.setProperty('--thdh-bg', 'linear-gradient(to bottom, #3b2618 0%, #3b2618 50%, #2b1d14 50%, #2b1d14 100%)');
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#3b2618');
     }
     const onLiveUpdated = () => {
       if (!G.liveSnapshot) return;
