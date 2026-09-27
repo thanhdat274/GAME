@@ -21,6 +21,7 @@ import { ShelfView } from '../ui/shelves';
 import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sound';
 import { Bar, Button, dialog, floatText, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
+import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
 
 const SHELF_TOP = HUD_H + 10;
 const FLOOR_Y = 262;
@@ -1279,7 +1280,7 @@ export class ShopScene extends Phaser.Scene {
     L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
     const hasDining = !G.liveSnapshot && ensureDiningTables(G.state).length > 0;
     const hasCloud = cloudSaveEnabled();
-    const panelH = 446 + (hasDining ? 54 : 0) + (hasCloud ? 54 : 0);
+    const panelH = 500 + (hasDining ? 54 : 0) + (hasCloud ? 54 : 0);
     const panelTop = Math.round((H - panelH) / 2);
     L.add(panel(this, 50, panelTop, W - 100, panelH));
     let y = panelTop + 32;
@@ -1373,6 +1374,14 @@ export class ShopScene extends Phaser.Scene {
       },
     });
     L.add(sound);
+    y += 54;
+    L.add(new Button(this, W / 2, y, {
+      w: 220,
+      h: 44,
+      label: '🔄 Kiểm tra cập nhật',
+      color: C.woodDark,
+      onTap: () => { void checkForUpdate().then((r) => toast(this, manualCheckMessage(r))); },
+    }));
     if (hasDining) {
       y += 54;
       L.add(new Button(this, W / 2, y, {

@@ -2,22 +2,29 @@ import { registerSW } from 'virtual:pwa-register';
 
 /** Kiểm tra bản mới định kỳ khi đang mở (app gắn ra màn hình chính ít khi tải lại trang). */
 const CHECK_EVERY_MS = 30 * 60 * 1000;
-/** Bấm nút "Kiểm tra cập nhật" thì chờ tối đa ngần này để xem có bản mới không. */
+/** Bấm "Kiểm tra cập nhật" (màn chính / tạm dừng) thì chờ tối đa ngần này để xem có bản mới không. */
 const MANUAL_CHECK_TIMEOUT_MS = 6000;
+
+export type ManualCheckResult = 'applying' | 'updated' | 'latest' | 'offline' | 'unavailable';
+
+let registration: ServiceWorkerRegistration | undefined;
+let updateFound = false;
+let bannerShown = false;
+let applyUpdateFn: (() => void) | undefined;
+let checkFn: (() => void) | undefined;
 
 /**
  * Khi có bản cập nhật mới: hiện nút "Cập nhật" nổi phía trên game. Bấm vào thì lưu game,
  * kích hoạt service worker mới rồi tải lại trang để lấy giao diện mới.
- * Ngoài ra có 1 nút nhỏ luôn hiện để tự bấm kiểm tra ngay (đề phòng lúc app không tự báo có bản mới).
+ * Việc tự bấm kiểm tra ngay (đề phòng lúc app không tự báo có bản mới) nằm ở nút
+ * "Kiểm tra cập nhật" trên màn hình chính / bảng tạm dừng, gọi qua checkForUpdate().
  */
 export function installUpdateBanner(beforeReload: () => void): void {
-  let registration: ServiceWorkerRegistration | undefined;
-  let updateFound = false;
-
   const check = () => {
     if (!registration || registration.installing || !navigator.onLine) return;
     registration.update().catch(() => undefined);
   };
+  checkFn = check;
 
   const updateSW = registerSW({
     immediate: true,
@@ -38,6 +45,7 @@ export function installUpdateBanner(beforeReload: () => void): void {
     setTimeout(() => window.location.reload(), 3000);
     void updateSW(true);
   };
+  applyUpdateFn = applyUpdate;
 
   // Mở lại app từ nền (iOS giữ trang cũ trong bộ nhớ): kiểm tra ngay.
   document.addEventListener('visibilitychange', () => {
@@ -48,6 +56,7 @@ export function installUpdateBanner(beforeReload: () => void): void {
   let banner: HTMLDivElement | null = null;
   function show(): void {
     if (banner) return;
+    bannerShown = true;
     banner = document.createElement('div');
     banner.setAttribute('role', 'alert');
     banner.style.cssText = [
@@ -95,72 +104,33 @@ export function installUpdateBanner(beforeReload: () => void): void {
     banner.append(text, btn, close);
     document.body.appendChild(banner);
   }
+}
 
-  let toastEl: HTMLDivElement | null = null;
-  function toast(msg: string): void {
-    toastEl?.remove();
-    toastEl = document.createElement('div');
-    toastEl.textContent = msg;
-    toastEl.style.cssText = [
-      'position:fixed',
-      'left:50%',
-      'transform:translateX(-50%)',
-      'bottom:calc(env(safe-area-inset-bottom) + 72px)',
-      'z-index:21',
-      'padding:8px 16px',
-      'background:#3b2618',
-      'color:#f6e3c4',
-      'border:2px solid #f2b632',
-      'border-radius:12px',
-      'box-shadow:0 4px 14px rgba(0,0,0,.45)',
-      'font:600 13px system-ui,sans-serif',
-      'white-space:nowrap',
-    ].join(';');
-    document.body.appendChild(toastEl);
-    setTimeout(() => { toastEl?.remove(); toastEl = null; }, 2200);
+/**
+ * Kiểm tra bản mới ngay khi được gọi từ nút "Kiểm tra cập nhật" (màn hình chính hoặc bảng
+ * tạm dừng). Nếu đã tìm thấy bản mới từ trước thì áp dụng luôn (lưu game rồi tải lại trang).
+ */
+export function checkForUpdate(): Promise<ManualCheckResult> {
+  if (!checkFn) return Promise.resolve('unavailable');
+  if (bannerShown) {
+    applyUpdateFn?.();
+    return Promise.resolve('applying');
   }
-
-  // Nút nhỏ luôn hiện ở góc màn hình để tự bấm kiểm tra bản mới bất cứ lúc nào.
-  const checkBtn = document.createElement('button');
-  checkBtn.type = 'button';
-  checkBtn.title = 'Kiểm tra cập nhật';
-  checkBtn.setAttribute('aria-label', 'Kiểm tra cập nhật');
-  checkBtn.textContent = '⟳';
-  checkBtn.style.cssText = [
-    'position:fixed',
-    'right:calc(env(safe-area-inset-right) + 8px)',
-    'bottom:calc(env(safe-area-inset-bottom) + 8px)',
-    'z-index:19',
-    'width:34px',
-    'height:34px',
-    'border-radius:50%',
-    'border:2px solid #f2b632',
-    'background:#3b2618',
-    'color:#f6e3c4',
-    'font:700 16px system-ui,sans-serif',
-    'line-height:1',
-    'cursor:pointer',
-    'opacity:.85',
-    'touch-action:manipulation',
-  ].join(';');
-  checkBtn.addEventListener('click', () => {
-    if (checkBtn.disabled) return;
-    if (banner) { applyUpdate(); return; }
-    if (!navigator.onLine) { toast('Đang ngoại tuyến, không kiểm tra được'); return; }
-    checkBtn.disabled = true;
-    checkBtn.textContent = '⏳';
-    updateFound = false;
-    check();
-    setTimeout(() => {
-      checkBtn.disabled = false;
-      if (updateFound) {
-        // Banner "Cập nhật" đã hiện; bấm nút này lần nữa cũng áp dụng bản mới luôn.
-        checkBtn.textContent = '🆕';
-      } else {
-        checkBtn.textContent = '⟳';
-        toast('Đã là bản mới nhất');
-      }
-    }, MANUAL_CHECK_TIMEOUT_MS);
+  if (!navigator.onLine) return Promise.resolve('offline');
+  updateFound = false;
+  checkFn();
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(updateFound ? 'updated' : 'latest'), MANUAL_CHECK_TIMEOUT_MS);
   });
-  document.body.appendChild(checkBtn);
+}
+
+/** Thông báo ngắn tương ứng kết quả checkForUpdate(), để hiện qua toast() trong game. */
+export function manualCheckMessage(result: ManualCheckResult): string {
+  switch (result) {
+    case 'applying': return 'Đang tải bản mới…';
+    case 'updated': return 'Có bản mới! Bấm nút "Cập nhật" ở đầu màn hình để tải.';
+    case 'latest': return 'Đã là bản mới nhất';
+    case 'offline': return 'Đang ngoại tuyến, không kiểm tra được';
+    case 'unavailable': return 'Chỉ kiểm tra được ở bản đã phát hành';
+  }
 }

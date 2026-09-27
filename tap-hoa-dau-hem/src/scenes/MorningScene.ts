@@ -21,6 +21,7 @@ import { play, setSoundEnabled, stopMusic, vibrate } from '../ui/sound';
 import { Culler, KineticScroll, clipInteractive, snap } from '../ui/scroll';
 import { Button, dialog, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
+import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
 import { scheduleEvents } from '../core/eventScheduler';
 
@@ -926,7 +927,7 @@ export class MorningScene extends Phaser.Scene {
     L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
 
     const hasCloud = cloudSaveEnabled();
-    const panelH = hasCloud ? 470 : 414;
+    const panelH = (hasCloud ? 470 : 414) + 50;
     const panelY = H / 2 - panelH / 2;
 
     L.add(panel(this, 50, panelY, W - 100, panelH));
@@ -973,6 +974,15 @@ export class MorningScene extends Phaser.Scene {
       },
     });
     L.add(autoBtn);
+
+    y += 50;
+    L.add(new Button(this, W / 2, y, {
+      w: 220,
+      h: 42,
+      label: '🔄 Kiểm tra cập nhật',
+      color: C.woodDark,
+      onTap: () => { void checkForUpdate().then((r) => toast(this, manualCheckMessage(r))); },
+    }));
 
     if (hasCloud) {
       y += 50;
