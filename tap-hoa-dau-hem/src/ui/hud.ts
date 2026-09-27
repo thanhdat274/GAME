@@ -3,7 +3,7 @@ import { averageRating, levelProgress } from '../core/progression';
 import { openLevelRoadmap } from './levelRoadmap';
 import { formatClock, formatMoney, type GameState } from '../core/state';
 import { Bar, toast } from './widgets';
-import { C, HEX, W, txt, SAFE_TOP } from './theme';
+import { C, HEX, W, txt } from './theme';
 import { cloudSaveEnabled } from '../services/firebase';
 import { getSyncStatus, onSyncStatus, syncNow, type SyncStatus } from '../services/sync';
 import { calendarDate } from '../core/calendar';
@@ -24,7 +24,7 @@ export class Hud extends Phaser.GameObjects.Container {
   constructor(scene: Phaser.Scene, private gs: GameState, private opts: { onPause?: () => void; subtitle?: string; onOverlay?: (open: boolean) => void } = {}) {
     super(scene, 0, 0);
     const bg = scene.add.graphics();
-    bg.fillStyle(C.hud, 1).fillRect(0, -SAFE_TOP, W, HUD_H + SAFE_TOP);
+    bg.fillStyle(C.hud, 1).fillRect(0, 0, W, HUD_H);
     bg.fillStyle(0x000000, 0.25).fillRect(0, HUD_H, W, 3);
     this.money = txt(scene, 10, 6, '', { size: 16, bold: true, color: HEX.yellow });
     this.day = txt(scene, W / 2 + 18, 7, '', { size: 9.5, bold: true, color: HEX.cream, origin: [0.5, 0], align: 'center' });

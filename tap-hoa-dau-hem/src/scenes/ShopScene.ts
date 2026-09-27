@@ -109,6 +109,9 @@ export class ShopScene extends Phaser.Scene {
   create(): void {
     setPlayClockRunning(true);
     setupCamera(this);
+    if (typeof document !== 'undefined') {
+      document.body.style.setProperty('--thdh-bg', 'linear-gradient(to bottom, #3b2618 0%, #3b2618 50%, #2b1d14 50%, #2b1d14 100%)');
+    }
     this.views.clear();
     this.walkers.clear();
     this.panelMode = '';

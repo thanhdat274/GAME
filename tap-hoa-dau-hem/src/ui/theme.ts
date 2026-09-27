@@ -20,7 +20,7 @@ export function computeGameHeight(): number {
   if (!w || !h) return 640;
   const ratio = h / w;
   if (ratio >= 1.55) {
-    return Math.min(840, Math.max(640, Math.round(W * ratio)));
+    return Math.max(640, Math.round(W * ratio));
   }
   // 720 ≥ 640 + 1 hàng kệ (ROW_PITCH 64): đủ cho hàng kệ thứ 4, dư chút cho ô dưới.
   if (ratio < 1) return 720;
@@ -32,14 +32,18 @@ export const H = computeGameHeight();
 export const ZOOM = 2;
 
 export let SAFE_TOP = 0;
+export let SAFE_BOTTOM = 0;
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const div = document.createElement('div');
   div.style.paddingTop = 'env(safe-area-inset-top, 0px)';
+  div.style.paddingBottom = 'env(safe-area-inset-bottom, 0px)';
   document.body.appendChild(div);
   const realTop = parseFloat(getComputedStyle(div).paddingTop) || 0;
+  const realBottom = parseFloat(getComputedStyle(div).paddingBottom) || 0;
   document.body.removeChild(div);
-  const w = window.innerWidth || W;
-  SAFE_TOP = Math.round(realTop * (W / w));
+  const h = window.innerHeight || H;
+  SAFE_TOP = Math.round(realTop * (H / h));
+  SAFE_BOTTOM = Math.round(realBottom * (H / h));
 }
 
 export const C = {
@@ -90,7 +94,8 @@ export const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Em
 
 /** Đặt camera để hệ tọa độ luôn là 360x640 dù canvas thật lớn gấp đôi. */
 export function setupCamera(scene: Phaser.Scene): void {
-  scene.cameras.main.setZoom(ZOOM).centerOn(W / 2, H / 2 - SAFE_TOP).setBackgroundColor(C.bg);
+  scene.cameras.main.setZoom(ZOOM).centerOn(W / 2, H / 2).setBackgroundColor(C.bg);
+  if (typeof document !== 'undefined') document.body.style.setProperty('--thdh-bg', '#2b1d14');
 }
 
 export interface TextOpts {

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { CustomerType, Look, Product } from '../core/data';
 import { FURNITURE_SPRITES, PALETTE, PRODUCT_SPRITES, type Sprite } from './pixelart';
-import { C, H, HEX, W, emoji, txt, ZOOM, SAFE_TOP } from './theme';
+import { C, H, HEX, W, emoji, txt, ZOOM } from './theme';
 import { play } from './sound';
 
 /** Kích thước một "điểm ảnh" pixel art trong tọa độ logic. */
@@ -268,8 +268,8 @@ export function bill(scene: Phaser.Scene, x: number, y: number, v: number, w = 7
 /** Tường, sàn, cửa ra vào của tiệm (bên trong). */
 export function drawShopInterior(scene: Phaser.Scene, top: number, floorY: number, bottom: number): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
-  g.fillStyle(C.wall, 1).fillRect(0, top - SAFE_TOP, W, floorY - (top - SAFE_TOP));
-  for (let x = 0; x < W; x += 24) g.fillStyle(C.wallLine, 1).fillRect(x, top - SAFE_TOP, 2, floorY - (top - SAFE_TOP));
+  g.fillStyle(C.wall, 1).fillRect(0, top, W, floorY - top);
+  for (let x = 0; x < W; x += 24) g.fillStyle(C.wallLine, 1).fillRect(x, top, 2, floorY - top);
   // Dây đèn trang trí
   for (let x = 10; x < W; x += 30) {
     g.fillStyle([C.red, C.yellow, C.green, C.blue][(x / 30) % 4 | 0], 1).fillCircle(x, top + 6, 3);
@@ -294,7 +294,7 @@ export function drawShopInterior(scene: Phaser.Scene, top: number, floorY: numbe
 export function drawStorefront(scene: Phaser.Scene, cx = W / 2, baseY = 352, miniMart = false): void {
   // 1. Bầu trời hoàng hôn & ánh nắng ấm áp
   const sky = scene.add.graphics();
-  sky.fillGradientStyle(0xeb6434, 0xeb6434, 0xfcb758, 0xfce18b, 1).fillRect(0, -SAFE_TOP, W, baseY + SAFE_TOP);
+  sky.fillGradientStyle(0xeb6434, 0xeb6434, 0xfcb758, 0xfce18b, 1).fillRect(0, 0, W, baseY);
 
   // Mặt trời hoàng hôn ấm áp
   const sunGlow = scene.add.graphics();
