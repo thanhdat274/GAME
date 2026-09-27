@@ -42,26 +42,34 @@ export class WarehouseScene extends Phaser.Scene {
     this.header = txt(this, 14, PAGE_TOP + 4, '', { size: 13, bold: true });
     const tier = nextWarehouseTier(G.state);
     if (tier && hasFeature(G.state.level, 'warehouse')) {
-      furnitureImage(this, 'shelf_steel', W - 152, PAGE_TOP + 12, 26, 26);
-      new Button(this, W - 74, PAGE_TOP + 12, {
-        w: 132, h: 30, size: 11, color: C.blue,
-        label: `⬆ ${tier.name} · ${formatMoney(tier.cost)}`,
-        onTap: () => this.upgrade(),
-      });
+      const label = `⬆ ${tier.name} · ${formatMoney(tier.cost)}`;
+      const w = Math.min(W - 160, this.textWidth(label, 11) + 18);
+      furnitureImage(this, 'shelf_steel', W - 12 - w - 18, PAGE_TOP + 12, 26, 26);
+      new Button(this, W - 12 - w / 2, PAGE_TOP + 12, { w, h: 30, size: 11, color: C.blue, label, onTap: () => this.upgrade() });
     }
-    // Bộ lọc dạng chip, 2 hàng.
-    FILTERS.forEach((f, i) => {
-      const x = 44 + (i % 5) * 68;
-      const y = PAGE_TOP + 46 + Math.floor(i / 5) * 32;
-      const b = new Button(this, x, y, { w: 64, h: 28, radius: 14, label: f.label, size: 10.5, color: C.wood, onTap: () => { this.filter = f.id; this.render(); } });
-      this.chips.push(b);
-    });
-    this.list = new ScrollArea(this, PAGE_TOP + 112, H - 70);
+    // Bộ lọc dạng chip: rộng theo chữ, tự xuống hàng khi hết chỗ.
+    const gap = 6;
+    let x = 12;
+    let y = PAGE_TOP + 46;
+    for (const f of FILTERS) {
+      const w = this.textWidth(f.label, 10.5) + 20;
+      if (x + w > W - 12) { x = 12; y += 32; }
+      this.chips.push(new Button(this, x + w / 2, y, { w, h: 28, radius: 14, label: f.label, size: 10.5, color: C.wood, onTap: () => { this.filter = f.id; this.render(); } }));
+      x += w + gap;
+    }
+    this.list = new ScrollArea(this, y + 34, H - 70);
     const foot = this.add.graphics();
     foot.fillStyle(C.hud, 1).fillRoundedRect(0, H - 66, W, 66, { tl: 14, tr: 14, bl: 0, br: 0 });
     foot.lineStyle(1.5, C.woodLight, 0.7).strokeRoundedRect(0, H - 66, W, 66, { tl: 14, tr: 14, bl: 0, br: 0 });
     txt(this, 16, H - 52, 'Lô hết hạn tự bị loại cuối ngày.\nBỏ lô để lấy chỗ: giá vốn ghi là tổn thất.', { size: 11, color: HEX.cream });
     this.render();
+  }
+
+  private textWidth(label: string, size: number): number {
+    const t = txt(this, 0, 0, label, { size, bold: true });
+    const w = Math.ceil(t.width);
+    t.destroy();
+    return w;
   }
 
   private upgrade(): void {
