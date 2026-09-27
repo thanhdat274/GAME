@@ -62,6 +62,32 @@ export interface LiveCommandEnvelope {
   command: LiveShopCommand;
 }
 
+/**
+ * Firestore không lưu được mảng lồng mảng (kệ, lưới nội thất), nên document `live/main`
+ * giữ `state` và `dayRuntime` trong một chuỗi JSON `payload`; các trường còn lại để truy vấn/nghe.
+ */
+export interface LiveShopDocFields {
+  schemaVersion: 1;
+  sequence: number;
+  payload: string;
+}
+
+export function encodeLiveShopDoc(aggregate: LiveShopAggregate): LiveShopDocFields {
+  return {
+    schemaVersion: aggregate.schemaVersion,
+    sequence: aggregate.sequence,
+    payload: JSON.stringify({ state: aggregate.state, dayRuntime: aggregate.dayRuntime }),
+  };
+}
+
+/** Đọc lại aggregate từ document Firestore; trả null nếu thiếu dữ liệu. */
+export function decodeLiveShopDoc(value: Record<string, unknown>): LiveShopAggregate | null {
+  if (value.schemaVersion !== 1 || !Number.isSafeInteger(value.sequence) || typeof value.payload !== 'string') return null;
+  const parsed = JSON.parse(value.payload) as Pick<LiveShopAggregate, 'state' | 'dayRuntime'>;
+  if (!parsed?.state) return null;
+  return { schemaVersion: 1, sequence: value.sequence as number, state: parsed.state, dayRuntime: parsed.dayRuntime ?? null };
+}
+
 export function createLiveShopAggregate(state: GameState): LiveShopAggregate {
   const copy = structuredClone(state);
   const dayRuntime = copy.phase === 'open' ? new DaySession(copy).snapshot() : null;

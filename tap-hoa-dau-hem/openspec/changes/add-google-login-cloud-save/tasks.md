@@ -42,7 +42,7 @@
 ## 5. Bảo mật Firestore
 
 - [x] 5.1 Viết `firestore.rules`: chỉ chủ tài khoản đọc/ghi/xóa các tài liệu save/clock hiện dùng, revision tăng đúng 1, data là string, giới hạn dữ liệu dưới 900KB
-- [ ] 5.2 Test quy tắc bằng Firebase Emulator (`@firebase/rules-unit-testing`): đọc chéo bị chặn, ghi sai revision bị chặn, chưa đăng nhập bị chặn
+- [x] 5.2 Test quy tắc bằng Firebase Emulator (`@firebase/rules-unit-testing`): đọc chéo bị chặn, ghi sai revision bị chặn, chưa đăng nhập bị chặn — `tests-emulator/firestore.rules.ts`, chạy `npm run test:emulator`
 - [x] 5.3 Script deploy quy tắc và hướng dẫn trong README
 
 ## 6. Tài khoản và quyền riêng tư
@@ -61,7 +61,7 @@
 - [ ] 7.3 Kịch bản offline: tắt mạng chơi 2 ngày game, bật mạng tự đồng bộ
 - [ ] 7.4 Mở link game từ Messenger, Zalo, Facebook trên iOS và Android: thấy hướng dẫn, không lỗi `disallowed_useragent`
 - [x] 7.5a Build tách lz-string thành chunk tải lười; entry ban đầu không import Firebase hoặc lz-string
-- [ ] 7.5b Kiểm tra trên trình duyệt qua Network rằng khách không tải Firebase
+- [x] 7.5b Kiểm tra trên trình duyệt qua Network rằng khách không tải Firebase — bản build production (27/09): tiêu đề và vào chơi chỉ tải index, phaser, workbox; không có chunk Firebase
 - [ ] 7.6 Deploy quy tắc Firestore rồi deploy client; theo dõi số lượt đọc/ghi trên Firebase Console trong tuần đầu
 
 ### Ghi nhận triển khai 26/09/2026
