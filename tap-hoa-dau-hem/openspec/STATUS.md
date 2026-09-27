@@ -11,10 +11,10 @@
 | `phase-2-shop-expansion` | 41 | 1 | 8.2 điện thoại thật. |
 | `phase-3-staff-and-manager` | 39 | 2 | 9.3 điện thoại thật, 9.4 deploy. |
 | `topdown-store-view` | 15 | 7 | 4.2–4.4 điện thoại/người chơi/deploy; 5.1–5.4 để cho change sau. |
-| `sticky-rice-shop` | 32 | 5 | Còn playtest viewport 375×812 (3.9, 4.7, 5.6), cân bằng chuỗi chưa đạt ngưỡng (6.1), điện thoại thật và deploy (6.4). |
+| `sticky-rice-shop` | 33 | 4 | Còn playtest viewport 375×812 (3.9, 4.7, 5.6), điện thoại thật và deploy (6.4). |
 | `phase-4-events-food-branches` | — | — | Đã lưu trữ (`archive/2026-09-27-…`). |
 
-Tổng còn mở: 34 task (27/09/2026).
+Tổng còn mở: 33 task (27/09/2026).
 
 ## Kiểm tra trong repo
 
@@ -105,3 +105,10 @@ Không đánh dấu hoàn thành các task yêu cầu thiết bị thật, Conso
 - Trình duyệt local xác nhận nút “Hàng nhà mình” mở đúng màn đơn nội bộ; màn này nêu rõ mỗi tiệm có kho/quầy riêng, nguyên liệu vào kho xôi và xôi gói vào quầy sau tạp hóa. Core test đã qua cả hai chiều và kịch bản tạp hóa chạy 3 ngày với xôi vắng chủ, đơn định kỳ tới quầy.
 - Đã cập nhật `docs/shop-types-json.md` và bảng trạng thái. Còn 5/37 task: viewport 375×812 (3.9, 4.7, 5.6), cân bằng chuỗi 6.1 chưa đạt mục tiêu, điện thoại thật và deploy (6.4). So sánh mô phỏng/đứng chơi 6.2 đã qua với cùng seed 1010: 181.000đ so với 194.500đ, lệch 6.9%.
 - TypeScript, Vite/PWA build, hai validator và 33 test tiệm xôi/đơn nội bộ qua. `npm run playtest` đã được mở rộng; lượt 10 ngày/1 seed hiện báo tỉ lệ lãi xôi/Chợ 577.6%, lãi ròng tăng thêm do đơn định kỳ -71.0%, hàng hỏng 0.4%, và bot Gợi ý không đủ vốn mở Chợ sau giỏ hàng. Chưa đánh dấu 6.1 hoàn thành.
+
+## Tiệm xôi — cân bằng 6.1 (27/09/2026)
+
+- Kịch bản chuỗi mới trong `npm run playtest` (chạy riêng: `npm run playtest -- 10 3 chain`): tạp hóa L30 đứng chơi bằng "Gợi ý" 3 ngày khởi động + 7 ngày đo, so từng cặp có/không có tiệm xôi cùng seed; tiệm xôi 2 thợ vắng chủ, nhập nguyên liệu mỗi sáng; tạp hóa đặt 6 xôi gói/ngày. Tiền tiệm xôi tách khỏi quỹ nhập hàng tạp hóa khi so lãi.
+- Kết quả (3 và 6 seed): lãi xôi ≈ 62% lãi Chợ ước tính (1 thợ ≈ 20%, 3 thợ ≈ 105%), xôi gói tăng lãi tạp hóa 6–8% (đã trừ gói bỏ và phí xe), hỏng/bỏ 6%, đủ tiền mở Chợ với vốn giả định 3.000.000đ. Các bot thường không đổi.
+- Lỗi tìm ra khi đo và đã sửa: mô phỏng cho một thợ làm ~75 phần/ngày trong khi đứng chơi chỉ ~15 (`cookPortionsPerHour` 6 → 1,2); thợ vắng chủ ngâm nếp theo số đã bán nên sản lượng tự giảm dần, và mức ngâm tối thiểu 20 phần vượt năng lực 1 thợ; mô phỏng bán theo giá niêm yết còn đứng chơi bán theo chất lượng; khách tạp hóa hầu như không hỏi xôi gói (thêm `sourcedRequestChance` = 0,1 cho `grocery`).
+- Test benchmark 100 ngày × 6 tiệm lấy lần nhanh nhất trong 3 lần chạy (trước đó chập chờn cả ở HEAD khi cả bộ test chạy song song).

@@ -50,7 +50,7 @@ export class InternalScene extends Phaser.Scene {
   private renderSupplier(sp: InternalSupplier, y: number): number {
     const s = G.state;
     const picks = (this.qty[sp.id] ??= {});
-    const step = sp.kind === 'made' ? 5 : 1;
+    const step = 1;
     const rec = s.recurringOrders.find((r) => r.fromStoreId === sp.storeId && r.toStoreId === s.activeStoreId);
     const recurringSummary = rec?.active
       ? `Mỗi ngày: ${Object.entries(rec.items).map(([id, n]) => `${n} ${product(id).name.toLowerCase()}`).join(', ')}`

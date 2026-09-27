@@ -14,6 +14,7 @@ Game đọc cấu hình loại cửa hàng từ `src/data/shopTypes.json`. `shop
 - `recipes`: mã công thức được loại tiệm phục vụ, tham chiếu `recipes.json`.
 - `supplies`: mặt hàng loại tiệm này có thể giao cho tiệm khác.
 - `sourcesFrom`: mặt hàng loại tiệm muốn ưu tiên đặt từ nguồn nội bộ; nếu chưa có tiệm cung cấp, người chơi vẫn có thể nhập từ mối sỉ.
+- `sourcedRequestChance` (tùy chọn): tỉ lệ mỗi khách hỏi thêm một món `sourcesFrom` khi món đó đang có ở quầy, ví dụ khách tạp hóa mua xôi gói ăn sáng. Bỏ trống là 0.
 - `dineInChance`, `addOns`: tỉ lệ khách ngồi lại và đồ uống kèm (nếu có).
 - `landPlots`: loại tiệm có thể mở rộng đất.
 - `service`: `shelves` cho khách tự lấy hàng hoặc `counter` cho khách gọi món tại quầy.

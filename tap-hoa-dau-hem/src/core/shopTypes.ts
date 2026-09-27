@@ -99,6 +99,7 @@ export function validateShopTypes(types: ShopTypeDef[] = DATA.shopTypes, branche
     }
     if (t.sim !== 'profit_average' && t.sim !== 'production') errors.push(`${at}: sim phải là profit_average hoặc production`);
     if (!(t.dineInChance >= 0 && t.dineInChance <= 1)) errors.push(`${at}: dineInChance phải trong 0..1`);
+    if (t.sourcedRequestChance !== undefined && !(t.sourcedRequestChance >= 0 && t.sourcedRequestChance <= 1)) errors.push(`${at}: sourcedRequestChance phải trong 0..1`);
     if (t.densityCurve !== null) {
       if (!Array.isArray(t.densityCurve) || !t.densityCurve.length) errors.push(`${at}: densityCurve phải là null hoặc danh sách khoảng giờ`);
       else t.densityCurve.forEach((seg, i) => {

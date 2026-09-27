@@ -370,7 +370,7 @@
     "orderDueMinute": 420,
     "recurringShortLimit": 3,
     "orderKeepDays": 7,
-    "cookPortionsPerHour": 6,
+    "cookPortionsPerHour": 1.2,
     "workHours": 12,
     "simRetailPerDay": 55,
     "tableTurnsPerDay": 10,

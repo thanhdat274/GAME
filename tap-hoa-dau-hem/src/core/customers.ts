@@ -183,6 +183,16 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
       lines.push({ productId: p.id, qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [] });
     }
   }
+  // Hàng nhận từ tiệm khác trong chuỗi (xôi gói) đang có ở quầy: một phần khách ghé mua kèm. Chỉ bốc số ngẫu nhiên khi
+  // quầy có món này, nên tiệm chưa đặt hàng nội bộ vẫn giữ nguyên chuỗi khách như trước.
+  const shop = state ? activeShopType(state).def : null;
+  if (state && shop?.sourcedRequestChance && !lines.some((l) => l.counterLine)) {
+    const sourced = shop.sourcesFrom.filter((id) => DATA.products.some((p) => p.id === id && p.unlockLevel <= level)
+      && state.counter.some((slot) => slot.productId === id && slot.qty > 0));
+    if (sourced.length && rng.next() < shop.sourcedRequestChance) {
+      lines.push({ productId: rng.pick(sourced), qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [] });
+    }
+  }
   return lines;
 }
 

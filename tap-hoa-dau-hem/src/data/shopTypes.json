@@ -76,6 +76,7 @@
       "xoi_trung_goi",
       "xoi_dua_goi"
     ],
+    "sourcedRequestChance": 0.1,
     "dineInChance": 1,
     "addOns": [],
     "landPlots": true,

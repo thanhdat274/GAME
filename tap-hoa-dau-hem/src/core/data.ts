@@ -470,6 +470,8 @@ export interface ShopTypeDef {
   supplies: string[];
   /** Mặt hàng ưu tiên lấy từ tiệm nội bộ khi chuỗi có tiệm cung cấp. */
   sourcesFrom: string[];
+  /** Tỉ lệ mỗi khách hỏi thêm một món `sourcesFrom` đang có ở quầy (khách mua xôi gói ăn sáng). Thiếu = 0. */
+  sourcedRequestChance?: number;
   dineInChance: number;
   addOns: { productId: string; chance: number }[];
   /** `shelves`: khách tự lấy hàng trên kệ; `counter`: khách chỉ gọi món ở quầy (tiệm xôi). */

@@ -48,7 +48,7 @@
 
 ## 6. Cân bằng và phát hành
 
-- [ ] 6.1 Mở rộng `npm run playtest` với kịch bản chuỗi có tiệm xôi; mục tiêu lãi tiệm xôi ≈ 60–80% chi nhánh Chợ, đơn định kỳ tăng lãi tạp hóa 5–10%, hàng hỏng < 10%, người chơi dùng "Gợi ý" vẫn mở được chi nhánh Chợ sau khi mở tiệm xôi — đã thêm báo cáo chuỗi; lượt 10 ngày/1 seed chưa đạt tỉ lệ lãi (577.6%), phần tăng lãi ròng đơn định kỳ (-71.0%) và mở Chợ sau giỏ Gợi ý
-- [x] 6.2 Test so sánh mô phỏng vắng chủ với playtest đứng chơi cùng seed, sai lệch không quá 20% — seed 1010, cùng cấu hình tiệm xôi có 3 thợ: lãi mô phỏng 181.000đ, lãi đứng chơi 194.500đ, sai lệch 6.9%
+- [x] 6.1 Mở rộng `npm run playtest` với kịch bản chuỗi có tiệm xôi; mục tiêu lãi tiệm xôi ≈ 60–80% chi nhánh Chợ, đơn định kỳ tăng lãi tạp hóa 5–10%, hàng hỏng < 10%, người chơi dùng "Gợi ý" vẫn mở được chi nhánh Chợ sau khi mở tiệm xôi — `npm run playtest -- 10 3 chain`: tạp hóa L30 đứng chơi bằng Gợi ý, tiệm xôi 2 thợ vắng chủ, đơn 6 xôi gói/ngày; 3 và 6 seed đều đạt: xôi 62% Chợ, tạp hóa +6–8%, hỏng 6%, đủ tiền mở Chợ (vốn giả định 3.000.000đ). Sửa kèm: năng lực thợ mô phỏng khớp đứng chơi (15 phần/thợ/ngày), tự ngâm theo nhu cầu thay vì số đã bán, giá mô phỏng theo chất lượng, `sourcedRequestChance` cho khách tạp hóa hỏi xôi gói
+- [x] 6.2 Test so sánh mô phỏng vắng chủ với playtest đứng chơi cùng seed, sai lệch không quá 20% — seed 1010, cùng cấu hình tiệm xôi có 3 thợ: lãi mô phỏng 160.000đ, lãi đứng chơi 194.500đ, sai lệch 17.7% (sau khi chỉnh năng lực thợ ở 6.1; trước đó hai bên khớp vì cả hai tình cờ ra ~45 phần)
 - [x] 6.3 Cập nhật `openspec/STATUS.md` và tài liệu thêm loại cửa hàng bằng JSON (`docs/shop-types-json.md`)
 - [ ] 6.4 Chơi thử trên điện thoại thật (migrate bản lưu v5 có chi nhánh, mở tiệm xôi, một tuần game), rồi deploy và thu phản hồi

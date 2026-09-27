@@ -82,6 +82,13 @@ export function missingIngredients(store: StoreData, recipe: RecipeDef, variant?
     : store.warehouse.reduce((n, l) => n + (l.productId === id ? l.qty : 0), 0)) < qty).map(([id]) => id);
 }
 
+/** Giá bán món chế biến theo chất lượng (0.75–1.25 × giá gợi ý, làm tròn 500đ, không dưới giá vốn). */
+export function qualityPrice(outputId: string, quality: number, priceDelta = 0): number {
+  const output = product(outputId);
+  const factor = Math.max(0.75, Math.min(1.25, quality));
+  return Math.max(output.cost, Math.round((output.price * factor + priceDelta) / 500) * 500);
+}
+
 /**
  * Trừ nguyên liệu cho một phần ở tiệm `store` mà không đưa lên quầy (mô phỏng sản xuất khi vắng chủ).
  * Trả chất lượng món, hoặc null nếu thiếu nguyên liệu.
@@ -122,7 +129,7 @@ export function prepareRecipe(state: GameState, id: string, quality = 1, variant
   outputSlot.qty++;
   outputSlot.lots = [{ qty: outputSlot.qty, exp: state.day + recipe.shelfLifeDays - 1 }];
   const qualityFactor = Math.max(0.75, Math.min(1.25, finalQuality + (variant?.qualityDelta ?? 0)));
-  store.prices[output.id] = Math.max(output.cost, Math.round((output.price * qualityFactor + (variant?.priceDelta ?? 0)) / 500) * 500);
+  store.prices[output.id] = qualityPrice(output.id, qualityFactor, variant?.priceDelta ?? 0);
   const variantNote = variant ? ` (${variant.name})` : '';
   const cost = Object.entries(requirements).reduce((sum, [item, qty]) => sum + product(item).cost * qty, 0);
   store.today.journal.push({ m: state.clock, t: `Đã chế biến ${output.name}${variantNote}; nguyên liệu ${formatMoney(cost)}` });

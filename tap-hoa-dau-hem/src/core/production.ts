@@ -1,6 +1,6 @@
 import { DATA, product } from './data';
 import { fillOrder, orderRemaining, pendingOrdersFrom, productionCapacity } from './internalSupply';
-import { makeServing } from './recipes';
+import { makeServing, qualityPrice } from './recipes';
 import { Rng, daySeed } from './rng';
 import { shopTypeOf } from './shopTypes';
 import { onProbation } from './staff';
@@ -60,7 +60,8 @@ export function simulateProductionDay(state: GameState, storeId: string, day: nu
   }
   const rng = new Rng(seed);
   const accuracy = cooks.reduce((n, s) => n + s.stats.accuracy, 0) / cooks.length;
-  const quality = Math.min(1.2, 0.8 + accuracy * 0.04);
+  // Cùng công thức chất lượng với Thợ nấu xôi khi đứng chơi (DaySession.finishTask).
+  const quality = Math.min(1.2, 0.75 + accuracy * 0.045);
 
   // Hấp mọi mẻ đã ngâm đủ.
   store.soakBatches = store.soakBatches.filter((batch) => {
@@ -70,20 +71,22 @@ export function simulateProductionDay(state: GameState, storeId: string, day: nu
   });
 
   let capacity = productionCapacity(store, efficiency);
-  const cookOne = (output: string): boolean => {
+  /** Làm một phần; trả chất lượng món hoặc null nếu không làm được. */
+  const cookOne = (output: string): number | null => {
     const recipe = DATA.recipes.find((r) => r.output === output);
-    if (!recipe || capacity <= 0 || !store.fixtures.some((f) => f.type === recipe.station)) return false;
-    if (makeServing(store, recipe, day, SIM_STEAM_MINUTE + 60, quality) === null) return false;
+    if (!recipe || capacity <= 0 || !store.fixtures.some((f) => f.type === recipe.station)) return null;
+    const q = makeServing(store, recipe, day, SIM_STEAM_MINUTE + 60, quality);
+    if (q === null) return null;
     capacity--;
     report.made++;
-    return true;
+    return q;
   };
 
   // 1) Đơn nội bộ tới hạn sáng mai: làm trước.
   for (const order of pendingOrdersFrom(state, storeId)) {
     if (order.dueDay > day + 1) continue;
     for (const id of Object.keys(order.items)) {
-      while (orderRemaining(order, id) > 0 && cookOne(id)) {
+      while (orderRemaining(order, id) > 0 && cookOne(id) !== null) {
         fillOrder(order, id, 1);
         report.delivered++;
       }
@@ -105,8 +108,10 @@ export function simulateProductionDay(state: GameState, storeId: string, day: nu
     let sold = false;
     for (let k = 0; k < menu.length && !sold; k++) {
       const recipe = menu[(start + k) % menu.length];
-      if (!cookOne(recipe.output)) continue;
-      const price = store.prices[recipe.output] ?? product(recipe.output).price;
+      const q = cookOne(recipe.output);
+      if (q === null) continue;
+      // Giá theo chất lượng như khi đứng chơi (nếp nguội, thợ tay nghề thấp thì bán rẻ hơn).
+      const price = qualityPrice(recipe.output, q);
       revenue += price;
       store.today.cogs += product(recipe.output).cost;
       store.today.sold[recipe.output] = (store.today.sold[recipe.output] ?? 0) + 1;
@@ -143,11 +148,13 @@ export function simulateProductionDay(state: GameState, storeId: string, day: nu
   }
   store.cookedRice = [];
 
-  // 5) Thợ tự ngâm cho hôm sau theo lượng bán 3 ngày gần nhất và đơn đang chờ.
-  const recent = store.analytics.slice(-2).map((r) => Object.entries(r.sold).reduce((n, [id, q]) => n + (menu.some((m) => m.output === id) ? q : 0), 0));
-  const avg = [...recent, report.sold].reduce((a, b) => a + b, 0) / (recent.length + 1);
-  const orderNeed = pendingOrdersFrom(state, storeId).reduce((n, o) => n + Object.keys(o.items).reduce((m, id) => m + orderRemaining(o, id), 0), 0);
-  const wantKg = Math.ceil(Math.max(cfg().minSimPortions, avg + orderNeed) / cfg().portionsPerKg);
+  // 5) Thợ tự ngâm cho hôm sau theo lượng khách dự kiến và đơn nội bộ (đơn đang chờ + đơn định kỳ sẽ sinh sáng mai).
+  // Không dựa vào số đã bán: ngày thiếu nếp bán ít sẽ kéo mẻ ngâm nhỏ dần.
+  const expectedRetail = Math.round(cfg().simRetailPerDay * (def?.traffic ?? 1) * efficiency);
+  const orderNeed = pendingOrdersFrom(state, storeId).reduce((n, o) => n + Object.keys(o.items).reduce((m, id) => m + orderRemaining(o, id), 0), 0)
+    + state.recurringOrders.filter((r) => r.active && r.fromStoreId === storeId).reduce((n, r) => n + Object.values(r.items).reduce((m, q) => m + q, 0), 0);
+  // Không ngâm quá số phần thợ làm được trong ngày (kể cả mức tối thiểu), phần dư sẽ hỏng.
+  const wantKg = Math.ceil(Math.min(Math.max(cfg().minSimPortions, expectedRetail + orderNeed), capacity + report.made) / cfg().portionsPerKg);
   const kg = Math.max(0, Math.min(wantKg - soakingKg(store), soakCapacity(store) - soakingKg(store), warehouseQty(store, 'nep')));
   if (kg > 0) {
     takeLots(store, 'nep', kg);

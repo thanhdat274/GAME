@@ -2,17 +2,18 @@
  * Chơi thử tự động: nhiều bot với kỹ năng và phong cách nhập hàng khác nhau, mỗi bot chơi N ngày
  * trên nhiều seed. In báo cáo cân bằng: ngày lên level, lãi/ngày, tỉ lệ khách bỏ về theo lý do,
  * số lần phải nhờ "Bà gửi tiền".
- * Chạy: npm run playtest -- [số ngày=10] [số seed=20]
+ * Chạy: npm run playtest -- [số ngày=10] [số seed=20] [chain = chỉ chạy kịch bản chuỗi tiệm xôi]
  */
 import { makeChange } from '../src/core/change';
-import { openBranch, simulateBranches, visitStore } from '../src/core/branches';
+import { openBranch, visitStore } from '../src/core/branches';
 import { DATA, product } from '../src/core/data';
 import { DaySession, endDay, openShop, startNextDay, type LeaveReason } from '../src/core/day';
-import { internalFee, runInternalSupplyMorning, setRecurringOrder } from '../src/core/internalSupply';
+import { internalFee, setRecurringOrder } from '../src/core/internalSupply';
 import { lastProductionReport } from '../src/core/production';
 import { Rng } from '../src/core/rng';
+import { marketWage } from '../src/core/staff';
 import { placeAnywhere, plotStatus, sellValue, unlockPlot } from '../src/core/layout';
-import { createNewGame, formatMoney, lotsFrom, storeView, totalQty, unlockedProducts, usableShelves, type GameState, type Staff, warehouseQty } from '../src/core/state';
+import { createNewGame, formatMoney, priceOf, storeView, totalQty, unlockedProducts, usableShelves, type GameState, type Staff, warehouseQty } from '../src/core/state';
 import { assignCounterSlot, autoArrange, buyStock, checkCart, isPerishable, nextWarehouseTier, stowHolding, suggestCart, upgradeWarehouse } from '../src/core/stock';
 
 interface Bot {
@@ -177,106 +178,151 @@ function run(bot: Bot, days: number, seed: number): RunStats {
   return stats;
 }
 
-function runHighLevelGrocery(bot: Bot, seed: number): { profit: number; money: number } {
-  const s = createNewGame();
-  s.level = 35;
-  s.money = 8_000_000;
-  expand(s);
-  restock(s, bot);
-  autoArrange(s);
-  const stats: RunStats = {
-    levelDay: {}, expByDay: [], profits: [], served: 0,
-    left: { patience: 0, nothing: 0, thief: 0, closed: 0 },
-    grandma: 0, finalMoney: 0, tips: 0, freshSold: 0, freshSpoiled: 0, netProfits: [],
-  };
-  playDay(s, bot, new Rng(seed), stats);
-  const summary = endDay(s);
-  return { profit: summary.netProfit ?? summary.grossProfit - summary.cogs - summary.tips - summary.overpaid, money: s.money };
-}
+/** Kịch bản chuỗi (6.1): tạp hóa L30 đứng chơi bằng "Gợi ý", tiệm xôi 1 thợ chạy vắng chủ. */
+const CHAIN_LEVEL = 30;
+/** Tiền mặt giả định khi người chơi vừa lên L30 (sau khi đã mở rộng mặt bằng). */
+const CHAIN_START_MONEY = 3_000_000;
+const CHAIN_WARMUP_DAYS = 3;
+const CHAIN_MEASURE_DAYS = 7;
+/** Đơn xôi gói định kỳ tạp hóa đặt từ tiệm xôi mỗi ngày. */
+const CHAIN_ORDER: Record<string, number> = { xoi_man_goi: 2, xoi_dau_xanh_goi: 2, xoi_trung_goi: 2 };
+/** Mức nguyên liệu tiệm xôi được mối sỉ bù mỗi sáng (người chơi đặt hàng cho tiệm xôi). */
+const XOI_STOCK: Record<string, number> = { nep: 14, dau_xanh: 25, hanh_phi: 40, cha_bong: 20, lap_xuong: 20, dua_nao: 15, trung_ga: 20, bao_goi: 20, tra_da: 40, sua_dau_nanh: 15 };
 
 function xoiCook(id: string, day: number): Staff {
   return {
     id, name: id, personality: 'diem_tinh', look: { shirt: '#fff', pants: '#000', hair: '#000', skin: '#fff' }, role: 'xoi_cook',
-    stats: { speed: 5, accuracy: 5, friendly: 5, stamina: 5 }, wage: 30_000, level: 1, exp: 0, mood: 70,
+    stats: { speed: 5, accuracy: 5, friendly: 5, stamina: 5 }, wage: marketWage({ speed: 5, accuracy: 5, friendly: 5, stamina: 5 }), level: 1, exp: 0, mood: 70,
     hiredDay: day - 3, streak: 0, lowMoodDays: 0, quitting: false, scoldedDay: null,
     lifetime: { served: 0, mistakes: 0, ratingSum: 0, ratingCount: 0, jobs: 0 },
   } as Staff;
 }
 
-/** Cùng lịch sử tạp hóa thực tế làm đầu vào để so thu nhập chi nhánh và mức tăng từ đơn xôi định kỳ. */
-function runChainEconomy(baseProfits: number[], hintBotCash: number, days: number, seed: number): {
-  xoiProfit: number; marketProfit: number; groceryLiftPct: number; wastePct: number; hintCanOpenMarket: boolean;
-} {
-  const state = createNewGame();
-  state.level = 35;
-  state.day = 30 + seed;
-  state.money = 10_000_000;
-  openBranch(state, 'market');
-  openBranch(state, 'xoi');
-  openBranch(state, 'school');
-
-  const history = baseProfits.slice(-7).map((profit, i) => ({ day: state.day - 7 + i, profit }) as never);
-  const main = storeView(state, 'main');
-  const market = storeView(state, 'market');
-  main.analytics = [...history];
-  market.analytics = [...history];
-  state.stores.find((store) => store.id === 'main')!.simDay = state.day - 1;
-  state.stores.find((store) => store.id === 'market')!.simDay = state.day - 1;
-
+/** Bù nguyên liệu kho tiệm xôi tới mức XOI_STOCK; trả về tiền mua theo giá vốn (kịch bản tự trừ vào quỹ tiệm xôi). */
+function topUpXoi(state: GameState): number {
   const xoi = storeView(state, 'xoi');
-  xoi.staff = [xoiCook('xoi-a', state.day), xoiCook('xoi-b', state.day), xoiCook('xoi-c', state.day)];
-  xoi.warehouse = lotsFrom({ nep: 160, dau_xanh: 500, hanh_phi: 500, cha_bong: 500, lap_xuong: 500, dua_nao: 500, trung_ga: 500, bao_goi: 500, tra_da: 100 });
-  xoi.activeRecipes = ['xoi_man', 'xoi_dau_xanh', 'xoi_trung', 'xoi_dua'];
-  xoi.soakBatches = [{ id: `sim-soak-${seed}`, kg: 9, startDay: state.day - 1, startMinute: 1200 }];
-  state.stores.find((store) => store.id === 'xoi')!.simDay = state.day - 1;
-  const recurring = setRecurringOrder(state, 'xoi', 'main', { xoi_man_goi: 4 }, true);
-  if (!recurring) throw new Error('Không tạo được đơn xôi gói định kỳ cho kịch bản kinh tế.');
+  let cost = 0;
+  for (const [id, target] of Object.entries(XOI_STOCK)) {
+    const need = target - warehouseQty(xoi, id);
+    if (need <= 0) continue;
+    const life = product(id).shelfLifeDays;
+    xoi.warehouse.push({ productId: id, qty: need, exp: life ? state.day + life - 1 : null });
+    cost += need * product(id).cost;
+  }
+  return cost;
+}
 
-  // Đứng ở cổng trường: tạp hóa chính, Chợ và tiệm xôi cùng chạy nền.
-  visitStore(state, 'school');
-  const dailyXoiProfit: number[] = [];
-  let soldOrMade = 0;
-  let waste = 0;
-  let marketIncome = 0;
-  let groceryIncome = 0;
-  let groceryBaseIncome = 0;
-  const avgBase = avg(baseProfits.slice(-7));
-  for (let day = 0; day < days; day++) {
-    if (day > 0) {
-      state.day++;
-      runInternalSupplyMorning(state);
+interface ChainRun {
+  /** Lãi ròng tạp hóa từng ngày (tổng kết cuối ngày). */
+  nets: number[];
+  /** Phí xe đơn xôi gói giao tới tạp hóa, theo ngày giao. */
+  fees: number[];
+  /** Lãi tiệm xôi từng ngày (doanh thu − giá vốn − lương − hỏng). */
+  xoiProfits: number[];
+  made: number;
+  riceSpoiled: number;
+  /** Xôi gói bán được / bị bỏ ở tạp hóa. */
+  goiSold: number;
+  goiSpoiled: number;
+  /** Lãi gộp xôi gói bán được − giá vốn xôi gói bỏ − phí xe, từng ngày (lãi tạp hóa có thêm nhờ đơn định kỳ). */
+  goiGain: number[];
+  /** Ngày (tính từ 0) đầu tiên còn đủ tiền mở Chợ sau khi nhập hàng Gợi ý; null nếu chưa. */
+  marketDay: number | null;
+}
+
+function runChain(seed: number, withXoi: boolean): ChainRun {
+  const rng = new Rng(seed);
+  const s = createNewGame();
+  s.level = CHAIN_LEVEL;
+  s.day = 40;
+  s.money = 8_000_000;
+  for (let i = 0; i < 4; i++) expand(s);
+  s.money = CHAIN_START_MONEY;
+  // Tiền tiệm xôi (phí mở, nguyên liệu, doanh thu, lương) tách khỏi quỹ nhập hàng của tạp hóa để so lãi tạp hóa công bằng;
+  // khi xét mở Chợ thì cộng lại vì tiền dùng chung toàn chuỗi.
+  let xoiCash = 0;
+  const run: ChainRun = { nets: [], fees: [], xoiProfits: [], made: 0, riceSpoiled: 0, goiSold: 0, goiSpoiled: 0, goiGain: [], marketDay: null };
+  if (withXoi) {
+    if (!openBranch(s, 'xoi').ok) throw new Error('Kịch bản chuỗi: không mở được tiệm xôi.');
+    const openCost = DATA.branches.find((b) => b.id === 'xoi')!.cost;
+    s.money += openCost;
+    xoiCash -= openCost;
+    visitStore(s, 'main');
+    const xoi = storeView(s, 'xoi');
+    xoi.staff = [xoiCook('xoi-a', s.day), xoiCook('xoi-b', s.day)];
+    xoi.activeRecipes = ['xoi_man', 'xoi_dau_xanh', 'xoi_trung', 'xoi_dua'];
+    xoi.soakBatches = [{ id: `sim-soak-${seed}`, kg: 8, startDay: s.day - 1, startMinute: 1200 }];
+    s.stores.find((store) => store.id === 'xoi')!.simDay = s.day - 1;
+    xoiCash -= topUpXoi(s);
+    if (!setRecurringOrder(s, 'xoi', 'main', CHAIN_ORDER, true)) throw new Error('Kịch bản chuỗi: không tạo được đơn định kỳ.');
+  }
+  const marketCost = DATA.branches.find((b) => b.id === 'market')!.cost;
+  const stats: RunStats = { levelDay: {}, expByDay: [], profits: [], served: 0, left: { patience: 0, nothing: 0, thief: 0, closed: 0 }, grandma: 0, finalMoney: 0, tips: 0, freshSold: 0, freshSpoiled: 0, netProfits: [] };
+  const isGoi = (id: string) => CHAIN_ORDER[id] !== undefined;
+  for (let d = 0; d < CHAIN_WARMUP_DAYS + CHAIN_MEASURE_DAYS; d++) {
+    // Người chơi mở chi nhánh ở màn buổi sáng, trước khi bấm Gợi ý nhập hàng.
+    if (run.marketDay === null && s.money + xoiCash >= marketCost) run.marketDay = d;
+    stowHolding(s);
+    s.holding = [];
+    restock(s, BOTS[1]);
+    autoArrange(s);
+    if (!s.counter.some((slot) => slot.productId && slot.qty > 0)) {
+      const counterProduct = unlockedProducts(s.level).find((p) => p.behindCounter && !p.recipeOnly && warehouseQty(s, p.id) > 0);
+      if (counterProduct) assignCounterSlot(s, 0, counterProduct.id);
     }
-    const incomingCost = state.internalOrders
-      .filter((order) => order.toStoreId === 'main' && order.status === 'delivered' && order.dueDay === state.day)
-      .reduce((sum, order) => sum + (order.internalCost ?? 0), 0);
-    const transferFees = state.internalOrders
-      .filter((order) => order.toStoreId === 'main' && order.status === 'delivered' && order.dueDay === state.day)
-      .reduce((sum, order) => sum + internalFee(Object.values(order.filled).reduce((n, qty) => n + qty, 0)), 0);
-    const branchIncome = simulateBranches(state, state.day);
-    const report = lastProductionReport(state, 'xoi')!;
-    const xoiToday = storeView(state, 'xoi').today;
-    dailyXoiProfit.push(report.revenue - xoiToday.cogs - xoiToday.wages - xoiToday.spoiledCost);
-    soldOrMade += report.made + report.spoiled;
-    waste += report.spoiled;
-    marketIncome += branchIncome.market ?? 0;
-    groceryIncome += (branchIncome.main ?? 0) - incomingCost - transferFees;
-    groceryBaseIncome += Math.round(avgBase * 0.6); // Tiệm chính: mặc định hiệu suất 60%, lưu lượng 1.
+    playDay(s, BOTS[1], rng, stats);
+    const summary = endDay(s);
+    run.nets.push(summary.netProfit ?? 0);
+    const goiSold = Object.entries(s.yesterdaySold).filter(([id]) => isGoi(id));
+    const goiSpoiled = (summary.spoiled ?? []).filter((x) => isGoi(x.productId));
+    run.goiSold += goiSold.reduce((n, [, q]) => n + q, 0);
+    run.goiSpoiled += goiSpoiled.reduce((n, x) => n + x.qty, 0);
+    run.goiGain.push(goiSold.reduce((n, [id, q]) => n + q * (priceOf(id, s) - product(id).cost), 0)
+      - goiSpoiled.reduce((n, x) => n + x.qty * product(x.productId).cost, 0));
+    startNextDay(s);
+    if (!withXoi) continue;
+    const fee = s.internalOrders
+      .filter((o) => o.toStoreId === 'main' && o.dueDay === s.day && (o.status === 'delivered' || o.status === 'short'))
+      .reduce((n, o) => n + internalFee(Object.values(o.filled).reduce((m, q) => m + q, 0)), 0);
+    run.fees.push(fee);
+    run.goiGain[run.goiGain.length - 1] -= fee;
+    const report = lastProductionReport(s, 'xoi');
+    const record = storeView(s, 'xoi').analytics.at(-1);
+    if (report && record) {
+      s.money -= report.revenue - report.wages;
+      xoiCash += report.revenue - report.wages;
+      run.xoiProfits.push(record.profit);
+      run.made += report.made;
+      run.riceSpoiled += report.spoiled;
+    }
+    xoiCash -= topUpXoi(s);
   }
-  const marketProfit = marketIncome / Math.max(days, 1);
-  const xoiProfit = avg(dailyXoiProfit);
-  const groceryLiftPct = ((groceryIncome - groceryBaseIncome) / Math.max(Math.abs(groceryBaseIncome), 1)) * 100;
-  const wastePct = (100 * waste) / Math.max(soldOrMade, 1);
+  return run;
+}
 
-  const hint = createNewGame();
-  hint.level = 30;
-  hint.money = hintBotCash;
-  const xoiOpen = openBranch(hint, 'xoi').ok;
-  if (xoiOpen) {
-    visitStore(hint, 'main');
-    restock(hint, BOTS[1]); // Bình thường (dùng Gợi ý) sau khi đã mở tiệm xôi.
-  }
-  const hintCanOpenMarket = xoiOpen && openBranch(hint, 'market').ok;
-  return { xoiProfit, marketProfit, groceryLiftPct, wastePct, hintCanOpenMarket };
+function chainEconomy(seeds: number): {
+  xoiProfit: number; marketProfit: number; groceryLiftPct: number; wastePct: number; marketDayBase: number | null; marketDayXoi: number | null; goiSold: number;
+} {
+  const market = DATA.branches.find((b) => b.id === 'market')!;
+  const measured = (xs: number[]) => xs.slice(CHAIN_WARMUP_DAYS);
+  const pairs = Array.from({ length: seeds }, (_, i) => ({ base: runChain(20_000 + i, false), xoi: runChain(20_000 + i, true) }));
+  const baseNet = avg(pairs.flatMap((p) => measured(p.base.nets)));
+  const made = pairs.reduce((n, p) => n + p.xoi.made, 0);
+  const wasted = pairs.reduce((n, p) => n + p.xoi.riceSpoiled + p.xoi.goiSpoiled, 0);
+  const days = (runs: ChainRun[]) => {
+    const got = runs.map((r) => r.marketDay).filter((d): d is number => d !== null);
+    return got.length === runs.length ? Math.max(...got) : null;
+  };
+  return {
+    // Chi nhánh Chợ vắng chủ: lãi trung bình của tạp hóa × hiệu suất × lưu lượng khu.
+    marketProfit: baseNet * market.efficiency * market.traffic,
+    xoiProfit: avg(pairs.flatMap((p) => measured(p.xoi.xoiProfits))),
+    groceryLiftPct: (100 * avg(pairs.flatMap((p) => measured(p.xoi.goiGain)))) / Math.max(Math.abs(baseNet), 1),
+    wastePct: (100 * wasted) / Math.max(made + pairs.reduce((n, p) => n + p.xoi.riceSpoiled, 0), 1),
+    marketDayBase: days(pairs.map((p) => p.base)),
+    marketDayXoi: days(pairs.map((p) => p.xoi)),
+    goiSold: pairs.reduce((n, p) => n + p.xoi.goiSold, 0) / (seeds * (CHAIN_WARMUP_DAYS + CHAIN_MEASURE_DAYS)),
+  };
 }
 
 const days = Number(process.argv[2] ?? 10);
@@ -284,8 +330,21 @@ const seeds = Number(process.argv[3] ?? 20);
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
 const pct = (a: number, b: number) => `${((100 * a) / Math.max(1, b)).toFixed(0)}%`;
 
-console.log(`Chơi thử tự động: ${BOTS.length} kiểu người chơi × ${seeds} ván × ${days} ngày\n`);
-for (const bot of BOTS) {
+function printChain(): void {
+  const economy = chainEconomy(Math.max(1, Math.min(seeds, Number(process.env.CHAIN_SEEDS ?? 3))));
+  const ratio = (100 * economy.xoiProfit) / Math.max(economy.marketProfit, 1);
+  const liftOk = economy.groceryLiftPct >= 5 && economy.groceryLiftPct <= 10;
+  const marketOk = economy.marketDayXoi !== null;
+  console.log(`▶ Kịch bản chuỗi L${CHAIN_LEVEL}: tạp hóa đứng chơi (Gợi ý) + tiệm xôi 2 thợ vắng chủ + đơn xôi gói định kỳ`);
+  console.log(`  Lãi xôi: ${formatMoney(economy.xoiProfit)}/ngày · lãi Chợ (ước tính): ${formatMoney(economy.marketProfit)}/ngày · tỉ lệ: ${ratio.toFixed(1)}%`);
+  console.log(`  Đơn định kỳ: bán ${economy.goiSold.toFixed(1)} xôi gói/ngày · lãi tạp hóa tăng ${economy.groceryLiftPct.toFixed(1)}% (lãi gộp xôi gói − gói bỏ − phí xe, so với lãi ròng tạp hóa) · xôi hỏng/bỏ: ${economy.wastePct.toFixed(1)}%`);
+  console.log(`  Đủ tiền mở Chợ sau nhập hàng (vốn ${formatMoney(CHAIN_START_MONEY)}): không có xôi ngày ${economy.marketDayBase ?? '—'} · có xôi ngày ${economy.marketDayXoi ?? '—'}`);
+  console.log(`  Mục tiêu: xôi 60–80% Chợ ${ratio >= 60 && ratio <= 80 ? 'ĐẠT' : 'CHƯA ĐẠT'} · đơn định kỳ +5–10% ${liftOk ? 'ĐẠT' : 'CHƯA ĐẠT'} · hỏng <10% ${economy.wastePct < 10 ? 'ĐẠT' : 'CHƯA ĐẠT'} · mở được Chợ ${marketOk ? 'ĐẠT' : 'CHƯA ĐẠT'}\n`);
+}
+
+const chainOnly = process.argv[4] === "chain";
+if (!chainOnly) console.log(`Chơi thử tự động: ${BOTS.length} kiểu người chơi × ${seeds} ván × ${days} ngày\n`);
+for (const bot of chainOnly ? [] : BOTS) {
   const runs = Array.from({ length: seeds }, (_, i) => run(bot, days, 1000 + i));
   const lv = (n: number) => {
     const ds = runs.map((r) => r.levelDay[n]).filter((d) => d !== undefined);
@@ -307,20 +366,6 @@ for (const bot of BOTS) {
   console.log(`  Lãi ngày 1: ${formatMoney(day1)} · lãi 3 ngày cuối: ${formatMoney(late)}/ngày · tip TB: ${formatMoney(avg(runs.map((r) => r.tips / days)))}/ngày`);
   console.log(`  Khách: phục vụ ${pct(served, total)} · bỏ về vì chờ lâu ${pct(pat, total)} · vì hết hàng ${pct(noth, total)}`);
   console.log(`  Tiền cuối: ${formatMoney(avg(runs.map((r) => r.finalMoney)))} · "Bà gửi tiền": ${runs.reduce((a, r) => a + r.grandma, 0)} lần / ${runs.length} ván\n`);
-  if (bot === BOTS[1]) {
-    const groceryRuns = Array.from({ length: Math.max(1, Math.min(seeds, 5)) }, (_, i) => runHighLevelGrocery(BOTS[1], 10_000 + i));
-    const economy = runChainEconomy(
-      groceryRuns.map((result) => result.profit),
-      avg(groceryRuns.map((result) => result.money)),
-      days,
-      1_000,
-    );
-    const ratio = (100 * economy.xoiProfit) / Math.max(economy.marketProfit, 1);
-    console.log('▶ Kịch bản chuỗi L35: tiệm xôi + đơn xôi gói định kỳ + Chợ');
-    console.log(`  Lãi xôi: ${formatMoney(economy.xoiProfit)}/ngày · lãi Chợ: ${formatMoney(economy.marketProfit)}/ngày · tỉ lệ: ${ratio.toFixed(1)}%`);
-    console.log(`  Lãi ròng tăng thêm ở tạp hóa từ đơn định kỳ: ${economy.groceryLiftPct.toFixed(1)}% · hàng xôi hỏng: ${economy.wastePct.toFixed(1)}%`);
-    console.log(`  Gợi ý mở tiệm xôi rồi mua giỏ hàng vẫn mở được Chợ ở Lv30: ${economy.hintCanOpenMarket ? 'ĐẠT' : 'CHƯA ĐẠT'}`);
-    console.log(`  Mục tiêu: xôi 60–80% Chợ ${ratio >= 60 && ratio <= 80 ? 'ĐẠT' : 'CHƯA ĐẠT'} · đơn định kỳ +5–10% ${economy.groceryLiftPct >= 5 && economy.groceryLiftPct <= 10 ? 'ĐẠT' : 'CHƯA ĐẠT'} · hỏng <10% ${economy.wastePct < 10 ? 'ĐẠT' : 'CHƯA ĐẠT'}\n`);
-  }
 }
+printChain();
 console.log(`(Vốn đầu ${formatMoney(DATA.balance.startMoney)}, một ngày = ${DATA.balance.daySeconds} giây thật)`);
