@@ -85,6 +85,10 @@ export class ShopScene extends Phaser.Scene {
   /** Che bảng tính tiền khi người chơi đang ở xa quầy (góc nhìn trên xuống). */
   private awayCover: Phaser.GameObjects.Container | null = null;
   private awayText: Phaser.GameObjects.Text | null = null;
+  /** Số giây người chơi không chạm màn hình; đủ ngưỡng trong cài đặt thì game chơi hộ quầy. */
+  private idleSec = 0;
+  private idleAuto = false;
+  private idleBadge: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('Shop');
@@ -150,6 +154,14 @@ export class ShopScene extends Phaser.Scene {
     if (this.topDown && !G.state.tutorialsSeen.includes('topdown')) this.topDownTutorial();
 
     this.wireEvents();
+    this.idleSec = 0;
+    this.idleAuto = false;
+    this.idleBadge = this.add.container(W / 2, PANEL_Y - 12).setDepth(350).setVisible(false);
+    this.idleBadge.add([
+      this.add.rectangle(0, 0, 250, 24, 0x2b1d14, 0.85).setStrokeStyle(1, C.yellow),
+      txt(this, 0, 0, '🤖 Đang chơi hộ · chạm màn hình để tự chơi', { size: 11, bold: true, color: HEX.cream, origin: [0.5, 0.5] }),
+    ]);
+    this.input.on('pointerdown', () => this.onPlayerInput());
     this.time.addEvent({
       delay: 150,
       loop: true,
@@ -1037,12 +1049,13 @@ export class ShopScene extends Phaser.Scene {
     // Chế độ quản lý: tăng tốc x2/x4 (nhiều bước core mỗi khung hình).
     const speed = G.state.today.managerDay ? G.state.manager.speed : 1;
     if (!G.liveSnapshot) for (let i = 0; i < speed && !this.ending; i++) this.session.update(dtMs / 1000);
+    this.tickIdle(dtMs / 1000);
     const gameDt = this.session.paused ? 0 : speed * Math.min(dtMs / 1000, 0.5);
     this.liveMap.update(gameDt);
     if (this.playMap) {
       this.playMap.update(gameDt);
       this.session.playerAtCounter = this.playMap.playerAtCounter;
-      const away = !this.playMap.playerAtCounter && this.session.playerAway <= 0 && !this.managerView;
+      const away = !this.playMap.playerAtCounter && this.session.playerAway <= 0 && !this.managerView && !this.idleAuto;
       this.awayCover?.setVisible(away);
       if (away) {
         const staffed = this.session.lanes.some((l) => !l.closing);
@@ -1077,6 +1090,41 @@ export class ShopScene extends Phaser.Scene {
     if (this.counterTimerText?.active && requestLeft != null) {
       this.counterTimerText.setText(`⏱ ${Math.ceil(requestLeft)}s`);
       this.counterRequestBar?.set(requestLeft / Math.max(1, this.session.front?.counterRequestSeconds ?? 1), requestLeft <= 2 ? C.red : C.green);
+    }
+  }
+
+  // ---------- Chơi hộ khi rảnh tay ----------
+
+  /** Đếm thời gian không chạm màn hình; giờ tạm dừng (menu, nhập hàng) không tính và đếm lại từ đầu. */
+  private tickIdle(dt: number): void {
+    if (G.liveSnapshot || this.ending || this.idleAuto) return;
+    const limit = G.state.settings.idleAutoPlay ?? 60;
+    if (!limit || this.session.paused || G.state.today.managerDay) {
+      this.idleSec = 0;
+      return;
+    }
+    this.idleSec += Math.min(dt, 0.5);
+    if (this.idleSec >= limit) this.setIdleAuto(true);
+  }
+
+  private onPlayerInput(): void {
+    this.idleSec = 0;
+    if (this.idleAuto) this.setIdleAuto(false);
+  }
+
+  /** Bật/tắt người chơi tự động của core: quét giỏ, trả lời mặc cả/ghi sổ, thối tiền, quầy rảnh thì nạp kệ; nhịp như người thật. */
+  private setIdleAuto(on: boolean): void {
+    this.idleAuto = on;
+    this.session.autoPlayer = on;
+    this.session.autoPlayerReact = on ? 0.8 : 0;
+    this.session.autoRefill = on;
+    this.idleBadge?.setVisible(on);
+    if (on) {
+      toast(this, '🤖 Bạn rảnh tay lâu quá, để game đứng quầy giùm nhé!', 300);
+      if (this.idleBadge) this.tweens.add({ targets: this.idleBadge, alpha: 0.55, yoyo: true, repeat: -1, duration: 700 });
+    } else {
+      if (this.idleBadge) { this.tweens.killTweensOf(this.idleBadge); this.idleBadge.setAlpha(1); }
+      toast(this, '✋ Bạn đứng quầy lại rồi', 300);
     }
   }
 
@@ -1260,10 +1308,11 @@ export class ShopScene extends Phaser.Scene {
     });
     L.add(autoBtn);
     y += 54;
-    const scanLabel = () => (G.state.settings.autoScan ? '📦 Tự quét giỏ: Bật' : '🧺 Tự quét giỏ: Tắt');
-    const scanBtn = new Button(this, W / 2, y, {
-      w: 220,
+    const scanLabel = () => (G.state.settings.autoScan ? '📦 Tự quét: Bật' : '🧺 Tự quét: Tắt');
+    const scanBtn = new Button(this, W / 2 - 56, y, {
+      w: 108,
       h: 44,
+      size: 11,
       label: scanLabel(),
       color: C.blue,
       onTap: () => {
@@ -1274,6 +1323,27 @@ export class ShopScene extends Phaser.Scene {
       },
     });
     L.add(scanBtn);
+    // Rảnh tay bao lâu thì game chơi hộ quầy: 1 phút → 30 giây → tắt.
+    const idleSteps = [60, 30, 0];
+    const idleLabel = () => {
+      const v = G.state.settings.idleAutoPlay ?? 60;
+      return v ? `🤖 Chơi hộ: ${v >= 60 ? `${v / 60} phút` : `${v}s`}` : '🤖 Chơi hộ: Tắt';
+    };
+    const idleBtn = new Button(this, W / 2 + 56, y, {
+      w: 108,
+      h: 44,
+      size: 11,
+      label: idleLabel(),
+      color: C.blue,
+      onTap: () => {
+        const cur = idleSteps.indexOf(G.state.settings.idleAutoPlay ?? 60);
+        G.state.settings.idleAutoPlay = idleSteps[(cur + 1) % idleSteps.length];
+        idleBtn.setText(idleLabel());
+        persist();
+      },
+    });
+    if (G.liveSnapshot) idleBtn.setEnabled(false);
+    L.add(idleBtn);
     y += 54;
     const viewLabel = () => (this.topDown ? '🗺️ Góc: Trên xuống' : '👀 Góc: Nhìn ngang');
     const viewBtn = new Button(this, W / 2 + 56, y, {
