@@ -142,6 +142,13 @@ const migrations: Record<number, Migration> = {
   }),
 };
 
+/** Kệ / tủ từ bản lưu cũ (ít ô hơn) được nới thêm ô trống cho đủ số ô hiện tại. */
+function padShelves(shelves: GameState['shelves']): void {
+  for (const row of shelves) {
+    if (Array.isArray(row) && row.length < DATA.balance.slotsPerShelf) row.push(...emptySlots(DATA.balance.slotsPerShelf - row.length));
+  }
+}
+
 function knownProduct(id: string): boolean {
   try {
     product(id);
@@ -216,6 +223,8 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
     storyStarted: loaded.storyStarted ?? {},
     version: CURRENT_VERSION,
   } as GameState;
+  padShelves(result.shelves);
+  for (const store of result.stores) if (Array.isArray(store.data?.shelves)) padShelves(store.data.shelves as GameState['shelves']);
   syncActiveStore(result);
   if (pendingLevelUp) applyLevelUps(result);
   return result;

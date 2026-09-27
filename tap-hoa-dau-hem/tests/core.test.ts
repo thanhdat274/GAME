@@ -76,11 +76,11 @@ describe('nhập hàng', () => {
 });
 
 describe('kệ hàng', () => {
-  it('gán ô nạp tối đa 10 từ kho', () => {
+  it('gán ô nạp tối đa 20 từ kho', () => {
     const s = createNewGame();
-    s.warehouse = lotsFrom({ mi_goi: 14 });
+    s.warehouse = lotsFrom({ mi_goi: 24 });
     assignSlot(s, 0, 0, 'mi_goi');
-    expect(s.shelves[0][0]).toMatchObject({ productId: 'mi_goi', qty: 10 });
+    expect(s.shelves[0][0]).toMatchObject({ productId: 'mi_goi', qty: 20 });
     expect(warehouseQty(s, 'mi_goi')).toBe(4);
   });
 
@@ -94,12 +94,12 @@ describe('kệ hàng', () => {
     expect(warehouseQty(s, 'muoi')).toBe(0);
   });
 
-  it('nạp lại: ô còn 1, kho 12 → ô 10, kho 3', () => {
+  it('nạp lại: ô còn 1, kho 22 → ô 20, kho 3', () => {
     const s = createNewGame();
     s.shelves[0][0] = { productId: 'mi_goi', qty: 1 };
-    s.warehouse = lotsFrom({ mi_goi: 12 });
-    expect(refillSlot(s, 0, 0)).toBe(9);
-    expect(s.shelves[0][0].qty).toBe(10);
+    s.warehouse = lotsFrom({ mi_goi: 22 });
+    expect(refillSlot(s, 0, 0)).toBe(19);
+    expect(s.shelves[0][0].qty).toBe(20);
     expect(warehouseQty(s, 'mi_goi')).toBe(3);
   });
 
@@ -185,10 +185,10 @@ describe('kệ hàng', () => {
 
   it('tính cảnh báo mức đầy theo khu', () => {
     const s = createNewGame();
-    s.warehouse = lotsFrom({ mi_goi: 10 });
+    s.warehouse = lotsFrom({ mi_goi: 20 });
     assignSlot(s, 0, 0, 'mi_goi');
     expect(zoneFill(s, 'dry')).toMatchObject({ fill: 1, alert: 'ok' });
-    s.shelves[0][0].qty = 2;
+    s.shelves[0][0].qty = 4;
     expect(zoneFill(s, 'dry')).toMatchObject({ fill: 0.2, alert: 'low' });
     s.shelves[0][0].qty = 0;
     expect(zoneFill(s, 'dry')).toMatchObject({ fill: 0, alert: 'critical' });
@@ -226,16 +226,16 @@ describe('kệ hàng', () => {
   it('tự bày: khu nhiều món hơn một kệ thì món dư tràn sang kệ trống, sau khi nhóm khác đã có kệ', () => {
     const s = createNewGame();
     s.level = 16;
-    const drinks = ['nuoc_ngot', 'nuoc_suoi', 'tra_xanh', 'tang_luc', 'sua_hop', 'sua_dau_nanh', 'bia_lon', 'ca_phe_lon'];
-    s.warehouse = lotsFrom({ ...Object.fromEntries(drinks.map((id) => [id, 3])), mi_goi: 3 });
+    const dry = ['mi_goi', 'gao', 'nuoc_mam', 'dau_an', 'duong', 'muoi', 'bot_canh', 'bot_ngot', 'hat_nem', 'nuoc_tuong', 'tuong_ot', 'hu_tieu_goi', 'chao_goi', 'sua_dac'];
+    s.warehouse = lotsFrom({ ...Object.fromEntries(dry.map((id) => [id, 3])), nuoc_ngot: 3 });
     const unplaced = autoArrange(s);
     expect(unplaced).toEqual([]);
     const zones = [0, 1, 2].map((r) => zoneOf(s, r));
-    expect(zones.filter((z) => z === 'dry')).toHaveLength(1);
-    expect(zones.filter((z) => z === 'drink')).toHaveLength(2);
+    expect(zones.filter((z) => z === 'drink')).toHaveLength(1);
+    expect(zones.filter((z) => z === 'dry')).toHaveLength(2);
     // Bấm lại vẫn giữ nguyên: món dư không bị đẩy về kho.
     expect(autoArrange(s)).toEqual([]);
-    for (const id of drinks) expect(s.shelves.flat().some((x) => x.productId === id)).toBe(true);
+    for (const id of dry) expect(s.shelves.flat().some((x) => x.productId === id)).toBe(true);
   });
 
   it('tự bày đặt mỗi món vào kệ cùng khu', () => {

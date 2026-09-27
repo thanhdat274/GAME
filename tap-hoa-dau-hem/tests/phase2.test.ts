@@ -185,9 +185,9 @@ describe('kho, tủ lạnh và hạn dùng', () => {
 
   it('nạp kệ lấy lô hạn sớm nhất trước (FEFO)', () => {
     const s = lvl(7);
-    s.warehouse = [{ productId: 'trung_ga', qty: 10, exp: 16 }, { productId: 'trung_ga', qty: 4, exp: 14 }];
+    s.warehouse = [{ productId: 'trung_ga', qty: 20, exp: 16 }, { productId: 'trung_ga', qty: 4, exp: 14 }];
     assignSlot(s, 0, 0, 'trung_ga');
-    expect(s.shelves[0][0].lots).toEqual([{ qty: 4, exp: 14 }, { qty: 6, exp: 16 }]);
+    expect(s.shelves[0][0].lots).toEqual([{ qty: 4, exp: 14 }, { qty: 16, exp: 16 }]);
     expect(s.warehouse).toEqual([{ productId: 'trung_ga', qty: 4, exp: 16 }]);
   });
 
@@ -527,7 +527,7 @@ describe('phiên bán giai đoạn 2', () => {
     e.scanAll();
     e.resolveCredit(false);
     expect(stars).toBe(2);
-    expect(t.shelves[0][0].qty).toBe(10);
+    expect(t.shelves[0][0].qty).toBe(20);
   });
 });
 
@@ -687,8 +687,8 @@ describe('cuối ngày', () => {
     assignSlot(s, 0, 0, 'trung_ga');
     s.shelves[0][0].qty = 4;
     s.shelves[0][0].lots = [{ qty: 4, exp: 10 }];
-    s.warehouse = [{ productId: 'trung_ga', qty: 10, exp: 12 }];
-    expect(refillSlot(s, 0, 0)).toBe(6);
-    expect(s.shelves[0][0].lots).toEqual([{ qty: 4, exp: 10 }, { qty: 6, exp: 12 }]);
+    s.warehouse = [{ productId: 'trung_ga', qty: 20, exp: 12 }];
+    expect(refillSlot(s, 0, 0)).toBe(16);
+    expect(s.shelves[0][0].lots).toEqual([{ qty: 4, exp: 10 }, { qty: 16, exp: 12 }]);
   });
 });

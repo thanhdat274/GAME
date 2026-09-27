@@ -1,9 +1,9 @@
 [
-  { "id": "shelf", "name": "Kệ gỗ", "icon": "🗄️", "kind": "shelf", "w": 2, "h": 1, "slots": 6, "cost": 80000, "unlockLevel": 5, "power": 0 },
-  { "id": "fridge", "name": "Tủ lạnh", "icon": "🧊", "kind": "fridge", "w": 1, "h": 2, "slots": 6, "cost": 120000, "unlockLevel": 5, "power": 5000 },
-  { "id": "freezer", "name": "Tủ đông", "icon": "❄️", "kind": "freezer", "w": 2, "h": 1, "slots": 4, "cost": 180000, "unlockLevel": 9, "power": 8000 },
+  { "id": "shelf", "name": "Kệ gỗ", "icon": "🗄️", "kind": "shelf", "w": 2, "h": 1, "slots": 12, "cost": 80000, "unlockLevel": 5, "power": 0 },
+  { "id": "fridge", "name": "Tủ lạnh", "icon": "🧊", "kind": "fridge", "w": 1, "h": 2, "slots": 12, "cost": 120000, "unlockLevel": 5, "power": 5000 },
+  { "id": "freezer", "name": "Tủ đông", "icon": "❄️", "kind": "freezer", "w": 2, "h": 1, "slots": 12, "cost": 180000, "unlockLevel": 9, "power": 8000 },
   { "id": "storage_rack", "name": "Kệ kho", "icon": "📦", "kind": "storage", "w": 1, "h": 1, "slots": 0, "cost": 50000, "unlockLevel": 8, "power": 0, "storageCells": 10 },
-  { "id": "shelf_double", "name": "Kệ đôi", "icon": "🗃️", "kind": "shelf", "w": 2, "h": 1, "slots": 6, "cost": 160000, "unlockLevel": 15, "power": 0, "capacityMul": 2, "requiresPlot": "D" },
+  { "id": "shelf_double", "name": "Kệ đôi", "icon": "🗃️", "kind": "shelf", "w": 2, "h": 1, "slots": 12, "cost": 160000, "unlockLevel": 15, "power": 0, "capacityMul": 2, "requiresPlot": "D" },
   { "id": "counter", "name": "Quầy thu ngân", "icon": "🧾", "kind": "counter", "w": 2, "h": 1, "slots": 0, "cost": 0, "unlockLevel": 1, "power": 0, "fixed": true },
   { "id": "counter2", "name": "Quầy thu ngân 2", "icon": "🧾", "kind": "counter", "w": 2, "h": 1, "slots": 0, "cost": 300000, "unlockLevel": 15, "power": 2000, "limit": 1, "requiresPlot": "D" },
   { "id": "food_grill", "name": "Bếp nướng", "icon": "🔥", "kind": "food", "w": 2, "h": 1, "slots": 0, "cost": 260000, "unlockLevel": 21, "power": 5000, "limit": 1, "requiresPlot": "E" },

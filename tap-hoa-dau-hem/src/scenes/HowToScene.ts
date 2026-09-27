@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { DATA } from '../core/data';
 import { Button, panel } from '../ui/widgets';
 import { C, HEX, W, setupCamera, txt } from '../ui/theme';
 
@@ -11,7 +12,7 @@ const PAGES = [
   {
     icon: '🧺',
     title: '2. Bày hàng lên kệ',
-    body: 'Chọn món trong kho rồi chạm (hoặc kéo) vào ô kệ. Mỗi ô chứa 5 món. Bấm "Tự bày" nếu lười. Nút × trả hàng về kho.',
+    body: `Chọn món trong kho rồi chạm (hoặc kéo) vào ô kệ. Mỗi kệ ${DATA.balance.slotsPerShelf} ô, mỗi ô chứa ${DATA.balance.slotCapacity} món. Bấm "Tự bày" nếu lười. Nút × trả hàng về kho.`,
   },
   {
     icon: '🙋',
