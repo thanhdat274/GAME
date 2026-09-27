@@ -974,28 +974,6 @@ export class DaySession {
     else if (this.state.settings.autoChange) this.autoChange();
   }
 
-  choosePaymentMethod(method: PaymentMethod): boolean {
-    const c = this.front;
-    if (!c || c.status !== 'paying' || c.paymentMethod) return false;
-    if (method === 'cash') {
-      c.paymentMethod = 'cash';
-      c.bill = customerPayment(c.total, this.rng);
-      c.changeDue = c.bill - c.total;
-      c.changeStartedAt = this.elapsed;
-      this.tray = [];
-      this.events.emit('paymentStarted', c);
-      if (c.changeDue === 0) this.completeSale(c, this.tipFor(c, false), 0);
-      else if (this.state.settings.autoChange) this.autoChange();
-      return true;
-    }
-    c.paymentMethod = method;
-    c.bill = c.total;
-    c.changeDue = 0;
-    this.tray = [];
-    this.completeSale(c, 0, 0);
-    return true;
-  }
-
   /** Người chơi trả lời khách mặc cả: bớt thì giảm tiền, không bớt thì khách có thể bỏ về. */
   resolveBargain(accept: boolean): boolean {
     const c = this.front;

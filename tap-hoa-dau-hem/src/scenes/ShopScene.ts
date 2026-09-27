@@ -850,7 +850,7 @@ export class ShopScene extends Phaser.Scene {
     const away = this.session.playerAway > 0;
     this.ownerAvatar?.setVisible(!away);
     const managerKey = this.managerView ? `manager-${G.state.manager.speed}-${this.session.openIncidents().map((i) => i.id).join(',')}` : '';
-    const mode = away && !c ? 'away' : managerKey || (!c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}-${c.paymentMethod ?? 'choose'}` : c.status === 'waiting' && c.askLeft !== undefined && c.order.some(askable) ? `ask-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`);
+    const mode = away && !c ? 'away' : managerKey || (!c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'waiting' && c.askLeft !== undefined && c.order.some(askable) ? `ask-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`);
     if (!force && mode === this.panelMode) return;
     const keepPay = mode === this.panelMode && mode.startsWith('pay');
     this.panelMode = mode;
