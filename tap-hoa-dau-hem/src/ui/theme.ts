@@ -6,6 +6,7 @@ import Phaser from 'phaser';
  * Trên màn hình dọc điện thoại (iPhone/Android tỉ lệ 18:9 ~ 21:9),
  * game tự mở rộng chiều cao (640 -> 840) để lấp đầy 100% màn hình,
  * loại bỏ hoàn toàn dải đen trên/dưới.
+ * Màn hình ngang (máy tính) vốn đã có dải hai bên, nên dùng khung cao đủ hiện 4 hàng kệ.
  */
 export function computeGameHeight(): number {
   if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
@@ -20,6 +21,8 @@ export function computeGameHeight(): number {
   if (ratio >= 1.55) {
     return Math.min(840, Math.max(640, Math.round(W * ratio)));
   }
+  // 720 ≥ 640 + 1 hàng kệ (ROW_PITCH 64): đủ cho hàng kệ thứ 4, dư chút cho ô dưới.
+  if (ratio < 1) return 720;
   return 640;
 }
 
