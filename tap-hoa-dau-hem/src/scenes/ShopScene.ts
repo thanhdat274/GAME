@@ -2,13 +2,14 @@ import Phaser from 'phaser';
 import type { Customer } from '../core/customers';
 import type { CustomerType } from '../core/data';
 import { DATA, hasFeature, product, type Category } from '../core/data';
+import { activeShopType } from '../core/shopTypes';
 import { DaySession, endDay, runDayHeadless } from '../core/day';
 import { orderShortfall, orderUnits, tripSeconds, type PhoneOrder } from '../core/delivery';
 import { roleDef, moodLabel } from '../core/staff';
 import { canGiveCredit } from '../core/ledger';
 import { claimQuest, questDef, questDone, questProgress, questsUnlocked } from '../core/quests';
 import { MAX_SHELVES, formatClock, formatMoney, warehouseQty } from '../core/state';
-import { askable, orderTotal } from '../core/customers';
+import { askable, discountedCashTotal, orderTotal } from '../core/customers';
 import { ensureDiningTables } from '../core/dining';
 import { calendarDate } from '../core/calendar';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
@@ -22,6 +23,7 @@ import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sou
 import { Bar, Button, dialog, floatText, panel, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
+import { perfEnabled, recordPerfSection } from '../ui/perfOverlay';
 
 const SHELF_TOP = HUD_H + 10;
 /** Màn hình đủ cao thì hiện thêm 1 hàng kệ; sàn, quầy và ô bên dưới dời xuống tương ứng. */
@@ -553,7 +555,7 @@ export class ShopScene extends Phaser.Scene {
     this.staffLayer.add(regG);
 
     this.ownerAvatar = ownerSprite(this, this.ownerX, PANEL_Y + 2).setScale(0.75).setFlipX(true);
-    this.ownerAvatar.setVisible(!this.session.closed && this.session.playerAway <= 0);
+    this.ownerAvatar.setVisible(this.session.playerAway <= 0);
     this.staffLayer.add([
       this.ownerAvatar,
       txt(this, this.ownerX, COUNTER_Y + 50, 'Bạn', { size: 9, bold: true, color: HEX.cream, origin: [0.5, 0.5] }),
@@ -847,7 +849,7 @@ export class ShopScene extends Phaser.Scene {
   private renderPanel(force = false): void {
     const c = this.session.front;
     const away = this.session.playerAway > 0;
-    this.ownerAvatar?.setVisible(!away && !this.session.closed);
+    this.ownerAvatar?.setVisible(!away);
     const managerKey = this.managerView ? `manager-${G.state.manager.speed}-${this.session.openIncidents().map((i) => i.id).join(',')}` : '';
     const mode = away && !c ? 'away' : managerKey || (!c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'waiting' && c.askLeft !== undefined && c.order.some(askable) ? `ask-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`);
     if (!force && mode === this.panelMode) return;
@@ -876,9 +878,12 @@ export class ShopScene extends Phaser.Scene {
     }
     if (!c) {
       const staffed = this.session.lanes.length > 0;
+      // Tiệm chỉ bán ở quầy (tiệm xôi) không có kệ: nhắc làm sẵn món thay vì nạp kệ.
+      const counterShop = activeShopType(G.state).def.service === 'counter';
       const msg = this.session.closed
         ? '🌙 Đã đóng cửa. Đang dọn tiệm...'
-        : staffed ? '⏳ Quầy bạn đang trống.\nThu ngân lo quầy bên phải, bạn tranh thủ nạp kệ nhé!' : '⏳ Đang chờ khách...\nTranh thủ nạp kệ bằng nút + xanh nhé!';
+        : counterShop ? '⏳ Đang chờ khách...\nTranh thủ vào Bếp làm sẵn vài phần nhé!'
+          : staffed ? '⏳ Quầy bạn đang trống.\nThu ngân lo quầy bên phải, bạn tranh thủ nạp kệ nhé!' : '⏳ Đang chờ khách...\nTranh thủ nạp kệ bằng nút + xanh nhé!';
       this.panelLayer.add(txt(this, W / 2, PANEL_Y + 100, msg, { size: 15, origin: [0.5, 0.5], align: 'center', color: HEX.muted, wrap: W - 40 }));
       const managerBtn = !this.session.closed && staffed && G.state.manager.enabled && hasFeature(G.state.level, 'manager') && !G.state.today.managerDay;
       if (managerBtn) {
@@ -888,7 +893,7 @@ export class ShopScene extends Phaser.Scene {
         } }));
       }
       if (!this.session.closed) {
-        this.panelLayer.add(new Button(this, W / 2, PANEL_Y + (managerBtn ? 210 : 184), { w: 240, h: 40, label: '📦 Tạm dừng · nhập & bày hàng', size: 13, color: C.wood, onTap: () => this.openRestock() }));
+        this.panelLayer.add(new Button(this, W / 2, PANEL_Y + (managerBtn ? 210 : 184), { w: 240, h: 40, label: counterShop ? '🍙 Vào bếp làm món' : '📦 Tạm dừng · nhập & bày hàng', size: 13, color: C.wood, onTap: () => (counterShop ? this.openKitchen() : this.openRestock()) }));
       }
       return;
     }
@@ -903,7 +908,8 @@ export class ShopScene extends Phaser.Scene {
   private renderAsking(c: Customer): void {
     const L = this.panelLayer;
     const names = c.order.filter(askable).map((l) => product(l.productId).name.toLowerCase());
-    L.add(txt(this, W / 2, PANEL_Y + 50, `🙋 ${this.who(c)}: "Còn ${names.join(', ') || 'hàng'} không con? Trên kệ hết rồi."`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
+    const items = names.join(', ') || 'hàng';
+    L.add(txt(this, W / 2, PANEL_Y + 50, `🙋 ${this.who(c)}: ${this.askSpeech(c, items)}`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
     L.add(txt(this, W / 2, PANEL_Y + 110, '🔎 Đang kiểm kho...\nCòn thì lấy đưa khách và bày thêm lên kệ; hết thì tính tiền phần còn lại.', { size: 13, origin: [0.5, 0.5], align: 'center', color: HEX.muted, wrap: W - 50 }));
   }
 
@@ -911,12 +917,90 @@ export class ShopScene extends Phaser.Scene {
     return c.name ?? c.type.name;
   }
 
+  private askSpeech(c: Customer, items: string): string {
+    const id = c.type.id;
+    const name = c.name ?? '';
+    if (id === 'sinh_vien') return `"Anh/chị ơi, còn ${items} không ạ? Trên kệ hết rồi."`;
+    if (id === 'hoc_sinh') return `"Cô/chú ơi, còn ${items} không ạ? Trên kệ hết rồi."`;
+    if (id === 'ong_cu') return `"Còn ${items} không cháu? Trên kệ hết rồi ông tìm không thấy."`;
+    if (id === 'xe_om') return `"Còn ${items} không cháu? Nhìn trên kệ thấy hết rồi."`;
+    if (id === 'noi_tro') return `"Còn ${items} không con? Trên kệ hết rồi."`;
+    if (id === 'ba_ban_hang') return `"Còn ${items} không con ơi? Trên kệ hết trơn rồi."`;
+    if (id === 'cong_nhan') return `"Chủ tiệm ơi, còn ${items} không? Trên kệ hết rồi."`;
+    if (id === 'thanh_nien') return `"Chủ quán ơi, còn ${items} không? Trên kệ hết sạch rồi."`;
+    if (id === 'me_bim') return `"Tiệm còn ${items} không em? Trên kệ hết rồi."`;
+    if (id === 'van_phong') return `"Tiệm mình còn ${items} không bạn? Trên kệ hết rồi."`;
+    if (id === 'shipper') return `"Tiệm còn ${items} không anh/chị? Trên kệ hết rồi."`;
+    if (id === 'khach_du_lich') return `"Tiệm ơi, còn ${items} không ạ? Trên kệ hết rồi."`;
+    if (id === 'hang_xom') {
+      if (name.includes('Chú') || name.includes('Bác')) return `"Còn ${items} không cháu? Trên kệ hết rồi."`;
+      if (name.includes('Cô') || name.includes('Dì')) return `"Còn ${items} không con? Trên kệ hết rồi."`;
+      if (name.includes('Anh')) return `"Còn ${items} không em? Trên kệ hết rồi."`;
+      return `"Còn ${items} không cháu? Trên kệ hết rồi."`;
+    }
+    return `"Còn ${items} không ạ? Trên kệ hết rồi."`;
+  }
+
+  private bargainSpeech(c: Customer): string {
+    const id = c.type.id;
+    const pct = c.bargainPct ?? 0;
+    const name = c.name ?? '';
+    if (id === 'noi_tro') return `"Bớt cho cô ${pct}% nha con, mua mở hàng cho nè!"`;
+    if (id === 'ba_ban_hang') return `"Bớt cho cô ${pct}% lấy thảo nha con!"`;
+    if (id === 'ong_cu') return `"Bớt cho ông ${pct}% được không cháu?"`;
+    if (id === 'sinh_vien') return `"Sinh viên nghèo bớt cho em ${pct}% được không ạ?"`;
+    if (id === 'hoc_sinh') return `"Bớt cho em ${pct}% được không cô/chú?"`;
+    if (id === 'xe_om') return `"Bớt cho chú ${pct}% nha cháu!"`;
+    if (id === 'cong_nhan') return `"Bớt cho anh ${pct}% nha chủ tiệm!"`;
+    if (id === 'thanh_nien') return `"Bớt cho em ${pct}% nha chủ quán!"`;
+    if (id === 'me_bim') return `"Bớt cho chị ${pct}% nha em!"`;
+    if (id === 'van_phong') return `"Bớt cho mình ${pct}% được không bạn?"`;
+    if (id === 'shipper') return `"Bớt cho shipper ${pct}% nha shop!"`;
+    if (id === 'khach_du_lich') return `"Giảm cho mình ${pct}% được không bạn?"`;
+    if (id === 'hang_xom') {
+      if (name.includes('Chú') || name.includes('Bác')) {
+        const title = name.includes('Chú') ? 'chú' : 'bác';
+        return `"Chỗ xóm giềng bớt cho ${title} ${pct}% nha cháu!"`;
+      }
+      if (name.includes('Cô') || name.includes('Dì')) {
+        const title = name.includes('Cô') ? 'cô' : 'dì';
+        return `"Chỗ xóm giềng bớt cho ${title} ${pct}% nha con!"`;
+      }
+      if (name.includes('Anh')) return `"Người quen bớt cho anh ${pct}% nha em!"`;
+      return `"Chỗ quen biết bớt cho ${pct}% nghen!"`;
+    }
+    return `"Bớt cho mình ${pct}% nha tiệm!"`;
+  }
+
+  private creditSpeech(c: Customer): string {
+    const id = c.type.id;
+    const name = c.name ?? '';
+    if (id === 'hang_xom') {
+      if (name.includes('Chú') || name.includes('Bác')) {
+        const title = name.includes('Chú') ? 'chú' : 'bác';
+        return `"Ghi sổ giùm ${title}, mai mốt ${title} gửi nghen cháu!"`;
+      }
+      if (name.includes('Cô') || name.includes('Dì')) {
+        const title = name.includes('Cô') ? 'cô' : 'dì';
+        return `"Ghi sổ giùm ${title}, mai mốt ${title} ghé trả nghen con!"`;
+      }
+      if (name.includes('Anh')) return `"Ghi sổ giùm anh, mai mốt anh ghé gửi nghen em!"`;
+      return `"Ghi sổ giùm, mai mốt ghé trả nghen!"`;
+    }
+    if (id === 'sinh_vien') return `"Ghi sổ giùm em bữa nay, đầu tháng có tiền em ghé trả nghen!"`;
+    if (id === 'ong_cu') return `"Ghi sổ giùm ông, mai lãnh lương hưu ông trả nghen!"`;
+    if (id === 'noi_tro') return `"Ghi sổ giùm cô, mai mốt cô ghé trả nghen con!"`;
+    if (id === 'xe_om') return `"Ghi sổ giùm chú, chiều chạy mấy cuốc xong chú ghé trả nghen!"`;
+    if (id === 'cong_nhan') return `"Ghi sổ giùm anh, cuối tuần lãnh lương anh ghé gửi nghen!"`;
+    return `"Ghi sổ giùm, mai mốt trả nghen!"`;
+  }
+
   /** Khách mặc cả: Bớt / Không bớt. */
   private renderBargain(c: Customer): void {
     const L = this.panelLayer;
     const total = orderTotal(c, G.state);
-    const after = Math.max(1000, Math.round((total * (100 - (c.bargainPct ?? 0))) / 100 / 1000) * 1000);
-    L.add(txt(this, W / 2, PANEL_Y + 40, `🙏 ${this.who(c)}: "Bớt cho cô ${c.bargainPct}% nha con!"`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
+    const after = discountedCashTotal(total, c.bargainPct ?? 0);
+    L.add(txt(this, W / 2, PANEL_Y + 40, `🙏 ${this.who(c)}: ${this.bargainSpeech(c)}`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
     L.add(txt(this, W / 2, PANEL_Y + 84, `Đơn ${formatMoney(total)} → ${formatMoney(after)}`, { size: 16, bold: true, origin: [0.5, 0.5], color: HEX.ink }));
     L.add(txt(this, W / 2, PANEL_Y + 112, 'Không bớt: khách có thể bỏ về, hoặc mua mà không vui (tối đa 3 sao).', { size: 11, origin: [0.5, 0.5], align: 'center', wrap: W - 50, color: HEX.muted }));
     const answer = (accept: boolean) => () => {
@@ -933,7 +1017,7 @@ export class ShopScene extends Phaser.Scene {
     const L = this.panelLayer;
     const total = orderTotal(c, G.state);
     const allowed = canGiveCredit(G.state, total);
-    L.add(txt(this, W / 2, PANEL_Y + 40, `📒 ${this.who(c)}: "Ghi sổ giùm, mai mốt trả nghen!"`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
+    L.add(txt(this, W / 2, PANEL_Y + 40, `📒 ${this.who(c)}: ${this.creditSpeech(c)}`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
     L.add(txt(this, W / 2, PANEL_Y + 84, `Nợ ${formatMoney(total)} · hạn 3 ngày`, { size: 16, bold: true, origin: [0.5, 0.5] }));
     L.add(txt(this, W / 2, PANEL_Y + 112, allowed ? 'Không cho: khách bỏ về và chấm 2 sao.' : 'Sổ nợ đã đầy (tối đa 20% tiền mặt).', { size: 12, origin: [0.5, 0.5], align: 'center', wrap: W - 50, color: allowed ? HEX.muted : HEX.red }));
     const answer = (grant: boolean) => () => {
@@ -1056,6 +1140,11 @@ export class ShopScene extends Phaser.Scene {
     const L = this.panelLayer;
     const y0 = PANEL_Y + 12;
     L.add(txt(this, 18, y0, `Đơn: ${formatMoney(c.total)}`, { size: 16, bold: true }));
+    if (c.paymentMethod === 'card' || c.paymentMethod === 'transfer') {
+      const label = c.paymentMethod === 'card' ? '💳 Khách thanh toán bằng thẻ' : '📲 Khách chuyển khoản';
+      L.add(txt(this, W / 2, y0 + 48, label, { size: 14, color: HEX.muted, origin: [0.5, 0.5] }));
+      return;
+    }
     L.add(txt(this, 18, y0 + 22, 'Khách đưa:', { size: 13, color: HEX.muted }));
     L.add(bill(this, 128, y0 + 30, c.bill, 64, 30));
     L.add(txt(this, 166, y0 + 30, formatMoney(c.bill), { size: 13, bold: true, origin: [0, 0.5] }));
@@ -1114,8 +1203,13 @@ export class ShopScene extends Phaser.Scene {
     }
     // Chế độ quản lý: tăng tốc x2/x4 (nhiều bước core mỗi khung hình).
     const speed = G.state.today.managerDay ? G.state.manager.speed : 1;
+    let measureAt = perfEnabled ? performance.now() : 0;
     if (!G.liveSnapshot) for (let i = 0; i < speed && !this.ending; i++) this.session.update(dtMs / 1000);
     this.tickIdle(dtMs / 1000);
+    if (perfEnabled) {
+      recordPerfSection('sim', performance.now() - measureAt);
+      measureAt = performance.now();
+    }
     const gameDt = this.session.paused ? 0 : speed * Math.min(dtMs / 1000, 0.5);
     this.liveMap.update(gameDt);
     if (this.playMap) {
@@ -1130,6 +1224,10 @@ export class ShopScene extends Phaser.Scene {
           : this.session.queue.length ? `Khách đầu hàng phải chờ bạn quay lại mới tính tiền được.\n(${this.session.queue.length} người đang chờ quầy bạn)` : 'Khách đầu hàng phải chờ bạn quay lại mới tính tiền được.');
       }
     }
+    if (perfEnabled) {
+      recordPerfSection('map', performance.now() - measureAt);
+      measureAt = performance.now();
+    }
     this.renderAcc += dtMs;
     if (this.renderAcc >= 100) {
       this.renderAcc = 0;
@@ -1140,6 +1238,10 @@ export class ShopScene extends Phaser.Scene {
       const canShowZoneActions = this.session.customers.length === 0;
       this.zoneRefillButtons.forEach(({ zone, button }) => button.setVisible(canShowZoneActions && !this.topDown && G.state.zones.some((item) => item === zone)));
       this.checkQuestProgress();
+    }
+    if (perfEnabled) {
+      recordPerfSection('ui', performance.now() - measureAt);
+      measureAt = performance.now();
     }
     const side = !this.topDown;
     this.session.customers.forEach((c) => {
@@ -1157,6 +1259,7 @@ export class ShopScene extends Phaser.Scene {
       this.counterTimerText.setText(`⏱ ${Math.ceil(requestLeft)}s`);
       this.counterRequestBar?.set(requestLeft / Math.max(1, this.session.front?.counterRequestSeconds ?? 1), requestLeft <= 2 ? C.red : C.green);
     }
+    if (perfEnabled) recordPerfSection('actors', performance.now() - measureAt);
   }
 
   // ---------- Chơi hộ khi rảnh tay ----------
@@ -1345,7 +1448,8 @@ export class ShopScene extends Phaser.Scene {
     L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
     const hasDining = !G.liveSnapshot && ensureDiningTables(G.state).length > 0;
     const hasCloud = cloudSaveEnabled();
-    const panelH = 500 + (hasDining ? 54 : 0) + (hasCloud ? 54 : 0);
+    const hasXoiKitchen = !G.liveSnapshot && activeShopType(G.state).def.service === 'counter';
+    const panelH = 500 + (hasDining ? 54 : 0) + (hasCloud ? 54 : 0) + (hasXoiKitchen ? 54 : 0);
     const panelTop = Math.round((H - panelH) / 2);
     L.add(panel(this, 50, panelTop, W - 100, panelH));
     let y = panelTop + 32;
@@ -1353,7 +1457,8 @@ export class ShopScene extends Phaser.Scene {
     y += 56;
     L.add(new Button(this, W / 2, y, { w: 220, h: 50, label: '▶ Tiếp tục', onTap: () => this.resume() }));
     y += 58;
-    L.add(new Button(this, W / 2, y, { w: 220, h: 44, label: '📦 Nhập & bày hàng', color: C.green, onTap: () => this.openRestock() }));
+    const counterShop = activeShopType(G.state).def.service === 'counter';
+    L.add(new Button(this, W / 2, y, { w: 220, h: 44, label: counterShop ? '📦 Nhập nguyên liệu' : '📦 Nhập & bày hàng', color: C.green, onTap: () => this.openRestock() }));
     y += 54;
     const autoLabel = () => (G.state.settings.autoChange ? '🧮 Tự thối tiền: Bật' : '✋ Tự thối tiền: Tắt');
     const autoBtn = new Button(this, W / 2, y, {
@@ -1447,6 +1552,17 @@ export class ShopScene extends Phaser.Scene {
       color: C.woodDark,
       onTap: () => { void checkForUpdate().then((r) => toast(this, manualCheckMessage(r))); },
     }));
+    if (hasXoiKitchen) {
+      y += 54;
+      L.add(new Button(this, W / 2, y, {
+        w: 220,
+        h: 44,
+        label: '🍙 Bếp xôi (ngâm, hấp, làm món)',
+        size: 12,
+        color: C.green,
+        onTap: () => this.openKitchen(),
+      }));
+    }
     if (hasDining) {
       y += 54;
       L.add(new Button(this, W / 2, y, {
@@ -1526,6 +1642,17 @@ export class ShopScene extends Phaser.Scene {
     setPlayClockRunning(false);
     this.scene.pause('Shop');
     this.scene.launch('Restock');
+  }
+
+  /** Tiệm xôi: màn Bếp (ngâm, hấp, làm món) phủ lên tiệm; tiệm đứng yên tới khi quay lại. */
+  private openKitchen(): void {
+    if (this.ending || G.liveSnapshot) return;
+    this.pauseLayer?.destroy();
+    this.pauseLayer = null;
+    this.session.paused = true;
+    setPlayClockRunning(false);
+    this.scene.pause('Shop');
+    this.scene.launch('Kitchen', { fromShop: true });
   }
 
   /** Nấu kỹ (mini-game) từ góc nhìn trên xuống: màn Bếp phủ lên, tiệm đứng yên tới khi quay lại. */

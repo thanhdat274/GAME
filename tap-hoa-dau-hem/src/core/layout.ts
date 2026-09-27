@@ -4,7 +4,7 @@ import { emptySlots, type Fixture, type GameState } from './state';
 
 export interface Cell { x: number; y: number }
 
-export type PlaceError = 'bounds' | 'locked' | 'overlap' | 'door' | 'storage-only';
+export type PlaceError = 'bounds' | 'locked' | 'overlap' | 'door' | 'storage-only' | 'generator-only';
 export type PlotStatus = 'open' | 'available' | 'level' | 'money';
 
 const key = (x: number, y: number) => y * DATA.land.cols + x;
@@ -31,7 +31,7 @@ export function plotAt(x: number, y: number): string | null {
   return DATA.land.plots.find((p) => p.rects.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h))?.id ?? null;
 }
 
-export function isOpenCell(state: GameState, x: number, y: number): boolean {
+export function isOpenCell(state: Pick<GameState, 'land'>, x: number, y: number): boolean {
   const owner = plotAt(x, y);
   return owner === 'initial' || (owner !== null && state.land.includes(owner));
 }
@@ -39,6 +39,11 @@ export function isOpenCell(state: GameState, x: number, y: number): boolean {
 function isStorageOnly(x: number, y: number): boolean {
   const owner = plotAt(x, y);
   return owner !== null && owner !== 'initial' && !!plot(owner).storageOnly;
+}
+
+function isGeneratorOnly(x: number, y: number): boolean {
+  const owner = plotAt(x, y);
+  return owner !== null && owner !== 'initial' && !!plot(owner).generatorOnly;
 }
 
 export function plotStatus(state: GameState, id: string): PlotStatus {
@@ -55,8 +60,22 @@ export function unlockPlot(state: GameState, id: string): PlotStatus {
   if (status !== 'available') return status;
   state.money -= plot(id).cost;
   state.land.push(id);
-  state.lifetime.landsOpened = state.land.length;
+  state.lifetime.landsOpened = state.land.filter((plotId) => !plot(plotId).generatorOnly).length;
+  if (plot(id).storageOnly) arrangeStorageRacks(state);
   return 'open';
+}
+
+/** Sắp các kệ kho vào KHO theo hàng, tối đa số ô chuyên dụng hiện có. */
+export function arrangeStorageRacks(state: Pick<GameState, 'land' | 'fixtures'>): void {
+  const warehouses = DATA.land.plots.filter((item) => item.storageOnly && state.land.includes(item.id));
+  if (!warehouses.length) return;
+  const racks = state.fixtures.filter((fixture) => furniture(fixture.type).kind === 'storage');
+  const cells = warehouses.flatMap(plotCells);
+  racks.slice(0, cells.length).forEach((rack, index) => {
+    rack.x = cells[index].x;
+    rack.y = cells[index].y;
+    rack.rot = 0;
+  });
 }
 
 /** Số khách chờ tối đa theo đất đã mở. */
@@ -84,19 +103,53 @@ export function occupancy(state: GameState, ignoreUid?: number): Map<number, num
   return map;
 }
 
-/** Kiểm tra đặt nội thất; trả về null nếu hợp lệ. */
-export function placementError(state: GameState, type: string, x: number, y: number, rot: 0 | 1, ignoreUid?: number): PlaceError | null {
-  const occ = occupancy(state, ignoreUid);
+/** Lỗi đặt nội thất tại các ô của nó, chưa xét chồng lên nội thất khác. */
+function cellsError(land: Pick<GameState, 'land'>, type: string, x: number, y: number, rot: 0 | 1, racksNeedWarehouse: boolean): PlaceError | Cell[] {
   const kind = furniture(type).kind;
   const { door, cols, rows } = DATA.land;
-  for (const c of fixtureCells({ type, x, y, rot })) {
+  const cells = fixtureCells({ type, x, y, rot });
+  for (const c of cells) {
     if (c.x < 0 || c.y < 0 || c.x >= cols || c.y >= rows) return 'bounds';
-    if (!isOpenCell(state, c.x, c.y)) return 'locked';
+    if (!isOpenCell(land, c.x, c.y)) return 'locked';
     if (c.x === door.x && c.y === door.y) return 'door';
     if (isStorageOnly(c.x, c.y) && kind !== 'storage') return 'storage-only';
-    if (occ.has(key(c.x, c.y))) return 'overlap';
+    if (kind === 'storage' && racksNeedWarehouse && !isStorageOnly(c.x, c.y)) return 'storage-only';
+    if (isGeneratorOnly(c.x, c.y) && kind !== 'generator') return 'generator-only';
+    if (kind === 'generator' && !isGeneratorOnly(c.x, c.y)) return 'generator-only';
   }
-  return null;
+  return cells;
+}
+
+/** Kiểm tra đặt nội thất; trả về null nếu hợp lệ. */
+export function placementError(state: GameState, type: string, x: number, y: number, rot: 0 | 1, ignoreUid?: number): PlaceError | null {
+  // Tiệm không mở đất (tiệm xôi) không có KHO nên kệ kho đặt trong mặt bằng chính.
+  const cells = cellsError(state, type, x, y, rot, activeShopType(state).def.landPlots);
+  if (!Array.isArray(cells)) return cells;
+  const occ = occupancy(state, ignoreUid);
+  return cells.some((c) => occ.has(key(c.x, c.y))) ? 'overlap' : null;
+}
+
+/**
+ * Cất vào kho nội thất những món không còn đặt hợp lệ, ví dụ khi bản mới đổi hình mảnh đất
+ * (ô F cũ thành KHO). Giữ nguyên uid và kệ hàng như khi người chơi tự cất. Trả về số món đã cất.
+ */
+export function stowMisplacedFixtures(data: Pick<GameState, 'land' | 'fixtures' | 'storedFixtures'>, racksNeedWarehouse: boolean): number {
+  const taken = new Set<number>();
+  const kept: Fixture[] = [];
+  let stowed = 0;
+  for (const fixture of data.fixtures) {
+    const cells = cellsError(data, fixture.type, fixture.x, fixture.y, fixture.rot, racksNeedWarehouse);
+    const fits = Array.isArray(cells) && !cells.some((c) => taken.has(key(c.x, c.y)));
+    if (fits || furniture(fixture.type).fixed) {
+      if (Array.isArray(cells)) for (const c of cells) taken.add(key(c.x, c.y));
+      kept.push(fixture);
+    } else {
+      data.storedFixtures.push(fixture);
+      stowed++;
+    }
+  }
+  data.fixtures = kept;
+  return stowed;
 }
 
 /** Ô khách đi được: đã mở, không bị nội thất chiếm, không thuộc sân sau (chỉ để kho). */
@@ -105,7 +158,7 @@ export function walkableGrid(state: GameState): boolean[] {
   const occ = occupancy(state);
   const grid: boolean[] = [];
   for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-    grid[key(x, y)] = isOpenCell(state, x, y) && !occ.has(key(x, y)) && !isStorageOnly(x, y);
+    grid[key(x, y)] = isOpenCell(state, x, y) && !occ.has(key(x, y)) && !isStorageOnly(x, y) && !isGeneratorOnly(x, y);
   }
   return grid;
 }
@@ -228,11 +281,11 @@ export function walkTiles(state: GameState, from: Fixture | null, to: Fixture | 
 
 // ---------- Mua / bán / di chuyển nội thất ----------
 
-export type BuyFixtureResult = 'ok' | 'money' | 'level' | 'limit' | 'plot' | 'shop' | PlaceError;
+export type BuyFixtureResult = 'ok' | 'money' | 'level' | 'limit' | 'plot' | 'shop' | 'staff' | PlaceError;
 
 function freeShelfIndex(state: GameState, slots: number): number {
   for (let i = 3; i < state.shelves.length; i++) {
-    if (!state.fixtures.some((f) => f.shelf === i)) {
+    if (!state.fixtures.some((f) => f.shelf === i) && !state.storedFixtures.some((f) => f.shelf === i)) {
       state.shelves[i] = emptySlots(slots);
       state.zones[i] = null;
       return i;
@@ -248,8 +301,13 @@ export function buyFixture(state: GameState, type: string, x: number, y: number,
   if (def.fixed) return 'level';
   if (!activeShopType(state).allowsFixture(type)) return 'shop';
   if (state.level < def.unlockLevel) return 'level';
-  if (def.requiresPlot && !state.land.includes(def.requiresPlot)) return 'plot';
-  if (def.limit !== undefined && state.fixtures.filter((f) => f.type === type).length >= def.limit) return 'limit';
+  if (def.requiresPlot && activeShopType(state).def.landPlots && !state.land.includes(def.requiresPlot)) return 'plot';
+  if (def.limit !== undefined && [...state.fixtures, ...state.storedFixtures].filter((f) => f.type === type).length >= def.limit) return 'limit';
+  if (def.kind === 'counter' && !def.fixed) {
+    const countersAfterPurchase = counterFixtures(state).length + 1;
+    const cashiers = state.staff.filter((staff) => staff.role === 'cashier').length;
+    if (cashiers < countersAfterPurchase) return 'staff';
+  }
   if (state.money < def.cost) return 'money';
   const error = placementError(state, type, x, y, rot);
   if (error) return error;
@@ -268,6 +326,33 @@ export function moveFixture(state: GameState, uid: number, x: number, y: number,
   f.x = x;
   f.y = y;
   f.rot = rot;
+  return null;
+}
+
+export type StowFixtureResult = 'ok' | 'fixed' | 'missing';
+
+/** Cất nội thất đã mua vào kho riêng, giữ nguyên uid, hướng và kệ hàng của nó. */
+export function stowFixture(state: GameState, uid: number): StowFixtureResult {
+  const fixture = state.fixtures.find((item) => item.uid === uid);
+  if (!fixture) return 'missing';
+  if (furniture(fixture.type).fixed) return 'fixed';
+  state.fixtures = state.fixtures.filter((item) => item.uid !== uid);
+  state.storedFixtures.push(fixture);
+  return 'ok';
+}
+
+/** Lấy nội thất đã cất ra đặt lại miễn phí tại ô hợp lệ. */
+export function retrieveFixture(state: GameState, uid: number, x: number, y: number, rot: 0 | 1): PlaceError | 'missing' | 'staff' | null {
+  const fixture = state.storedFixtures.find((item) => item.uid === uid);
+  if (!fixture) return 'missing';
+  if (furniture(fixture.type).kind === 'counter') {
+    const cashiers = state.staff.filter((staff) => staff.role === 'cashier').length;
+    if (cashiers < counterFixtures(state).length + 1) return 'staff';
+  }
+  const error = placementError(state, fixture.type, x, y, rot);
+  if (error) return error;
+  state.storedFixtures = state.storedFixtures.filter((item) => item.uid !== uid);
+  state.fixtures.push({ ...fixture, x, y, rot });
   return null;
 }
 

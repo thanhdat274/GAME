@@ -14,8 +14,9 @@ export function computeGameHeight(): number {
   }
   if (typeof window === 'undefined') return 640;
   const gameEl = typeof document !== 'undefined' ? document.getElementById('game') : null;
-  const w = (gameEl?.clientWidth && gameEl.clientWidth > 0) ? gameEl.clientWidth : window.innerWidth;
-  const h = (gameEl?.clientHeight && gameEl.clientHeight > 0) ? gameEl.clientHeight : window.innerHeight;
+  const rect = gameEl?.getBoundingClientRect();
+  const w = (rect && rect.width > 0) ? rect.width : ((gameEl?.clientWidth && gameEl.clientWidth > 0) ? gameEl.clientWidth : window.innerWidth);
+  const h = (rect && rect.height > 0) ? rect.height : ((gameEl?.clientHeight && gameEl.clientHeight > 0) ? gameEl.clientHeight : window.innerHeight);
   if (!w || !h) return 640;
   const ratio = h / w;
   if (ratio >= 1.55) {

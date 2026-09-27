@@ -2,6 +2,7 @@ import { DATA, type Category, type CustomerType } from './data';
 import type { Rng } from './rng';
 import { priceOf, unlockedCategories, unlockedProducts, usableShelves, type GameState } from './state';
 import { EffectStack } from './effects';
+import { activeShopType } from './shopTypes';
 import { customerWantsInvoice } from './tax';
 
 export interface OrderLine {
@@ -23,6 +24,7 @@ export interface OrderLine {
 }
 
 export type CustomerStatus = 'entering' | 'browsing' | 'waiting' | 'scanning' | 'bargain' | 'credit' | 'paying' | 'fleeing' | 'done';
+export type PaymentMethod = 'cash' | 'card' | 'transfer';
 
 export interface Customer {
   id: number;
@@ -35,6 +37,7 @@ export interface Customer {
   bill: number;
   total: number;
   changeDue: number;
+  paymentMethod?: PaymentMethod;
   changeStartedAt: number;
   undos: number;
   shortAttempts: number;
@@ -97,9 +100,14 @@ export function densityAt(minute: number): number {
   return seg ? seg.mul : 1;
 }
 
+/** Mật độ khách của tiệm đang đứng: loại tiệm có đường cong riêng (tiệm xôi đông buổi sáng). */
+export function shopDensityAt(state: GameState, minute: number): number {
+  return activeShopType(state).densityAt(minute) ?? densityAt(minute);
+}
+
 /** Thời gian trung bình (giây thật) giữa hai khách. */
-export function meanSpawnSeconds(minute: number, ratingMul: number, day = 99, eventTrafficMul = 1): number {
-  return DATA.balance.baseSpawnSeconds / (densityAt(minute) * ratingMul * newShopMultiplier(day) * eventTrafficMul);
+export function meanSpawnSeconds(minute: number, ratingMul: number, day = 99, eventTrafficMul = 1, density = densityAt(minute)): number {
+  return DATA.balance.baseSpawnSeconds / (density * ratingMul * newShopMultiplier(day) * eventTrafficMul);
 }
 
 /** Tiệm mới mở ít người biết: ngày đầu ít khách hơn. */
@@ -112,13 +120,45 @@ export function pickCustomerType(rng: Rng, types: CustomerType[] = DATA.customer
   return pool[rng.weightedIndex(pool.map((t) => t.weight))];
 }
 
+/**
+ * Tiệm chỉ bán ở quầy (tiệm xôi): khách gọi 1–3 món khác nhau trong menu đang mở bán, ưu tiên món còn ở quầy.
+ * Món hết vẫn có thể được gọi (khách sẽ thiếu món và trừ sao), giống món quầy của tạp hóa.
+ */
+export function generateCounterOrder(type: CustomerType, rng: Rng, state: GameState): OrderLine[] {
+  const shop = activeShopType(state);
+  const dishes = DATA.recipes.filter((r) => shop.allowsRecipe(r.id) && !r.packaged && r.unlockLevel <= state.level && state.activeRecipes.includes(r.id));
+  if (!dishes.length) return [];
+  const weights = [0.6, 0.3, 0.1].slice(0, Math.max(1, Math.min(3, type.maxItems)));
+  const count = Math.min(dishes.length, rng.weightedIndex(weights) + 1);
+  const lines: OrderLine[] = [];
+  for (let i = 0; i < count; i++) {
+    const pool = dishes.filter((r) => !lines.some((l) => l.productId === r.output));
+    const inStock = (id: string) => state.counter.some((slot) => slot.productId === id && slot.qty > 0);
+    const pick = pool[rng.weightedIndex(pool.map((r) => (inStock(r.output) ? 3 : 1)))];
+    lines.push({ productId: pick.output, qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [] });
+  }
+  return lines;
+}
+
 /** Sinh giỏ hàng thông thường; hàng sau quầy được thêm riêng theo xác suất của khách. */
+/** Món tiệm có bán: đang được xếp vào ô kệ (kể cả ô đã hết) hoặc còn trong kho. */
+function carriedProducts(state: GameState): Set<string> {
+  const ids = new Set<string>();
+  for (const r of usableShelves(state)) for (const slot of state.shelves[r]) if (slot.productId) ids.add(slot.productId);
+  for (const lot of state.warehouse) if (lot.qty > 0) ids.add(lot.productId);
+  return ids;
+}
+
 export function generateOrder(type: CustomerType, level: number, rng: Rng, state?: GameState, cartUnits = 0): OrderLine[] {
+  if (state && activeShopType(state).def.service === 'counter') return generateCounterOrder(type, rng, state);
   const cats = unlockedCategories(level);
   const products = unlockedProducts(level, state).filter((p) => !p.behindCounter);
   // Món đang bán xả được chọn nhiều hơn.
   const clearance = new Set<string>();
   if (state) for (const r of usableShelves(state)) for (const s of state.shelves[r]) if (s.clearance && s.productId && s.qty > 0) clearance.add(s.productId);
+  // Khách chủ yếu tìm món tiệm có bán (đã xếp lên kệ hoặc còn trong kho); chỉ đôi khi hỏi món tiệm chưa bán.
+  // Nhờ vậy danh mục lớn hơn chỗ bày không làm phần lớn khách bỏ về vì "hết hàng".
+  const carried = state ? carriedProducts(state) : null;
   const effects = state ? EffectStack.forDay(state.day, state.calendarStartMonth, state.calendarStartYear, state.activeEvents) : null;
   const pickWeight = (id: string, price: number, category: string) => (1 / Math.sqrt(price))
     * (clearance.has(id) ? DATA.balance.clearance.pickWeightMul : 1) * (effects?.demand(category, id) ?? 1);
@@ -131,7 +171,9 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
     const catWeights = cats.map((c: Category) => (type.prefs[c] ?? 0) * (effects?.demand(c) ?? 1));
     const ci = rng.weightedIndex(catWeights);
     if (ci < 0) break;
-    const pool = products.filter((p) => p.category === cats[ci] && !lines.some((l) => l.productId === p.id));
+    const all = products.filter((p) => p.category === cats[ci] && !lines.some((l) => l.productId === p.id));
+    const sold = carried ? all.filter((p) => carried.has(p.id)) : all;
+    const pool = sold.length && (sold.length === all.length || rng.next() >= DATA.balance.uncarriedAskChance) ? sold : all;
     if (pool.length === 0) continue;
     // Món rẻ (mì gói, muối) được mua thường xuyên hơn món đắt (dầu ăn).
     const p = pool[rng.weightedIndex(pool.map((x) => pickWeight(x.id, x.price, x.category)))];
@@ -145,13 +187,25 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
   if (level >= counterUnlockLevel && type.counterRequestChance > 0 && rng.next() < type.counterRequestChance) {
     const counterProducts = unlockedProducts(level, state).filter((p) => p.behindCounter);
     if (state) {
-      const prepared = DATA.products.filter((p) => p.recipeOnly && state.activeRecipes.some((id) => DATA.recipes.find((r) => r.id === id)?.output === p.id)
+      // Món chế biến đang có ở quầy: tự nấu (món đang mở bán) hoặc nhận từ tiệm khác trong chuỗi (xôi gói).
+      const prepared = DATA.products.filter((p) => p.recipeOnly && p.unlockLevel <= level
+        && (state.activeRecipes.some((id) => DATA.recipes.find((r) => r.id === id)?.output === p.id) || activeShopType(state).def.sourcesFrom.includes(p.id))
         && state.counter.some((slot) => slot.productId === p.id && slot.qty > 0));
       counterProducts.push(...prepared);
     }
     if (counterProducts.length) {
       const p = rng.pick(counterProducts);
       lines.push({ productId: p.id, qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [] });
+    }
+  }
+  // Hàng nhận từ tiệm khác trong chuỗi (xôi gói) đang có ở quầy: một phần khách ghé mua kèm. Chỉ bốc số ngẫu nhiên khi
+  // quầy có món này, nên tiệm chưa đặt hàng nội bộ vẫn giữ nguyên chuỗi khách như trước.
+  const shop = state ? activeShopType(state).def : null;
+  if (state && shop?.sourcedRequestChance && !lines.some((l) => l.counterLine)) {
+    const sourced = shop.sourcesFrom.filter((id) => DATA.products.some((p) => p.id === id && p.unlockLevel <= level)
+      && state.counter.some((slot) => slot.productId === id && slot.qty > 0));
+    if (sourced.length && rng.next() < shop.sourcedRequestChance) {
+      lines.push({ productId: rng.pick(sourced), qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [] });
     }
   }
   return lines;
@@ -164,7 +218,9 @@ export function hasCarts(state: GameState | undefined, level: number): boolean {
 }
 
 export function createCustomer(id: number, level: number, rng: Rng, state?: GameState): Customer {
-  const type = pickCustomerType(rng, DATA.customers, level);
+  const allowed = state ? activeShopType(state).def.customers : null;
+  const types = allowed ? DATA.customers.filter((t) => allowed.includes(t.id)) : DATA.customers;
+  const type = pickCustomerType(rng, types, level);
   const cartCfg = DATA.balance.cart;
   const cart = hasCarts(state, level) && cartCfg.types.includes(type.id) && rng.next() < cartCfg.chance;
   const order = generateOrder(type, level, rng, state, cart ? rng.int(cartCfg.minItems, cartCfg.maxItems) : 0);
@@ -216,8 +272,16 @@ export function createCustomer(id: number, level: number, rng: Rng, state?: Game
 
 /**
  * Tổng tiền các món đã quét, theo giá lúc khách lấy (kể cả bán xả), trừ phần bớt giá.
- * Làm tròn tới 1.000đ như tiệm thật (khay tiền không có tờ 500đ).
+ * Làm tròn tới 500đ, mệnh giá nhỏ nhất trong khay tiền.
  */
+export function roundedCashAmount(amount: number): number {
+  return Math.max(1000, Math.round(amount / 500) * 500);
+}
+
+export function discountedCashTotal(total: number, pct: number): number {
+  return roundedCashAmount(total * (100 - pct) / 100);
+}
+
 export function orderTotal(c: Customer, state?: GameState): number {
   const gross = c.order.reduce((sum, l) => {
     if (l.scanned <= 0) return sum;
@@ -225,7 +289,7 @@ export function orderTotal(c: Customer, state?: GameState): number {
     return sum + Math.round(unit * l.scanned);
   }, 0);
   const net = c.discountPct ? (gross * (100 - c.discountPct)) / 100 : gross;
-  return net > 0 ? Math.max(1000, Math.round(net / 1000) * 1000) : 0;
+  return net > 0 ? roundedCashAmount(net) : 0;
 }
 
 export function orderComplete(c: Customer): boolean {

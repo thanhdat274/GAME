@@ -337,7 +337,11 @@ export class LiveMap {
       }
       a.staffId = st.id;
       const lane = this.session.lanes.findIndex((l) => l.staffId === st.id);
-      this.setGoal(a, staffGoal(state, this.session.workerOf(st.id)?.task ?? null, lane >= 0 ? lane + 1 : null), snap);
+      const task = this.session.workerOf(st.id)?.task ?? null;
+      const fetchedCustomer = task?.startsWith('fetch:')
+        ? [...this.session.queue, ...this.session.lanes.flatMap((entry) => entry.queue)].find((c) => c.id === Number(task.slice(6)))
+        : undefined;
+      this.setGoal(a, fetchedCustomer ? customerGoal(this.session, fetchedCustomer) : staffGoal(state, task, lane >= 0 ? lane + 1 : null), snap);
     }
     // Người chơi.
     const playerId = 'player';

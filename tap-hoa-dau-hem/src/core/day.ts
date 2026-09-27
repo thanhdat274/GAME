@@ -1,8 +1,8 @@
 import { computeTip, customerPayment, judgeChange, type ChangeResult } from './change';
-import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, type Customer, type OrderLine } from './customers';
+import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, shopDensityAt, type Customer, type OrderLine, type PaymentMethod } from './customers';
 import { recordDay } from './analytics';
 import { applyPlanogram, planogramProduct, runRestockRules } from './autorestock';
-import { DATA, hasFeature, product, type Category } from './data';
+import { DATA, hasFeature, product, type Category, type RecipeDef } from './data';
 import { attractionMultiplier, hasCat } from './decor';
 import { createPhoneOrder, deliveryUnlocked, orderShortfall, orderUnits, reserveItems, tripSeconds, type PhoneOrder } from './delivery';
 import { Emitter } from './events';
@@ -11,8 +11,11 @@ import { eventDefinition, scheduleEvents } from './eventScheduler';
 import { calendarDate } from './calendar';
 import { deliverBranchShipments, simulateBranches } from './branches';
 import { prestigeRevenueMultiplier } from './prestige';
-import { prepareRecipe } from './recipes';
-import { cleanDiningTable, seatDiner, serveExtraDiningOrder, tickDining } from './dining';
+import { makeServing, missingIngredients, prepareRecipe } from './recipes';
+import { cleanDiningTable, seatDiner, serveDiningAddOns, serveExtraDiningOrder, tickDining } from './dining';
+import { activeShopType } from './shopTypes';
+import { cookedPortions, discardSpoiledSoaks, soakStatus, spoilRiceEndOfDay, startSoak, steamBatch, suggestSoakKg } from './stickyRice';
+import { fillOrder, orderRemaining, pendingOrdersFrom, runInternalSupplyMorning } from './internalSupply';
 import { counterFixture, counterFixtures, maxQueueFor, maxShoppersFor, walkTiles, walkableGrid } from './layout';
 import { canGiveCredit, collectDebt, markBadDebts, recordDebt, repaymentsToday } from './ledger';
 import { cheapSpawnMultiplier, keepChance } from './pricing';
@@ -336,7 +339,7 @@ export class DaySession {
           const mul = ratingSpawnMultiplier(averageRating(this.state)) * attractionMultiplier(this.state) * cheapSpawnMultiplier(this.state)
             * trafficMultiplier(this.state.level);
           const effects = EffectStack.forDay(this.state.day, this.state.calendarStartMonth, this.state.calendarStartYear, this.state.activeEvents);
-          const mean = meanSpawnSeconds(this.state.clock, mul, this.state.day, effects.multiply('trafficMul'));
+          const mean = meanSpawnSeconds(this.state.clock, mul, this.state.day, effects.multiply('trafficMul'), shopDensityAt(this.state, this.state.clock));
           this.nextSpawnIn = Math.max(1, this.rng.exponential(mean));
         } else this.nextSpawnIn = 0.5;
       }
@@ -365,6 +368,9 @@ export class DaySession {
     const waiting = [...this.queue, ...this.ready, ...inLanes].filter((c) => c.status === 'waiting' || c.status === 'scanning' || c.status === 'paying' || c.status === 'bargain' || c.status === 'credit');
     const cat = hasCat(this.state);
     for (const c of waiting) {
+      // Sau khi đóng cửa, khách nhân viên đang tính tiền được phục vụ nốt, không bị đuổi giữa giao dịch.
+      // Khách chờ người chơi thì vẫn hết kiên nhẫn, để ngày kết thúc được khi không ai đứng quầy.
+      if (this.closed && this.lanes.some((lane) => lane.job?.customerId === c.id)) continue;
       let rate = c === this.front || this.lanes.some((l) => l.queue[0] === c) ? 1 : b.queuePatienceRate;
       // Khách thấy chủ tiệm đang bận nạp kệ thì chờ thong thả hơn.
       if (!this.playerAtCounter && !this.autoPlayer && c.lane === 0) rate *= b.topDown.awayPatienceRate;
@@ -384,9 +390,10 @@ export class DaySession {
     }
     const c = this.front;
     if (c?.status === 'scanning') this.tickCounterRequest(c, dt);
-    if (c?.status === 'waiting' && c.askLeft && (this.playerAtCounter || this.autoPlayer)) c.askLeft = Math.max(0, c.askLeft - dt);
+    if (c?.status === 'waiting' && c.askLeft && c.askLeft > 0 && (this.playerAtCounter || this.autoPlayer)) c.askLeft = Math.max(0, c.askLeft - dt);
     this.promoteFront();
     this.tickLanes(dt);
+    this.balanceCheckoutQueues();
     if (this.autoPlayer) this.autoServe(dt);
 
     if (this.closed && this.customers.length === 0 && !this.ended) {
@@ -402,6 +409,8 @@ export class DaySession {
 
   private spawn(): void {
     const c = createCustomer(this.nextId++, this.state.level, this.rng, this.state);
+    // Tiệm chỉ bán ở quầy mà chưa mở bán món nào: không có khách ghé.
+    if (!c.order.length) return;
     if (hasFeature(this.state.level, 'thief') && this.rng.next() < DATA.balance.security.thiefChance) {
       c.thief = true;
       delete c.name;
@@ -679,6 +688,14 @@ export class DaySession {
     return true;
   }
 
+  private requestStockFetch(c: Customer): boolean {
+    const available = this.state.staff.some((s) => (s.role === 'refill' || s.role === 'stocker')
+      && this.workerOf(s.id)?.present && (this.closed || this.isOnShift(s)));
+    if (!available) return false;
+    this.tasks.upsert(`fetch:${c.id}`, 'fetch', 20_000 - c.id);
+    return true;
+  }
+
   /** Vào quầy: 0 = quầy người chơi, số khác = id quầy nhân viên. */
   private joinLane(c: Customer, laneId: number): void {
     c.lane = laneId;
@@ -711,15 +728,50 @@ export class DaySession {
     return best?.id ?? null;
   }
 
+  /** Chuyển khách còn đang chờ sang quầy vắng hơn; không ngắt giao dịch đang xử lý. */
+  private balanceCheckoutQueues(): void {
+    const queues = [
+      ...(this.playerLaneOpen() ? [{ id: 0, queue: this.queue, busy: false }] : []),
+      ...this.lanes.filter((lane) => !lane.closing).map((lane) => ({ id: lane.id, queue: lane.queue, busy: lane.job !== null })),
+    ];
+    if (queues.length < 2) return;
+
+    let changed = false;
+    // Chuyển từng khách đang chờ từ hàng dài sang hàng ngắn cho đến khi cân bằng.
+    while (true) {
+      const source = [...queues].sort((a, b) => b.queue.length - a.queue.length)[0];
+      const target = [...queues].sort((a, b) => a.queue.length - b.queue.length)[0];
+      if (!source || !target || source === target || source.queue.length - target.queue.length <= 1) break;
+
+      const activeId = source.busy ? (source.queue[0]?.id ?? null) : null;
+      let index = -1;
+      for (let i = source.queue.length - 1; i >= 0; i--) {
+        const c = source.queue[i];
+        if (c.id !== activeId && c.status === 'waiting') { index = i; break; }
+      }
+      if (index < 0) break;
+      const [customer] = source.queue.splice(index, 1);
+      customer.lane = target.id;
+      target.queue.push(customer);
+      changed = true;
+    }
+    if (changed) this.events.emit('lanesChanged', undefined);
+  }
+
   private promoteFront(): void {
     const c = this.front;
     if (!c || c.status !== 'waiting') return;
     if (!this.playerAtCounter && !this.autoPlayer) return;
     if (c.order.some(askable)) {
-      // Khách đi tới quầy hỏi món hết, người đứng quầy kiểm kho: mất vài giây rồi mới tính tiền.
+      // Nhân viên kho/tiếp hàng lấy món khách hỏi; người chơi chỉ chờ món được mang ra.
       if (c.askLeft === undefined) {
-        c.askLeft = DATA.balance.askStockSeconds;
         this.events.emit('stockAsking', c);
+        c.askLeft = this.requestStockFetch(c) ? -1 : DATA.balance.askStockSeconds;
+      }
+      // Nhân viên kho hết ca giữa chừng: người đứng quầy tự đi kiểm kho.
+      if (c.askLeft < 0) {
+        if (this.requestStockFetch(c)) return;
+        c.askLeft = DATA.balance.askStockSeconds;
       }
       if (c.askLeft > 0) return;
       if (!this.askForMissing(c)) return;
@@ -817,9 +869,11 @@ export class DaySession {
     if (this.zoneRefills.some((r) => r.zone === zone)) return false;
     const slots: { shelf: number; slot: number }[] = [];
     for (const shelf of usableShelves(this.state)) {
-      if (zoneOf(this.state, shelf) !== zone) continue;
-      this.state.shelves[shelf].forEach((_, index) => {
-        if (canRefill(this.state, shelf, index)) slots.push({ shelf, slot: index });
+      const fridge = shelfKind(this.state, shelf) === 'fridge';
+      if (!fridge && zoneOf(this.state, shelf) !== zone) continue;
+      this.state.shelves[shelf].forEach((slot, index) => {
+        const matchesZone = fridge ? slot.productId !== null && product(slot.productId).category === zone : true;
+        if (matchesZone && canRefill(this.state, shelf, index)) slots.push({ shelf, slot: index });
       });
     }
     if (!slots.length) return false;
@@ -873,6 +927,12 @@ export class DaySession {
 
   private maybeStartPayment(c: Customer): void {
     if (c !== this.front || c.status !== 'scanning') return;
+    // Khách gọi nhiều món ở quầy (tiệm xôi): phục vụ lần lượt từng món.
+    while (c.counterRequestResolved) {
+      const next = c.order.find((line) => line.counterLine && line.picked === 0 && line.missing === 0);
+      if (!next) break;
+      this.beginCounterRequest(c, next);
+    }
     if (!c.counterRequestResolved) return;
     if (c.order.some((line) => line.picked > line.scanned)) return;
     const total = orderTotal(c, this.state);
@@ -893,17 +953,24 @@ export class DaySession {
     this.startPayment(c);
   }
 
+  private pickPaymentMethod(): PaymentMethod {
+    if (this.rng.next() >= DATA.balance.cashlessChance) return 'cash';
+    return this.rng.next() < 0.5 ? 'card' : 'transfer';
+  }
+
   private startPayment(c: Customer): void {
     const total = orderTotal(c, this.state);
     c.comboTipEligible = c.scanStartedAt !== null && this.elapsed - c.scanStartedAt <= DATA.balance.scanComboSeconds;
     c.total = total;
-    c.bill = customerPayment(total, this.rng);
+    c.paymentMethod = this.pickPaymentMethod();
+    c.bill = c.paymentMethod === 'cash' ? customerPayment(total, this.rng) : total;
     c.changeDue = c.bill - total;
     c.status = 'paying';
     c.changeStartedAt = this.elapsed;
     this.tray = [];
     this.events.emit('paymentStarted', c);
-    if (c.changeDue === 0) this.completeSale(c, this.tipFor(c, false), 0);
+    if (c.paymentMethod !== 'cash') this.completeSale(c, 0, 0);
+    else if (c.changeDue === 0) this.completeSale(c, this.tipFor(c, false), 0);
     else if (this.state.settings.autoChange) this.autoChange();
   }
 
@@ -1078,7 +1145,7 @@ export class DaySession {
   private completeSale(c: Customer, tip: number, lost: number, credit = false, staff?: Staff): void {
     const b = DATA.balance;
     const t = this.state.today;
-    c.total = Math.round(c.total * prestigeRevenueMultiplier(this.state) / 1000) * 1000;
+    c.total = Math.round(c.total * prestigeRevenueMultiplier(this.state) / 500) * 500;
     let items = 0;
     for (const line of c.order) {
       if (line.scanned <= 0) continue;
@@ -1117,7 +1184,10 @@ export class DaySession {
     this.state.exp += exp;
     t.expGained += exp;
     const dineTable = c.order.find((line) => line.scanned > 0 && DATA.recipes.some((recipe) => recipe.output === line.productId));
-    const seated = dineTable ? seatDiner(this.state, c.id, dineTable.productId) : null;
+    const dineChance = activeShopType(this.state).def.dineInChance;
+    const wantsSeat = !!dineTable && (dineChance >= 1 || this.rng.next() < dineChance);
+    const seated = wantsSeat ? seatDiner(this.state, c.id, dineTable!.productId) : null;
+    if (seated) serveDiningAddOns(this.state, seated, this.rng);
     this.finish(c, 'served', stars);
     if (seated) this.events.emit('diningChanged', [seated]);
     this.events.emit('sale', { customer: c, amount: c.total, tip });
@@ -1185,6 +1255,14 @@ export class DaySession {
 
   private finish(c: Customer, reason: LeaveReason, stars: number): void {
     const wasFront = this.front === c;
+    const fetchKey = `fetch:${c.id}`;
+    this.tasks.complete(fetchKey);
+    for (const worker of this.workers) {
+      if (worker.task !== fetchKey) continue;
+      worker.task = null;
+      worker.left = 0;
+      worker.idle = DATA.balance.staff.refillCheckSeconds;
+    }
     c.status = 'done';
     if (reason !== 'closed') {
       recordRating(this.state, stars);
@@ -1418,6 +1496,13 @@ export class DaySession {
         w.left = recipe.prepSeconds * timeFactor(s, w.tired);
         continue;
       }
+      if (s.role === 'xoi_cook') {
+        const job = this.xoiCookJob();
+        if (!job) { w.idle = DATA.balance.staff.refillCheckSeconds; continue; }
+        w.task = job.key;
+        w.left = job.seconds * timeFactor(s, w.tired);
+        continue;
+      }
       if (s.role === 'branch_manager') { w.idle = DATA.balance.staff.refillCheckSeconds; continue; }
       w.idle = DATA.balance.staff.refillCheckSeconds;
       const task = this.tasks.claim(s.id, ROLE_TASKS[s.role].filter((k) => k !== 'watch'));
@@ -1439,10 +1524,55 @@ export class DaySession {
     }
   }
 
+  /**
+   * Việc tiếp theo của Thợ nấu xôi: hấp khi hết nếp chín, làm đơn nội bộ trước (trừ khi tắt ưu tiên),
+   * rồi làm món bán lẻ còn ít ở quầy.
+   */
+  private xoiCookJob(): { key: string; seconds: number } | null {
+    const st = this.state;
+    const shop = activeShopType(st);
+    if (shop.def.id !== 'xoi') return null;
+    const hasStation = (station: string) => st.fixtures.some((f) => f.type === station);
+    if (cookedPortions(st) < 3 && hasStation('xung_hap')) {
+      const ready = st.soakBatches.find((b) => soakStatus(b, st.day, st.clock).kind === 'ready');
+      if (ready) return { key: `steam:${ready.id}`, seconds: DATA.balance.stickyRice.steamSeconds * 2 };
+    }
+    const canMake = (recipe: RecipeDef) => hasStation(recipe.station) && !missingIngredients(st, recipe).length;
+    if (st.settings.xoiOrderPriority !== false) {
+      for (const order of pendingOrdersFrom(st, st.activeStoreId)) {
+        if (order.dueDay > st.day + 1) continue;
+        for (const id of Object.keys(order.items)) {
+          const recipe = DATA.recipes.find((r) => r.output === id);
+          if (recipe && orderRemaining(order, id) > 0 && canMake(recipe)) return { key: `xoi:${recipe.id}:${order.id}`, seconds: recipe.prepSeconds };
+        }
+      }
+    }
+    const retail = DATA.recipes.find((r) => shop.allowsRecipe(r.id) && !r.packaged && st.activeRecipes.includes(r.id) && canMake(r)
+      && st.counter.filter((slot) => slot.productId === r.output).reduce((n, slot) => n + slot.qty, 0) < 3);
+    return retail ? { key: `cook:${retail.id}`, seconds: retail.prepSeconds } : null;
+  }
+
   private finishTask(s: Staff, w: Worker): void {
     const key = w.task!;
     w.task = null;
     this.tasks.complete(key);
+    const quality = Math.min(1.2, 0.75 + s.stats.accuracy * 0.045);
+    if (key.startsWith('steam:')) {
+      const result = steamBatch(this.state, this.state, key.slice('steam:'.length), quality);
+      if (result.ok) { this.jobDone(s); this.log(`${s.name} hấp xong ${result.rice.portions} phần nếp chín`); }
+      return;
+    }
+    if (key.startsWith('xoi:')) {
+      const [, recipeId, orderId] = key.split(':');
+      const recipe = DATA.recipes.find((r) => r.id === recipeId);
+      const order = this.state.internalOrders.find((o) => o.id === orderId);
+      if (!recipe || !order || orderRemaining(order, recipe.output) <= 0) return;
+      if (makeServing(this.state, recipe, this.state.day, this.state.clock, quality) === null) return;
+      fillOrder(order, recipe.output, 1);
+      this.jobDone(s);
+      this.log(`${s.name} làm 1 ${product(recipe.output).name} cho đơn của ${this.state.stores.find((x) => x.id === order.toStoreId)?.name ?? 'tiệm khác'}`);
+      return;
+    }
     if (key.startsWith('cook:')) {
       const recipeId = key.slice('cook:'.length);
       const result = prepareRecipe(this.state, recipeId, Math.min(1.2, 0.75 + s.stats.accuracy * 0.045));
@@ -1456,6 +1586,16 @@ export class DaySession {
       if (!this.state.holding.length) return;
       stowHolding(this.state);
       this.log(`${s.name} cất hàng giao vào kho`);
+      this.jobDone(s);
+      return;
+    }
+    if (key.startsWith('fetch:')) {
+      const customerId = Number(key.slice('fetch:'.length));
+      const customer = [...this.queue, ...this.lanes.flatMap((lane) => lane.queue)].find((c) => c.id === customerId);
+      if (customer) {
+        customer.askLeft = 0;
+        this.askForMissing(customer);
+      }
       this.jobDone(s);
       return;
     }
@@ -1491,8 +1631,13 @@ export class DaySession {
       if (!lane.job) {
         if (lane.closing || c.status !== 'waiting') continue;
         if (c.order.some(askable)) {
-          // Khách hỏi món hết: thu ngân kiểm kho trước rồi mới quét.
+          // Nhân viên kho/tiếp hàng lấy món khách hỏi; thu ngân không phải rời quầy.
           if (c.askLeft === undefined) this.events.emit('stockAsking', c);
+          if ((c.askLeft === undefined || c.askLeft < 0) && this.requestStockFetch(c)) {
+            c.askLeft = -1;
+            continue;
+          }
+          // Không có nhân viên kho/tiếp hàng đang làm: thu ngân tự kiểm kho như trước.
           c.askLeft = DATA.balance.askStockSeconds;
           lane.job = { customerId: c.id, phase: 'ask', left: DATA.balance.askStockSeconds * timeFactor(s, w.tired) };
           continue;
@@ -1578,6 +1723,7 @@ export class DaySession {
       } else c.maxStars = b.bargain.declineMaxStars;
     }
     c.total = total;
+    c.paymentMethod = this.pickPaymentMethod();
     c.status = 'paying';
     lane.job = { customerId: c.id, phase: 'change', left: b.staff.changeSeconds * timeFactor(s, w.tired) };
   }
@@ -1585,6 +1731,11 @@ export class DaySession {
   private staffChange(lane: Lane, c: Customer, s: Staff): void {
     const cfg = DATA.balance.staff;
     lane.job = null;
+    if (c.paymentMethod !== 'cash') {
+      this.jobDone(s);
+      this.completeSale(c, 0, 0, false, s);
+      return;
+    }
     let lost = 0;
     if (this.rng.next() < errorChance(s, this.state.day)) {
       const amount = this.rng.pick(cfg.wrongChangeValues);
@@ -1935,12 +2086,20 @@ export function endDay(state: GameState): DaySummary {
   if (outage && Number(outage.params?.outageHours ?? 0) > 3) spoilFrozenStock(state);
   receiveDeliveries(state, state.day, DATA.balance.closeMinute);
   expireLots(state, state.day);
+  // Tiệm xôi: nếp chín thừa và mẻ ngâm quá hạn bị bỏ cuối ngày; có thợ thì thợ tự ngâm cho mai.
+  spoilRiceEndOfDay(state, state);
+  let soakNote: string | null = null;
+  if (state.staff.some((st) => st.role === 'xoi_cook' && !st.quitting)) {
+    const kg = suggestSoakKg(state);
+    if (kg > 0 && startSoak(state, state, kg).ok) soakNote = `🪣 Thợ nấu xôi đã ngâm ${kg} kg nếp cho hôm nay.`;
+  }
   const power = electricityCost(state);
   state.money -= power;
   t.electricity += power;
   // Lương cuối ngày cho người có ca; thiếu tiền thành nợ lương.
   const pay = payroll(state);
   state.morningNotes = updateMoods(state).map((n) => n.text);
+  if (soakNote) state.morningNotes.push(soakNote);
   if (pay.debt > 0) state.morningNotes.push(`Còn nợ lương nhân viên ${formatMoney(pay.debt)}`);
   markBadDebts(state);
   const avg = t.ratingCount ? t.ratingSum / t.ratingCount : 0;
@@ -1983,6 +2142,7 @@ export function endDay(state: GameState): DaySummary {
     theftCost: t.theftCost,
     fines: t.fines,
     deliveryFees: t.deliveryFees,
+    internalCost: t.internalCost,
     staffLevelUps: [...t.staffLevelUps],
     journal: [...t.journal],
     closedEarlyAt: t.closedEarlyAt,
@@ -2058,16 +2218,20 @@ export function startNextDay(state: GameState): number {
   claimAllDone(state);
   state.day++;
   const branchIncome = simulateBranches(state, state.day - 1);
-  const arrivals = deliverBranchShipments(state, state.day);
-  if (arrivals) state.morningNotes.push(`🚚 ${arrivals} chuyến xe hàng đã đến chi nhánh.`);
-  for (const [id, amount] of Object.entries(branchIncome)) {
-    const name = state.stores.find((store) => store.id === id)?.name ?? id;
-    state.morningNotes.push(`${name} đóng góp ${formatMoney(amount)} từ ngày hôm qua.`);
-  }
+  // Reset trước các chuyến giao để giá vốn nhận hàng được ghi vào ngày mới.
   state.phase = 'morning';
   state.clock = DATA.balance.openMinute;
   state.today = emptyStats();
   state.lastSummary = null;
+  const arrivals = deliverBranchShipments(state, state.day, DATA.balance.openMinute);
+  if (arrivals) state.morningNotes.push(`🚚 ${arrivals} chuyến xe hàng đã đến chi nhánh.`);
+  // Đơn nội bộ: giao xôi gói tới hạn (7h), sinh đơn định kỳ cho sáng mai, dọn đơn cũ.
+  runInternalSupplyMorning(state);
+  for (const [id, amount] of Object.entries(branchIncome)) {
+    const name = state.stores.find((store) => store.id === id)?.name ?? id;
+    state.morningNotes.push(`${name} đóng góp ${formatMoney(amount)} từ ngày hôm qua.`);
+  }
+  discardSpoiledSoaks(state, state);
   updateTax(state);
   state.morningNotes.push(...taxReminders(state));
   scheduleEvents(state);

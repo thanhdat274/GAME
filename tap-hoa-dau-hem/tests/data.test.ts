@@ -4,9 +4,9 @@ import { expiryFor, suggestedTarget } from '../src/core/stock';
 import { createNewGame } from '../src/core/state';
 
 describe('dữ liệu mặt hàng', () => {
-  it('products.json hợp lệ và có đủ hàng các giai đoạn 1–4', () => {
+  it('products.json hợp lệ và có đủ hàng các giai đoạn 1–4 và tiệm xôi', () => {
     expect(validateProducts(DATA.products)).toEqual([]);
-    expect(DATA.products).toHaveLength(133);
+    expect(DATA.products).toHaveLength(335);
   });
 
   it('levels.json hợp lệ', () => {

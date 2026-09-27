@@ -23,9 +23,14 @@ export function shopTypeDef(id: ShopTypeId): ShopTypeDef {
   return def;
 }
 
-/** Loại cửa hàng của một tiệm; snapshot cũ thiếu trường được coi là tạp hóa. */
+const behaviors = new Map<ShopTypeDef, ShopTypeBehavior>();
+
+/** Loại cửa hàng của một tiệm; snapshot cũ thiếu trường được coi là tạp hóa. Được gọi rất dày (mỗi khách, mỗi lần lọc hàng) nên cache theo định nghĩa. */
 export function shopTypeOf(store: Pick<StoreSnapshot, 'shopType'> | undefined): ShopTypeBehavior {
-  return behavior(shopTypeDef(store?.shopType ?? 'grocery'));
+  const def = shopTypeDef(store?.shopType ?? 'grocery');
+  let cached = behaviors.get(def);
+  if (!cached) { cached = behavior(def); behaviors.set(def, cached); }
+  return cached;
 }
 
 /** Loại cửa hàng của tiệm người chơi đang đứng. */
@@ -94,6 +99,7 @@ export function validateShopTypes(types: ShopTypeDef[] = DATA.shopTypes, branche
     }
     if (t.sim !== 'profit_average' && t.sim !== 'production') errors.push(`${at}: sim phải là profit_average hoặc production`);
     if (!(t.dineInChance >= 0 && t.dineInChance <= 1)) errors.push(`${at}: dineInChance phải trong 0..1`);
+    if (t.sourcedRequestChance !== undefined && !(t.sourcedRequestChance >= 0 && t.sourcedRequestChance <= 1)) errors.push(`${at}: sourcedRequestChance phải trong 0..1`);
     if (t.densityCurve !== null) {
       if (!Array.isArray(t.densityCurve) || !t.densityCurve.length) errors.push(`${at}: densityCurve phải là null hoặc danh sách khoảng giờ`);
       else t.densityCurve.forEach((seg, i) => {

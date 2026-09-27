@@ -90,3 +90,14 @@ Món xôi SHALL chỉ nấu được ở tiệm loại `xoi`. Góc đồ ăn c�
 #### Scenario: Tạp hóa không thấy món xôi trong bếp
 - **WHEN** người chơi mở Bếp & quầy nước ở tạp hóa sau khi đã mở tiệm xôi
 - **THEN** menu không có món xôi nào, và có gợi ý "Đặt xôi gói từ Tiệm xôi nhà mình"
+
+### Requirement: Quầy trưng bày xôi riêng
+Tiệm xôi SHALL có quầy trưng bày xôi riêng trong layout mặc định. Món làm ra nằm ở quầy của chính tiệm xôi để khách gọi; khi chuyển xôi gói cho tạp hóa, hàng tới ô sau quầy riêng của tạp hóa. Hai tiệm MUST NOT dùng chung kho hoặc quầy.
+
+#### Scenario: Món vừa làm ở tiệm xôi
+- **WHEN** người chơi chế biến một phần xôi tại tiệm xôi
+- **THEN** phần đó xuất hiện ở quầy xôi của tiệm xôi và không thay đổi tồn kho/quầy của tạp hóa
+
+#### Scenario: Tiệm xôi mở mặc định
+- **WHEN** người chơi mở tiệm xôi
+- **THEN** layout riêng có thùng ngâm, xửng hấp, quầy trưng bày xôi và bàn ăn; không cần kệ tạp hóa để bán món xôi

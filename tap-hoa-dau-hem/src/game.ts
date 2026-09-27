@@ -73,7 +73,13 @@ export function persistLocal(): void {
 
 export function tryLoad(): LoadResult {
   if (isMaxLevelSimulation) {
-    if (new URLSearchParams(window.location.search).get('reset') === '1') deleteSave();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reset') === '1') {
+      deleteSave();
+      params.delete('reset');
+      const query = params.toString();
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    }
     const saved = loadGame();
     if (saved.status === 'ok') {
       G.state = saved.state;

@@ -2,6 +2,7 @@ import { DATA, furniture, hasFeature, product, supplier, type Product } from './
 import { recordPurchase, supplierTaxFactor } from './tax';
 import { Rng, daySeed } from './rng';
 import { EffectStack } from './effects';
+import { activeShopType } from './shopTypes';
 import {
   fixtureOfShelf, shelfKind, shelfUsable, slotEarliestExp, slotLots, sortLots, totalQty, unlockedProducts,
   usableShelves, warehouseTotals, type GameState, type Lot, type ShelfZone, type Slot, type SlotLot, type StoreData,
@@ -387,7 +388,7 @@ function slotAt(state: GameState, shelf: number, slot: number) {
   return s;
 }
 
-/** Sức chứa mỗi ô của kệ (kệ đôi chứa gấp đôi). */
+/** Sức chứa mỗi ô; kệ đôi, kệ 3 và kệ 4 tăng số ô chứ không tăng sức chứa từng ô. */
 export function shelfCapacity(state: GameState, shelf: number): number {
   const f = fixtureOfShelf(state, shelf);
   return DATA.balance.slotCapacity * (f ? furniture(f.type).capacityMul ?? 1 : 1);
@@ -429,6 +430,9 @@ export function placeError(state: GameState, shelf: number, productId: string): 
   const p = product(productId);
   const kindError = kindAccepts(state, shelf, p);
   if (kindError) return kindError;
+  // Tủ lạnh là khu bảo quản theo nhiệt độ, không phải một quầy hàng theo danh mục.
+  // Có thể để chung đồ uống, đồ tươi và các mặt hàng yêu cầu bảo quản lạnh.
+  if (shelfKind(state, shelf) === 'fridge') return null;
   const zone = zoneOf(state, shelf);
   return zone && zone !== p.category ? 'wrong-zone' : null;
 }
@@ -453,7 +457,8 @@ export function assignSlot(state: GameState, shelf: number, slot: number, produc
   const error = placeError(state, shelf, productId);
   if (error) throw new Error(error);
   if (s.productId !== productId) clearSlot(state, shelf, slot);
-  if (!zoneOf(state, shelf)) state.zones[shelf] = product(productId).category as ShelfZone;
+  if (shelfKind(state, shelf) === 'fridge') state.zones[shelf] = null;
+  else if (!zoneOf(state, shelf)) state.zones[shelf] = product(productId).category as ShelfZone;
   s.productId = productId;
   return refillSlot(state, shelf, slot);
 }
@@ -756,21 +761,91 @@ export function sellFixture(state: GameState, uid: number): SellFixtureResult {
 export function suggestedTarget(state: GameState, p: Product): number {
   const cfg = DATA.balance.suggest;
   const demand = (state.yesterdaySold[p.id] ?? 0) + (state.yesterdayMissed[p.id] ?? 0);
-  // Hàng mau hỏng: nhập sát nhu cầu (không dự phòng), món mới thử ít để tránh hỏng. Hàng HSD dài nhập như hàng khô.
+  // Hàng mau hỏng: nhập sát nhu cầu (không dự phòng). Món chưa ai hỏi thì không nhập thử (newFresh = 0): khách
+  // thỉnh thoảng hỏi món tiệm chưa bán, số "hỏi mà không có" đó thành nhu cầu cho ngày sau. Hàng HSD dài nhập như hàng khô.
   if (isPerishable(p)) return demand > 0 ? Math.max(1, Math.ceil(demand * cfg.freshFactor)) : cfg.newFresh;
   const base = demand > 0 ? demand : p.price <= cfg.cheapPrice ? cfg.newCheap : cfg.newPricey;
   return Math.ceil(base * cfg.buffer) + 1;
 }
 
+/** Gợi ý hàng cho tiệm xôi dựa trên nguyên liệu các món đã bán hôm qua. */
+function xoiSuggestionTargets(state: GameState): { p: Product; target: number }[] {
+  const shop = activeShopType(state).def;
+  const recipes = DATA.recipes.filter((r) => shop.recipes.includes(r.id) && r.unlockLevel <= state.level);
+  const active = recipes.filter((r) => state.activeRecipes.includes(r.id));
+  // Khi chưa chọn món, gợi ý nguyên liệu cho các món xôi bán tại tiệm để người chơi có thể bắt đầu.
+  const planned = active.length ? active : recipes.filter((r) => !r.packaged);
+  const ingredientDemand = new Map<string, number>();
+  let hasRecipeSales = false;
+  for (const r of planned) {
+    const demand = (state.yesterdaySold[r.output] ?? 0) + (state.yesterdayMissed[r.output] ?? 0);
+    if (demand <= 0) continue;
+    hasRecipeSales = true;
+    for (const [id, qty] of Object.entries(r.ingredients)) {
+      ingredientDemand.set(id, (ingredientDemand.get(id) ?? 0) + demand * qty);
+    }
+  }
+
+  const unlocked = new Set(unlockedProducts(state.level, state).map((p) => p.id));
+  const targets = new Map<string, { p: Product; target: number }>();
+  const addTarget = (p: Product, target: number) => {
+    const current = targets.get(p.id);
+    if (!current || target > current.target) targets.set(p.id, { p, target });
+  };
+
+  const ingredientIds = hasRecipeSales
+    ? [...ingredientDemand.keys()]
+    : [...new Set(planned.flatMap((r) => Object.keys(r.ingredients)))];
+  const cfg = DATA.balance.suggest;
+  const portionsPerKg = DATA.balance.stickyRice.portionsPerKg;
+  for (const id of ingredientIds) {
+    if (id === 'nep_chin') {
+      if (!unlocked.has('nep')) continue;
+      const rice = product('nep');
+      const portionsNeeded = ingredientDemand.get(id) ?? 0;
+      const targetKg = portionsNeeded > 0
+        ? Math.ceil((portionsNeeded * cfg.buffer + 1) / portionsPerKg)
+        : suggestedTarget(state, rice);
+      const otherRicePortions = state.soakBatches.reduce((sum, batch) => sum + batch.kg * portionsPerKg, 0)
+        + state.cookedRice.reduce((sum, batch) => sum + batch.portions, 0);
+      const availableRicePortions = totalQty(state, 'nep') * portionsPerKg + otherRicePortions;
+      const missingKg = Math.max(0, Math.ceil((targetKg * portionsPerKg - availableRicePortions) / portionsPerKg));
+      addTarget(rice, totalQty(state, 'nep') + missingKg);
+      continue;
+    }
+    if (!unlocked.has(id)) continue;
+    const p = product(id);
+    const demand = ingredientDemand.get(id) ?? 0;
+    const target = demand > 0
+      ? isPerishable(p)
+        ? Math.max(1, Math.ceil(demand * cfg.freshFactor))
+        : Math.ceil(demand * cfg.buffer) + 1
+      : suggestedTarget(state, p);
+    addTarget(p, target);
+  }
+
+  // Đồ uống kèm được bán trực tiếp, nên vẫn dùng thống kê bán hàng thông thường.
+  for (const addOn of shop.addOns) {
+    if (unlocked.has(addOn.productId)) {
+      const p = product(addOn.productId);
+      addTarget(p, suggestedTarget(state, p));
+    }
+  }
+  return [...targets.values()];
+}
+
 /**
  * Giỏ hàng gợi ý: bù mỗi món lên mức suggestedTarget. Khi thiếu tiền hoặc chỗ kho thì chia đều theo
- * tỉ lệ còn thiếu của từng món, để không món nào bị bỏ trống hoàn toàn. Bỏ qua món chưa có tủ phù hợp.
+ * tỉ lệ còn thiếu của từng món, để không món nào bị bỏ trống hoàn toàn. Tiệm xôi tính nguyên liệu
+ * theo món đã bán, vì nguyên liệu được giữ trong kho chứ không bày trên kệ.
  */
 export function suggestCart(state: GameState, supplierId = 'co_tu'): Cart {
-  const items = unlockedProducts(state.level, state).filter((p) => !p.behindCounter && hasPlaceFor(state, p)).map((p) => {
-    const target = suggestedTarget(state, p);
-    return { p, target, want: Math.max(0, target - totalQty(state, p.id)), blocked: false };
-  });
+  const targets = activeShopType(state).def.id === 'xoi'
+    ? xoiSuggestionTargets(state)
+    : unlockedProducts(state.level, state)
+      .filter((p) => !p.behindCounter && hasPlaceFor(state, p))
+      .map((p) => ({ p, target: suggestedTarget(state, p) }));
+  const items = targets.map(({ p, target }) => ({ p, target, want: Math.max(0, target - totalQty(state, p.id)), blocked: false }));
   const cart: Cart = {};
   for (;;) {
     let best: (typeof items)[number] | null = null;

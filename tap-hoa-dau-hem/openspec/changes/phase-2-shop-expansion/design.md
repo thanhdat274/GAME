@@ -33,7 +33,7 @@ Chỉ vào được ở Buổi sáng. Nút "Sắp xếp" chuyển sang build mod
 - Đã cân nhắc: chỉ lưu tổng + "ngày hết hạn sớm nhất" → bỏ vì sai khi nhập nhiều đợt.
 
 ### D5. Lạnh
-Món có `requiresCold: "fridge" | "freezer"` chỉ đặt được vào ô của thiết bị tương ứng. Tiền điện tính cuối ngày: tủ lạnh 5.000đ/ngày, tủ đông 8.000đ/ngày. Đồ uống không lạnh vẫn bán được nhưng khách mua ít hơn 50% (trừ nước suối).
+Món có `requiresCold: "fridge" | "freezer"` chỉ đặt được vào ô của thiết bị tương ứng. Tủ lạnh 1 cánh 1×1 có 8 ô hàng, tủ 2 cánh 2×1 (có thể xoay 1×2) có 24 ô hàng; tiền điện lần lượt là 3.000đ và 8.000đ/ngày. Tủ đông có 12 ô, tốn 8.000đ/ngày. Đồ uống không lạnh vẫn bán được nhưng khách mua ít hơn 50% (trừ nước suối).
 
 ### D6. Giá và phản ứng khách
 Mỗi món có `refPrice` (giá gợi ý). Hệ số giá `r = price / refPrice` trong khoảng 0.8–1.5. Xác suất khách vẫn lấy món = `clamp(1 - k·(r-1), 0.1, 1)`, với k theo kiểu khách (học sinh k=1.5, văn phòng k=0.5). Giá < refPrice thì tăng nhẹ tốc độ sinh khách của tiệm (tối đa +10%).

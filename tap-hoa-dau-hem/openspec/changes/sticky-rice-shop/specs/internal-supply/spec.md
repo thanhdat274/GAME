@@ -12,7 +12,7 @@ Mỗi loại tiệm SHALL khai báo `supplies` (hàng cung cấp cho tiệm khá
 - **THEN** tiệm xôi nhập trà đá từ mối sỉ, không có lỗi
 
 ### Requirement: Mối hàng nội bộ
-Màn Nhập hàng SHALL liệt kê thêm các tiệm khác trong chuỗi làm mối, nếu tiệm đó có thể cung cấp mặt hàng cần. Tạp hóa thấy "Tiệm xôi nhà mình", bán các loại xôi gói. Tiệm xôi thấy "Tạp hóa nhà mình", bán nguyên liệu xôi đang có trong kho tạp hóa.
+Màn Nhập hàng SHALL liệt kê thêm các tiệm khác trong chuỗi làm mối, nếu tiệm đó có thể cung cấp mặt hàng cần. Tạp hóa thấy "Tiệm xôi nhà mình", bán các loại xôi gói. Tiệm xôi thấy "Tạp hóa nhà mình", bán nguyên liệu xôi đang có trong kho tạp hóa. Mỗi tiệm giữ kho, kệ và quầy riêng.
 
 #### Scenario: Tạp hóa thấy mối tiệm xôi
 - **WHEN** chuỗi có tiệm xôi và người chơi mở Nhập hàng ở tạp hóa
@@ -23,14 +23,14 @@ Màn Nhập hàng SHALL liệt kê thêm các tiệm khác trong chuỗi làm m�
 - **THEN** mối nội bộ không hiện
 
 ### Requirement: Giá và phí đơn nội bộ
-Hàng nội bộ SHALL tính theo giá vốn nguyên liệu, không cộng lãi, vì tiền dùng chung toàn chuỗi. Mỗi chuyến giao trả phí xe theo công thức chuyển hàng hiện có. Tổng kết MUST ghi doanh thu bán lẻ cuối cùng cho tiệm bán ra, và ghi giá vốn chuyển giao là chi phí của tiệm nhận.
+Hàng nội bộ SHALL tính theo giá vốn nguyên liệu, không cộng lãi, vì tiền dùng chung toàn chuỗi. Mỗi chuyến giao trả phí xe theo công thức chuyển hàng hiện có. Báo cáo MUST ghi doanh thu bán lẻ cuối cùng cho tiệm bán ra và hiển thị riêng giá vốn hàng nhận theo tiệm; giá vốn chuyển giao không trừ tiền chung lần hai.
 
 #### Scenario: Đặt 20 xôi gói
 - **WHEN** tạp hóa đặt 20 xôi gói mặn
-- **THEN** chi phí đơn bằng 20 × giá vốn nguyên liệu xôi mặn cộng phí xe, không có khoản lãi nội bộ
+- **THEN** báo cáo ghi giá vốn 20 × giá vốn nguyên liệu xôi mặn ở tiệm nhận và tiền chung chỉ trả phí xe, không có khoản lãi nội bộ
 
 ### Requirement: Đơn một lần và đơn định kỳ
-Người chơi SHALL đặt đơn nội bộ một lần, hoặc bật đơn định kỳ lặp lại mỗi ngày với số lượng cố định cho tới khi tắt. Đơn có trạng thái: `pending` (chờ làm), `ready` (đã làm), `in_transit` (đang chở), `delivered` (đã giao), `short` (giao thiếu), `cancelled` (đã hủy).
+Người chơi SHALL đặt đơn nội bộ một lần, hoặc bật đơn định kỳ lặp lại mỗi ngày với số lượng cố định cho tới khi tắt. Đơn có trạng thái: `pending` (chờ làm), `made` (đã làm đủ), `shipping` (đang chở), `delivered` (đã giao), `short` (giao thiếu), `cancelled` (đã hủy).
 
 #### Scenario: Đơn định kỳ
 - **WHEN** người chơi bật đơn định kỳ 15 xôi gói đậu xanh mỗi ngày
@@ -41,11 +41,11 @@ Người chơi SHALL đặt đơn nội bộ một lần, hoặc bật đơn đ�
 - **THEN** đơn chuyển sang `cancelled` và không mất tiền
 
 ### Requirement: Giao hàng và giao thiếu
-Xôi gói SHALL tới tạp hóa trong buổi sáng cùng ngày (mặc định 7h game) nếu được làm trước giờ chở. Nguyên liệu từ tạp hóa tới tiệm xôi vào sáng hôm sau bằng xe chuyển hàng, giữ nguyên hạn dùng (FEFO). Khi tiệm cung cấp không đủ hàng, game MUST giao phần đang có, đánh dấu `short` và ghi chú ở màn Buổi sáng của tiệm nhận.
+Xôi gói SHALL tới các ô sau quầy riêng của tạp hóa trong buổi sáng ngày đến hạn (mặc định 7h game), nếu được làm trước giờ chở. Nguyên liệu từ tạp hóa tới khu nhận hàng của tiệm xôi vào sáng hôm sau bằng xe chuyển hàng, giữ nguyên hạn dùng (FEFO). Khi tiệm cung cấp không đủ hàng, game MUST giao phần đang có, đánh dấu `short` và ghi chú ở màn Buổi sáng của tiệm nhận.
 
 #### Scenario: Tiệm xôi thiếu nếp
 - **WHEN** đơn 20 xôi gói nhưng tiệm xôi chỉ làm được 12
-- **THEN** tạp hóa nhận 12, đơn ở trạng thái `short`, và buổi sáng hiện "Tiệm xôi giao thiếu 8 phần: thiếu nếp"
+- **THEN** tạp hóa nhận 12 vào quầy riêng, đơn ở trạng thái `short`, và buổi sáng hiện "Tiệm xôi giao thiếu 8 phần: thiếu nếp"
 
 ### Requirement: Ưu tiên đơn nội bộ
 Khi người chơi đang đứng ở tiệm xôi, bảng "Đơn nội bộ" SHALL hiện các đơn chờ làm cùng giờ chở. Món làm ra được xếp vào đơn khi người chơi chọn "Giao cho đơn". Thợ nấu xôi MUST làm đơn nội bộ trước rồi mới làm hàng bán lẻ, trừ khi người chơi tắt ưu tiên.
@@ -64,3 +64,14 @@ Tiệm có kiểu mô phỏng `production` SHALL chạy mô phỏng sản xuất
 #### Scenario: Không có thợ
 - **WHEN** tiệm xôi vắng chủ và không có Thợ nấu xôi
 - **THEN** tiệm xôi không sản xuất, không bán, đơn nội bộ giao 0, và bản đồ hiện cảnh báo
+
+### Requirement: Quầy và kệ độc lập theo tiệm
+Tiệm xôi SHALL có quầy trưng bày riêng để giữ món đã làm; tạp hóa SHALL nhận xôi gói vào ô sau quầy riêng của tạp hóa. Hàng xôi gói là `behindCounter`, nên không dùng chung kho, quầy, hoặc ô kệ thường giữa hai tiệm.
+
+#### Scenario: Nhận xôi gói ở tạp hóa
+- **WHEN** đơn xôi gói được giao tới tạp hóa
+- **THEN** số lượng được đưa vào ô sau quầy của tạp hóa, khách có thể gọi mua trong ngày, và kho/quầy của tiệm xôi không đổi
+
+#### Scenario: Tiệm xôi không có kệ tự chọn
+- **WHEN** khách ghé tiệm xôi
+- **THEN** khách gọi món ở quầy xôi riêng; game không yêu cầu đặt kệ tạp hóa hoặc dùng kệ của tiệm khác

@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { DATA, hasFeature, type StaffRole, type StatKey } from '../core/data';
 import {
-  STAT_KEYS, STAT_NAMES, bonusStaff, changeRole, ensureBoard, expToNext, fire, hire, moodLabel, nextSlotLevel, personalityDef,
-  roleDef, scoldStaff, staffSlots, unlockedRoles,
+  STAT_KEYS, STAT_NAMES, bonusStaff, changeRole, ensureBoard, expToNext, fire, hire, moodLabel, nextSlotLevel, personalityDef, recommendCandidate,
+  roleDef, scoldStaff, staffSlots, transferStaff, unlockedRoles,
 } from '../core/staff';
 import { scheduleEnabled, shiftsOn } from '../core/schedule';
-import { formatMoney, type Candidate, type Staff } from '../core/state';
+import { formatMoney, storeView, type Candidate, type Staff } from '../core/state';
 import { G, persist } from '../game';
 import { staffSprite } from '../ui/art';
 import { PAGE_TOP, ScrollArea, card, pageFrame } from '../ui/page';
@@ -67,7 +67,11 @@ export class StaffScene extends Phaser.Scene {
       this.list.add(txt(this, 14, y, `Bảng ứng viên đổi sau ${refresh} ngày.`, { size: 11, color: HEX.muted }));
       y += 18;
       if (!board.length) this.list.add(txt(this, W / 2, y + 40, 'Hết ứng viên, chờ bảng mới nhé.', { size: 14, color: HEX.muted, origin: [0.5, 0.5] }));
-      for (const c of board) y = this.candidateCard(c, y);
+      const recommendation = recommendCandidate(s, board);
+      const ordered = recommendation
+        ? [recommendation.candidate, ...board.filter((candidate) => candidate.id !== recommendation.candidate.id)]
+        : board;
+      for (const c of ordered) y = this.candidateCard(c, y, c.id === recommendation?.candidate.id ? recommendation.reason : undefined);
     }
     this.list.setHeight(y + 20);
   }
@@ -90,7 +94,7 @@ export class StaffScene extends Phaser.Scene {
 
   private staffCard(st: Staff, y: number): number {
     const s = G.state;
-    const h = 186;
+    const h = 208;
     const mood = moodLabel(st.mood);
     this.list.add(card(this, 8, y, W - 16, h - 6, st.quitting ? 0xffe4dc : C.panel));
     this.list.add(staffSprite(this, 34, y + 52, st).setScale(0.6));
@@ -109,9 +113,9 @@ export class StaffScene extends Phaser.Scene {
       this.list.add(txt(this, 18, yy, `${st.name} muốn nghỉ việc (quyết định ở buổi sáng).`, { size: 11, bold: true, color: HEX.red }));
     }
     yy = y + h - 34;
-    const bw = (W - 40) / 4;
+    const bw = (W - 40) / 5;
     const btn = (i: number, label: string, color: number, onTap: () => void, enabled = true) =>
-      this.list.add(new Button(this, 20 + bw / 2 + i * (bw + 2), yy, { w: bw - 4, h: 32, label, size: 10, color, onTap: this.list.guard(onTap) }).setEnabled(enabled));
+      this.list.add(new Button(this, 20 + bw / 2 + i * (bw + 2), yy, { w: bw - 4, h: 32, label, size: 9, color, onTap: this.list.guard(onTap) }).setEnabled(enabled));
     btn(0, `🎁 Thưởng\n${DATA.balance.staff.bonusAmount / 1000}k`, C.green, () => {
       if (!bonusStaff(s, st.id)) { toast(this, 'Không đủ tiền thưởng', H / 2, C.red); return; }
       play('coin');
@@ -126,7 +130,8 @@ export class StaffScene extends Phaser.Scene {
       this.render();
     }, st.scoldedDay !== s.day);
     btn(2, '🔁 Vai trò', C.blue, () => this.pickRole(st), unlockedRoles(s).length > 1);
-    btn(3, '✖ Sa thải', C.red, () => dialog(this, {
+    btn(3, '⇄ Chuyển', C.blue, () => this.transferFlow(st), s.stores.length > 1);
+    btn(4, '✖ Sa thải', C.red, () => dialog(this, {
       icon: '😢',
       title: `Sa thải ${st.name}?`,
       body: `Trả thêm ${formatMoney(st.wage * DATA.balance.staff.severanceDays)} trợ cấp. ${st.name} sẽ bị xóa khỏi lịch ca.`,
@@ -136,6 +141,27 @@ export class StaffScene extends Phaser.Scene {
       ],
     }));
     return y + h;
+  }
+
+  private transferFlow(st: Staff): void {
+    const s = G.state;
+    const slots = staffSlots(s.level);
+    const destinations = s.stores.filter((store) => store.id !== s.activeStoreId);
+    const buttons = destinations.map((store) => {
+      const count = storeView(s, store.id).staff.length;
+      return {
+        label: `${store.name} · ${count}/${slots}`,
+        color: count < slots ? C.blue : C.grey,
+        onTap: () => {
+          if (!transferStaff(s, st.id, store.id)) { toast(this, 'Chi nhánh đã đủ chỗ', H / 2, C.red); return; }
+          persist();
+          toast(this, `${st.name} đã chuyển tới ${store.name}`, H / 2, C.greenDark);
+          this.render();
+        },
+      };
+    });
+    buttons.push({ label: 'Đóng', color: C.grey, onTap: () => undefined });
+    dialog(this, { icon: '⇄', title: `Điều chuyển ${st.name}`, body: 'Số chỗ nhân viên được tính riêng cho từng chi nhánh. Lịch làm của nhân viên được giữ lại.', buttons });
   }
 
   private pickRole(st: Staff): void {
@@ -149,16 +175,16 @@ export class StaffScene extends Phaser.Scene {
     dialog(this, { title: `Vai trò của ${st.name}`, body: 'Thu ngân đứng quầy; Bổ sung kệ nạp ô vơi dưới 40%; Kho cất hàng và bày theo sơ đồ; Giao hàng chạy đơn điện thoại.', buttons });
   }
 
-  private candidateCard(c: Candidate, y: number): number {
+  private candidateCard(c: Candidate, y: number, recommendation?: string): number {
     const s = G.state;
     const h = 150;
     const role = roleDef(c.role);
     const fixed = c.id === DATA.staff.fixedCandidate.id;
-    this.list.add(card(this, 8, y, W - 16, h - 6, fixed ? 0xfff0d0 : C.panel));
+    this.list.add(card(this, 8, y, W - 16, h - 6, recommendation ? 0xe8f5e9 : fixed ? 0xfff0d0 : C.panel));
     this.list.add(staffSprite(this, 34, y + 50, c).setScale(0.6));
-    this.list.add(txt(this, 62, y + 8, `${c.name}${fixed ? ' ⭐' : ''}`, { size: 14, bold: true }));
+    this.list.add(txt(this, 62, y + 8, `${c.name}${fixed ? ' ⭐' : ''}${recommendation ? ' · ĐỀ XUẤT' : ''}`, { size: 13, bold: true, color: recommendation ? HEX.green : HEX.ink }));
     this.list.add(txt(this, 62, y + 28, `Hợp vai: ${role.icon} ${role.name} · ${personalityDef(c.personality).name}`, { size: 11, color: HEX.muted }));
-    this.list.add(txt(this, 62, y + 44, personalityDef(c.personality).note, { size: 10, color: HEX.muted, wrap: W - 180 }));
+    this.list.add(txt(this, 62, y + 44, recommendation ? `⭐ ${recommendation}` : personalityDef(c.personality).note, { size: 10, bold: !!recommendation, color: recommendation ? HEX.green : HEX.muted, wrap: W - 180 }));
     this.list.add(txt(this, W - 20, y + 8, `${formatMoney(c.wage)}/ngày`, { size: 13, bold: true, origin: [1, 0], color: '#b7411f' }));
     this.statBars(c.stats, 18, y + 70, role.mainStat);
     const full = s.staff.length >= staffSlots(s.level);

@@ -23,6 +23,7 @@ export function recordDay(state: GameState, summary: DaySummary): DayRecord {
     hourly: [...t.hourly],
     staff: structuredClone(t.staffPerf),
     manager: t.managerDay,
+    internalCost: t.internalCost,
   };
   state.analytics.push(record);
   const keep = DATA.balance.analytics.historyDays;

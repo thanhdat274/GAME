@@ -9,6 +9,7 @@
     "preview": "vite preview --host",
     "test": "vitest run",
     "simulate": "vite-node scripts/simulate.ts",
+    "playtest:max": "vite --host --open \"/?simulate=max&reset=1\"",
     "icons": "node scripts/make-icons.mjs",
     "sprites": "vite-node scripts/sprite-sheet.ts",
     "playtest": "vite-node scripts/playtest.ts",

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { DATA } from '../src/core/data';
 import { DaySession, endDay, grandmaHelp, openShop, startNextDay } from '../src/core/day';
 import { meanSpawnSeconds, newShopMultiplier, type Customer, type OrderLine } from '../src/core/customers';
@@ -6,6 +6,11 @@ import { createNewGame, type GameState, lotsFrom } from '../src/core/state';
 import { makeChange } from '../src/core/change';
 import { generateOrder } from '../src/core/customers';
 import { Rng } from '../src/core/rng';
+
+// Các test tính tiền giả định khách trả tiền mặt; khách trả thẻ/chuyển khoản có test riêng.
+const cashlessChance = DATA.balance.cashlessChance;
+beforeAll(() => { DATA.balance.cashlessChance = 0; });
+afterAll(() => { DATA.balance.cashlessChance = cashlessChance; });
 
 const order = (productId = 'mi_goi', qty = 1): OrderLine => ({ productId, qty, picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
 
@@ -170,11 +175,17 @@ describe('khách tự mua hàng và thanh toán', () => {
     forceNextOrder(all, [order()]);
     const allCustomer = front(all);
     allCustomer.type.tipMul = 0;
-    all.scanAll();
-    if (all.front?.status === 'paying') {
-      allCustomer.changeStartedAt = all.elapsed - DATA.balance.fastChangeSeconds;
-      for (const bill of makeChange(allCustomer.changeDue)) all.addBill(bill);
-      all.giveChange();
+    // Tắt tip thối nhanh (kể cả khi khách đưa vừa đủ) để chỉ còn tip combo cần kiểm tra.
+    const fastChangeSeconds = DATA.balance.fastChangeSeconds;
+    DATA.balance.fastChangeSeconds = 0;
+    try {
+      all.scanAll();
+      if (all.front?.status === 'paying') {
+        for (const bill of makeChange(allCustomer.changeDue)) all.addBill(bill);
+        all.giveChange();
+      }
+    } finally {
+      DATA.balance.fastChangeSeconds = fastChangeSeconds;
     }
     expect(allState.today.tips).toBe(0);
 
@@ -218,6 +229,26 @@ describe('khách tự mua hàng và thanh toán', () => {
     expect(over.giveChange()).toBe('over');
     expect(overState.today.overpaid).toBe(5000);
     expect(overState.money).toBe(DATA.balance.startMoney + overCustomer.total - 5000);
+  });
+
+  it('khách trả thẻ/chuyển khoản: bán xong ngay, không thối tiền, không tip', () => {
+    DATA.balance.cashlessChance = 1;
+    try {
+      const s = stockedGame();
+      const d = new DaySession(s, 56);
+      forceNextOrder(d, [order('nuoc_mam')]);
+      const c = front(d);
+      let tip: number | undefined;
+      d.events.on('sale', (event) => { if (event.customer === c) tip = event.tip; });
+      d.scanItem('nuoc_mam');
+      expect(c.status).toBe('done');
+      expect(['card', 'transfer']).toContain(c.paymentMethod);
+      expect(c.changeDue).toBe(0);
+      expect(tip).toBe(0);
+      expect(s.today.served).toBe(1);
+    } finally {
+      DATA.balance.cashlessChance = 0;
+    }
   });
 
   it('khách bỏ đi thì trả món trong giỏ về đúng kệ', () => {

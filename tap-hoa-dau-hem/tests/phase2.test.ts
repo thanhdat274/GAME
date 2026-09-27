@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { DATA, validateProducts } from '../src/core/data';
+import { beforeAll, afterAll, describe, expect, it } from 'vitest';
+import { DATA, furniture, validateProducts } from '../src/core/data';
 import { DaySession, endDay, openShop, startNextDay } from '../src/core/day';
 import { type Customer, type OrderLine } from '../src/core/customers';
 import { attraction, attractionMultiplier, buyDecor } from '../src/core/decor';
 import {
-  buyFixture, checkPaths, maxQueueFor, placementError, plotStatus, unlockPlot, walkTiles,
+  buyFixture, checkPaths, maxQueueFor, placementError, plot, plotCells, plotStatus, sellValue, unlockPlot, walkTiles,
 } from '../src/core/layout';
 import { canGiveCredit, debtLimit, markBadDebts, recordDebt, remindDebt, repaymentsToday } from '../src/core/ledger';
 import { cheapSpawnMultiplier, clampPrice, keepChance, priceRange, setPrice } from '../src/core/pricing';
@@ -18,6 +18,11 @@ import {
 import { createNewGame, lotsFrom, shelfKind, warehouseQty, type GameState } from '../src/core/state';
 import { BACKUP_KEY, PRE_MIGRATE_KEY, SAVE_KEY, loadGame, type KeyValueStore } from '../src/core/save';
 import saveV2 from './fixtures/save-v2.json';
+
+// Các test tính tiền giả định khách trả tiền mặt; khách trả thẻ/chuyển khoản có test riêng.
+const cashlessChance = DATA.balance.cashlessChance;
+beforeAll(() => { DATA.balance.cashlessChance = 0; });
+afterAll(() => { DATA.balance.cashlessChance = cashlessChance; });
 
 function lvl(level: number, money = 2_000_000): GameState {
   const s = createNewGame();
@@ -58,7 +63,8 @@ function tickUntil(d: DaySession, predicate: () => boolean, max = 4000): void {
 describe('dữ liệu giai đoạn 2', () => {
   it('có 45 món uống / tươi / đông với trường hạn dùng / lạnh hợp lệ', () => {
     const fresh = DATA.products.filter((p) => p.unlockLevel <= 20 && ['drink', 'fresh', 'frozen'].includes(p.category));
-    expect(fresh).toHaveLength(45);
+    // Katalog đã có thêm mặt hàng từ phase 4; giữ kiểm tra số món tối thiểu của phase 2.
+    expect(fresh.length).toBeGreaterThanOrEqual(45);
     expect(DATA.products.filter((p) => p.requiresCold === 'freezer').every((p) => p.unlockLevel >= 9)).toBe(true);
     expect(DATA.levels.maxLevel).toBe(35);
     expect(DATA.levels.levels.slice(0, 9).map((l) => l.exp)).toEqual([0, 80, 200, 360, 560, 800, 1080, 1400, 1780]);
@@ -92,7 +98,7 @@ describe('mặt bằng và nội thất', () => {
     const s = lvl(9);
     expect(placementError(s, 'fridge', 0, 3, 0)).toBe('locked');
     unlockPlot(s, 'A');
-    expect(placementError(s, 'fridge', 0, 4, 0)).toBe('overlap');
+    expect(placementError(s, 'fridge', 0, 5, 0)).toBe('overlap');
     expect(placementError(s, 'fridge', 0, 3, 0)).toBeNull();
     expect(placementError(s, 'storage_rack', 0, 7, 0)).toBe('door');
   });
@@ -102,16 +108,37 @@ describe('mặt bằng và nội thất', () => {
     unlockPlot(s, 'A');
     unlockPlot(s, 'B');
     unlockPlot(s, 'C');
-    expect(placementError(s, 'fridge', 4, 0, 0)).toBe('storage-only');
-    expect(buyFixture(s, 'storage_rack', 4, 0, 0)).toBe('ok');
-    expect(warehouseCapacity(s)).toBe(30 + 10);
+    const kho = plot('C').rects[0];
+    expect(placementError(s, 'fridge_single', kho.x, kho.y, 0)).toBe('storage-only');
+    // Kệ kho chỉ đặt trong KHO, không đặt ra sàn bán hàng.
+    expect(placementError(s, 'storage_rack', 3, 3, 0)).toBe('storage-only');
+    expect(buyFixture(s, 'storage_rack', kho.x, kho.y, 0)).toBe('ok');
+    expect(warehouseCapacity(s)).toBe(30 + 20);
+  });
+
+  it('KHO nằm sát tiệm; bản lưu cũ cất nội thất trên ô nay thành KHO và dời kệ kho vào KHO', () => {
+    // KHO (4×2) liền ngay bên phải Đất B, không cần mở F mới tới được.
+    const kho = plotCells(plot('C'));
+    expect(kho).toHaveLength(8);
+    const b = plotCells(plot('B'));
+    expect(kho.some((c) => b.some((d) => Math.abs(c.x - d.x) + Math.abs(c.y - d.y) === 1))).toBe(true);
+
+    const s = lvl(25);
+    s.land = ['A', 'B', 'C', 'F'];
+    // Vị trí theo bản đồ cũ: tủ lạnh 1 cánh ở F cũ (6,6), kệ kho ở KHO cũ (8,5).
+    s.fixtures.push({ uid: s.nextUid++, type: 'fridge_single', x: 6, y: 6, rot: 0 }, { uid: s.nextUid++, type: 'storage_rack', x: 8, y: 5, rot: 0 });
+    const loaded = migrate({ version: CURRENT_VERSION, state: structuredClone(s) as unknown as Record<string, unknown> });
+    expect(loaded.storedFixtures.map((f) => f.type)).toEqual(['fridge_single']);
+    const rack = loaded.fixtures.find((f) => f.type === 'storage_rack')!;
+    expect(kho.some((c) => c.x === rack.x && c.y === rack.y)).toBe(true);
+    expect(checkPaths(loaded).ok).toBe(true);
   });
 
   it('bố cục chặn lối đi bị phát hiện bằng BFS', () => {
     const s = lvl(5);
     unlockPlot(s, 'A');
-    // Tủ lạnh đặt vào lối đi duy nhất (cột 1) chặn cửa với quầy và các kệ.
-    expect(buyFixture(s, 'fridge', 1, 5, 0)).toBe('ok');
+    // Tủ lạnh 1 cánh đặt vào lối đi duy nhất chặn cửa với quầy và các kệ.
+    expect(buyFixture(s, 'fridge_single', 1, 5, 0)).toBe('ok');
     const result = checkPaths(s);
     expect(result.ok).toBe(false);
     expect(result.blocked.length).toBeGreaterThan(0);
@@ -126,7 +153,7 @@ describe('mặt bằng và nội thất', () => {
     const uid = s.fixtures.find((f) => f.shelf === fridge)!.uid;
     expect(sellFixture(s, uid)).toBe('ok');
     expect(warehouseQty(s, 'nuoc_ngot')).toBe(12);
-    expect(s.money).toBe(money + 60_000);
+    expect(s.money).toBe(money + sellValue('fridge'));
   });
 
   it('quãng đường tăng khi nội thất ở xa', () => {
@@ -157,14 +184,15 @@ describe('kho, tủ lạnh và hạn dùng', () => {
     expect(shelfKind(s, fridge)).toBe('fridge');
   });
 
-  it('tiền điện: 1 tủ lạnh + 1 tủ đông = 13.000đ', () => {
+  it('tiền điện: 1 tủ lạnh 2 cánh + 1 tủ đông = 16.000đ; tủ 1 cánh 3.000đ', () => {
     const { s } = withFridge(9);
     unlockPlot(s, 'B');
     expect(buyFixture(s, 'freezer', 4, 3, 0)).toBe('ok');
-    expect(electricityCost(s)).toBe(13_000);
+    expect(electricityCost(s)).toBe(16_000);
     s.phase = 'open';
     const sum = endDay(s);
-    expect(sum.electricity).toBe(13_000);
+    expect(sum.electricity).toBe(16_000);
+    expect(furniture('fridge_single').power).toBe(3000);
   });
 
   it('nhập bánh mì ngày 12 thì hạn tới hết ngày 13, hết ngày 13 thì hỏng', () => {
@@ -532,7 +560,7 @@ describe('phiên bán giai đoạn 2', () => {
 });
 
 describe('làm tròn tiền', () => {
-  it('tổng đơn luôn chia hết 1.000đ để thối được bằng khay tiền', () => {
+  it('tổng đơn luôn chia hết 500đ để thối được bằng khay tiền', () => {
     const s = lvl(7);
     s.warehouse = lotsFrom({ trung_ga: 20 });
     assignSlot(s, 0, 0, 'trung_ga');
@@ -542,8 +570,9 @@ describe('làm tròn tiền', () => {
     tickUntil(d, () => d.front?.status === 'scanning');
     d.scanAll();
     const total = d.front?.total ?? s.today.revenue;
-    expect(total % 1000).toBe(0);
-    expect(total).toBe(4000);
+    expect(total % 500).toBe(0);
+    expect(DATA.balance.drawer).toContain(500);
+    expect(total).toBe(3500);
   });
 });
 
@@ -676,9 +705,9 @@ describe('cuối ngày', () => {
     s.warehouse = [{ productId: 'banh_mi', qty: 2, exp: s.day }];
     const sum = endDay(s);
     expect(sum.spoiled).toEqual([{ productId: 'banh_mi', qty: 2 }]);
-    expect(sum.electricity).toBe(5000);
+    expect(sum.electricity).toBe(8000);
     expect(sum.priceComplaints).toEqual([{ productId: 'nuoc_ngot', qty: 6 }]);
-    expect(sum.netProfit).toBe(100_000 - 70_000 - 6000 - 5000);
+    expect(sum.netProfit).toBe(100_000 - 70_000 - 6000 - 8000);
   });
 
   it('refill vẫn đúng với kho nhiều lô', () => {

@@ -3,7 +3,7 @@ import { DATA, decor, furniture, hasFeature, type FurnitureKind } from '../core/
 import { buyDecor } from '../core/decor';
 import {
   buyFixture, checkPaths, fixtureCells, footprint, moveFixture, placementError, plot, plotAt, plotCells, plotStatus,
-  sellValue, unlockPlot, type PlaceError,
+  retrieveFixture, sellValue, stowFixture, unlockPlot, type PlaceError,
 } from '../core/layout';
 import { formatMoney, type Fixture, type GameState } from '../core/state';
 import { activeShopType } from '../core/shopTypes';
@@ -15,7 +15,7 @@ import { Button, dialog, toast } from '../ui/widgets';
 import { KineticScroll } from '../ui/scroll';
 import { C, H, HEX, W, emoji, setupCamera, txt } from '../ui/theme';
 
-const CELL = 43;
+const CELL = Math.floor((W - 16) / DATA.land.cols);
 const GX = (W - DATA.land.cols * CELL) / 2;
 const GY = 60;
 const PANEL_Y = GY + DATA.land.rows * CELL + 6;
@@ -23,7 +23,7 @@ const PANEL_Y = GY + DATA.land.rows * CELL + 6;
 const CARD_W = 82;
 const CARD_H = 106;
 const CARD_GAP = 8;
-const SHOP_TOP = PANEL_Y + 24;
+const SHOP_TOP = PANEL_Y + 42;
 const SHOP_BOTTOM = SHOP_TOP + CARD_H + 8;
 
 const KIND_COLOR: Record<FurnitureKind, number> = {
@@ -44,7 +44,8 @@ const PLACE_TEXT: Record<PlaceError, string> = {
   locked: 'Đất chưa mở',
   overlap: 'Chồng lên nội thất khác',
   door: 'Không chặn cửa ra vào',
-  'storage-only': 'Sân sau chỉ đặt kệ kho',
+  'storage-only': 'Chỉ đặt kệ kho trong khu KHO',
+  'generator-only': 'Máy phát chỉ đặt ở ô kỹ thuật riêng',
 };
 
 /** Những gì có thể mua trong chế độ Sắp xếp (nội thất + đồ trang trí đặt sàn). */
@@ -65,6 +66,9 @@ export class BuildScene extends Phaser.Scene {
   private hint!: Phaser.GameObjects.Text;
   private selected: number | null = null;
   private placing: string | null = null;
+  private placingStoredUid: number | null = null;
+  private placingRot: 0 | 1 = 0;
+  private placementCell: { x: number; y: number } | null = null;
   private blocked = new Set<number>();
   private drag: { uid: number; startX: number; startY: number; moved: boolean; cell: { x: number; y: number } | null; offset: { x: number; y: number } } | null = null;
   private ghost: Phaser.GameObjects.Container | null = null;
@@ -83,6 +87,9 @@ export class BuildScene extends Phaser.Scene {
     this.snapshot = JSON.stringify(s);
     this.selected = null;
     this.placing = data?.buy ?? null;
+    this.placingStoredUid = null;
+    this.placingRot = 0;
+    this.placementCell = null;
     this.blocked.clear();
     this.drag = null;
     this.ghost = null;
@@ -118,6 +125,7 @@ export class BuildScene extends Phaser.Scene {
     });
 
     this.redraw();
+    if (this.placing) this.startPlacing(this.placing, this.placingStoredUid, this.placingRot);
   }
 
   // ---------- Vẽ ----------
@@ -144,7 +152,8 @@ export class BuildScene extends Phaser.Scene {
         continue;
       }
       const storage = owner !== 'initial' && plot(owner).storageOnly;
-      if (open) g.fillStyle(storage ? 0x9aa48a : (x + y) % 2 ? C.floorA : C.floorB, 1).fillRect(px, py, CELL, CELL);
+      const technical = owner !== 'initial' && !!owner && plot(owner).generatorOnly;
+      if (open) g.fillStyle(storage ? 0x9aa48a : technical ? 0x697780 : (x + y) % 2 ? C.floorA : C.floorB, 1).fillRect(px, py, CELL, CELL);
       else g.fillStyle(0x5c4632, 1).fillRect(px, py, CELL, CELL);
       g.lineStyle(1, 0x000000, 0.15).strokeRect(px, py, CELL, CELL);
     }
@@ -153,23 +162,34 @@ export class BuildScene extends Phaser.Scene {
 
     this.fixtureLayer.removeAll(true);
     this.fixtureLayer.add(emoji(this, GX + door.x * CELL + CELL / 2, GY + door.y * CELL + CELL / 2, '🚪', 20));
-    // Đất khóa: nhãn giá / level ở giữa mảnh (ngắt dòng tên dài và ghim trong màn hình để không bị che khuất).
+    for (const f of s.fixtures) this.fixtureLayer.add(this.fixtureView(f));
+    // Đất khóa: đặt thông tin gọn trong chính mảnh đất để không tràn khỏi lưới.
     for (const p of DATA.land.plots) {
       if (s.land.includes(p.id)) continue;
       const cells = plotCells(p);
       const rawCx = GX + (cells.reduce((a, c) => a + c.x, 0) / cells.length) * CELL + CELL / 2;
       const cy = GY + (cells.reduce((a, c) => a + c.y, 0) / cells.length) * CELL + CELL / 2;
       const status = plotStatus(s, p.id);
-      const shortName = p.name.includes('·') ? p.name.replace(/\s*·\s*/, '\n') : p.name;
-      const costOrLevel = status === 'level' ? `Cần level ${p.level}` : formatMoney(p.cost);
-      const label = `🔒 ${shortName}\n${costOrLevel}`;
-      const cx = Phaser.Math.Clamp(rawCx, 65, W - 65);
-      const t = txt(this, cx, cy, label, { size: 10, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center' });
-      t.setLineSpacing(-2);
+      const shortName = p.generatorOnly ? 'Chỉ đặt máy phát' : p.id === 'G' ? 'Khu mở rộng' : p.name.replace(/^Đất [A-Z]\s*·\s*/, '');
+      const costOrLevel = status === 'level' ? `Cần LV${p.level}` : p.cost === 0 ? 'Mở miễn phí' : formatMoney(p.cost);
+      const label = `🔒 ${p.name}\n${shortName}\n${costOrLevel}`;
+      const width = Math.max(58, Math.max(...p.rects.map((r) => r.w)) * CELL - 8);
+      const t = txt(this, rawCx, cy, label, { size: p.id === 'G' ? 8 : 9, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: width });
+      t.setLineSpacing(-3);
       t.setBackgroundColor(status === 'available' ? '#2a7a43cc' : '#00000088').setPadding(4, 2, 4, 2);
       this.fixtureLayer.add(t);
     }
-    for (const f of s.fixtures) this.fixtureLayer.add(this.fixtureView(f));
+    const techPlot = DATA.land.plots.find((p) => p.generatorOnly);
+    if (techPlot && s.land.includes(techPlot.id) && !s.fixtures.some((f) => f.type === 'generator')) {
+      const cells = plotCells(techPlot);
+      const cx = GX + (cells.reduce((sum, cell) => sum + cell.x, 0) / cells.length) * CELL + CELL / 2;
+      const cy = GY + (cells.reduce((sum, cell) => sum + cell.y, 0) / cells.length) * CELL + CELL / 2;
+      this.fixtureLayer.add(txt(this, cx, cy, '⚡ Ô KỸ THUẬT', { size: 7, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: CELL * 2 - 4 }));
+    }
+    for (const warehousePlot of DATA.land.plots.filter((p) => p.storageOnly && s.land.includes(p.id))) {
+      const cell = plotCells(warehousePlot)[0];
+      this.fixtureLayer.add(txt(this, GX + cell.x * CELL + 3, GY + cell.y * CELL + 3, warehousePlot.id === 'C' ? '📦 KHO' : '📦 KHO +', { size: 8, bold: true, color: HEX.cream, origin: [0, 0] }));
+    }
     this.renderPanel();
   }
 
@@ -206,22 +226,35 @@ export class BuildScene extends Phaser.Scene {
     const sel = this.selected !== null ? s.fixtures.find((f) => f.uid === this.selected) : undefined;
     if (this.placing) {
       const item = catalog(s).find((i) => i.id === this.placing);
-      this.hint.setText(`Chạm một ô trống đã mở để đặt ${item?.name ?? ''}`);
+      this.hint.setText(`Chạm ô trống để đặt ${item?.name ?? ''} · ${this.placingRot ? 'dọc' : 'ngang'}`);
     } else if (sel) this.hint.setText('Kéo để di chuyển · ô xanh hợp lệ, đỏ không hợp lệ');
     else this.hint.setText('Chạm nội thất để chọn · chạm đất khóa để mở');
 
     if (sel) {
       const def = furniture(sel.type);
       L.add(txt(this, 12, PANEL_Y + 8, `${def.icon} ${def.name}${sel.shelf !== undefined ? ` (kệ ${sel.shelf + 1})` : ''}`, { size: 13, bold: true, color: HEX.cream }));
-      L.add(new Button(this, 60, PANEL_Y + 48, { w: 100, h: 36, label: '↻ Xoay', size: 13, color: C.blue, onTap: () => this.rotate(sel) }));
-      L.add(new Button(this, 176, PANEL_Y + 48, { w: 120, h: 36, label: def.fixed ? 'Không bán' : `Bán +${formatMoney(sellValue(sel.type))}`, size: 12, color: C.red, onTap: () => this.sell(sel) }).setEnabled(!def.fixed));
-      L.add(new Button(this, 300, PANEL_Y + 48, { w: 90, h: 36, label: 'Bỏ chọn', size: 12, color: C.grey, onTap: () => { this.selected = null; this.redraw(); } }));
+      L.add(new Button(this, 48, PANEL_Y + 48, { w: 78, h: 36, label: '↻ Xoay', size: 11, color: C.blue, onTap: () => this.rotate(sel) }).setEnabled(def.w !== def.h));
+      L.add(new Button(this, 137, PANEL_Y + 48, { w: 76, h: 36, label: '📦 Cất đi', size: 11, color: C.grey, onTap: () => this.stow(sel) }).setEnabled(!def.fixed));
+      L.add(new Button(this, 231, PANEL_Y + 48, { w: 96, h: 36, label: def.fixed ? 'Không bán' : `Bán +${formatMoney(sellValue(sel.type))}`, size: 10, color: C.red, onTap: () => this.sell(sel) }).setEnabled(!def.fixed));
+      L.add(new Button(this, 322, PANEL_Y + 48, { w: 68, h: 36, label: 'Bỏ chọn', size: 10, color: C.grey, onTap: () => { this.selected = null; this.redraw(); } }));
     } else {
       L.add(txt(this, 12, PANEL_Y + 6, this.placing ? '📍 Đang đặt · chạm lại thẻ để bỏ' : '🛒 Mua thêm', { size: 13, bold: true, color: HEX.cream }));
+      if (this.placing && !DATA.decor.some((d) => d.id === this.placing)) {
+        const def = furniture(this.placing);
+        L.add(new Button(this, W - 50, PANEL_Y + 20, {
+          w: 86, h: 30, label: `↻ ${this.placingRot ? 'Dọc' : 'Ngang'}`, size: 11, color: C.blue,
+          onTap: () => this.rotatePlacement(),
+        }).setEnabled(def.w !== def.h));
+      } else if (!this.placing) {
+        L.add(new Button(this, W - 50, PANEL_Y + 20, {
+          w: 86, h: 30, label: `📦 Cất (${s.storedFixtures.length})`, size: 10, color: C.blue,
+          onTap: () => this.showStoredFixtures(),
+        }).setEnabled(s.storedFixtures.length > 0));
+      }
       this.renderShop(L);
     }
-    L.add(new Button(this, 70, H - 28, { w: 116, h: 42, label: '✕ Hủy', size: 15, color: C.grey, onTap: () => this.cancel() }));
-    L.add(new Button(this, W - 80, H - 28, { w: 136, h: 46, label: 'Xong ✓', size: 17, color: C.green, onTap: () => this.done() }));
+    L.add(new Button(this, 70, H - 32, { w: 116, h: 42, label: '✕ Hủy', size: 15, color: C.grey, onTap: () => this.cancel() }));
+    L.add(new Button(this, W - 80, H - 32, { w: 136, h: 46, label: 'Xong ✓', size: 17, color: C.green, onTap: () => this.done() }));
   }
 
   /** Dải thẻ mua nội thất, vuốt ngang: món mua được xếp trước, món còn khóa xếp sau theo level. */
@@ -230,9 +263,11 @@ export class BuildScene extends Phaser.Scene {
     const items = catalog(s).map((it) => {
       const def = it.decor ? null : furniture(it.id);
       const missingPlot = !!def?.requiresPlot && !s.land.includes(def.requiresPlot);
-      const limitReached = !!def?.limit && s.fixtures.filter((f) => f.type === it.id).length >= def.limit;
+      const limitReached = !!def?.limit && [...s.fixtures, ...s.storedFixtures].filter((f) => f.type === it.id).length >= def.limit;
       const tooLow = s.level < it.level;
-      return { it, missingPlot, limitReached, tooLow, locked: tooLow || missingPlot || limitReached };
+      const requiredCashiers = def?.kind === 'counter' && !def.fixed ? s.fixtures.filter((f) => furniture(f.type).kind === 'counter').length + 1 : 0;
+      const missingCashiers = requiredCashiers > s.staff.filter((staff) => staff.role === 'cashier').length;
+      return { it, missingPlot, limitReached, tooLow, missingCashiers, requiredCashiers, locked: tooLow || missingPlot || limitReached || missingCashiers };
     });
     items.sort((a, b) => Number(a.locked) - Number(b.locked) || (a.locked ? a.it.level - b.it.level : 0));
     const row = this.add.container(-this.shopX, 0);
@@ -240,7 +275,7 @@ export class BuildScene extends Phaser.Scene {
     this.shopRow = row;
     L.add(row);
     const cy = SHOP_TOP + CARD_H / 2;
-    items.forEach(({ it, missingPlot, limitReached, tooLow, locked }, i) => {
+    items.forEach(({ it, missingPlot, limitReached, tooLow, missingCashiers, requiredCashiers, locked }, i) => {
       const x = 10 + CARD_W / 2 + i * (CARD_W + CARD_GAP);
       const active = this.placing === it.id;
       const b = new Button(this, x, cy, {
@@ -251,7 +286,9 @@ export class BuildScene extends Phaser.Scene {
           if (tooLow) { toast(this, `Mở ở level ${it.level}`); return; }
           if (missingPlot) { toast(this, 'Mở Đất D để mua món này'); return; }
           if (limitReached) { toast(this, `Đã đủ số lượng ${it.name}`); return; }
-          this.placing = active ? null : it.id;
+          if (missingCashiers) { toast(this, `Cần tuyển đủ ${requiredCashiers} thu ngân để vận hành ${requiredCashiers} quầy`); return; }
+          if (active) this.stopPlacing();
+          else this.startPlacing(it.id, null, 0);
           this.selected = null;
           this.redraw();
         },
@@ -268,7 +305,7 @@ export class BuildScene extends Phaser.Scene {
       name.setMaxLines(2);
       b.add(name);
       // Nhãn giá / điều kiện ở đáy thẻ.
-      const status = tooLow ? `Cần Lv ${it.level}` : missingPlot ? 'Cần Đất D' : limitReached ? '✓ Đã đủ' : formatMoney(it.cost);
+      const status = tooLow ? `Cần Lv ${it.level}` : missingPlot ? 'Cần Đất D' : limitReached ? '✓ Đã đủ' : missingCashiers ? `Cần ${requiredCashiers} thu ngân` : formatMoney(it.cost);
       const poor = !locked && s.money < it.cost;
       const chip = this.add.graphics();
       chip.fillStyle(0x000000, 0.35).fillRoundedRect(-CARD_W / 2 + 6, CARD_H / 2 - 24, CARD_W - 12, 18, 9);
@@ -284,7 +321,8 @@ export class BuildScene extends Phaser.Scene {
     this.shopX = Math.min(this.shopX, this.shopMax);
     row.setX(-this.shopX);
     if (this.shopMax > 0 && !this.placing) {
-      L.add(txt(this, W - 12, PANEL_Y + 8, 'vuốt ngang ›', { size: 10, color: HEX.muted, origin: [1, 0] }));
+      // Chừa khoảng riêng cho nút Cất ở mép phải của cùng hàng tiêu đề.
+      L.add(txt(this, W - 102, PANEL_Y + 8, 'vuốt ngang ›', { size: 10, color: HEX.muted, origin: [1, 0] }));
     }
   }
 
@@ -302,6 +340,12 @@ export class BuildScene extends Phaser.Scene {
 
   private onMove(p: Phaser.Input.Pointer): void {
     const d = this.drag;
+    if (!d && this.placing) {
+      const cell = this.cellAt(p.worldX, p.worldY);
+      if (!cell) return;
+      this.showPlacementPreview(cell);
+      return;
+    }
     if (!d || !p.isDown) return;
     if (!d.moved && Math.hypot(p.worldX - d.startX, p.worldY - d.startY) < 8) return;
     const f = G.state.fixtures.find((item) => item.uid === d.uid);
@@ -368,26 +412,126 @@ export class BuildScene extends Phaser.Scene {
   private place(x: number, y: number): void {
     const id = this.placing!;
     const isDecor = DATA.decor.some((d) => d.id === id);
-    const result = isDecor ? buyDecor(G.state, id, { x, y }) : buyFixture(G.state, id, x, y, 0);
-    if (result !== 'ok') {
+    const result = isDecor ? buyDecor(G.state, id, { x, y })
+      : this.placingStoredUid !== null
+        ? retrieveFixture(G.state, this.placingStoredUid, x, y, this.placingRot)
+        : buyFixture(G.state, id, x, y, this.placingRot);
+    // Mua mới trả về 'ok', còn retrieveFixture trả về null khi thành công.
+    // Xem null là thất bại sẽ làm món đã lấy khỏi kho hiện toast "Không đặt được"
+    // dù dữ liệu đã chuyển món vào tiệm.
+    if (result !== 'ok' && result !== null) {
       play('error');
-      this.paintFootprint(id, x, y, 0);
+      this.paintFootprint(id, x, y, isDecor ? 0 : this.placingRot);
       this.time.delayedCall(400, () => this.overlay.clear());
       const msg = result === 'money' ? 'Chưa đủ tiền'
         : result === 'level' ? 'Chưa mở khóa'
         : result === 'plot' ? 'Mở Đất D để mua món này'
         : result === 'shop' ? 'Loại tiệm này không đặt được món này'
         : result === 'limit' ? `Đã đủ số lượng ${furniture(id).name}`
+        : result === 'staff' ? `Cần tuyển đủ ${G.state.fixtures.filter((f) => furniture(f.type).kind === 'counter').length + 1} thu ngân để vận hành các quầy`
         : result in PLACE_TEXT ? PLACE_TEXT[result as PlaceError]
         : 'Không đặt được';
       toast(this, msg, H * 0.4, C.red);
       return;
     }
     play('cash');
-    toast(this, `Đã mua ${isDecor ? decor(id).name : furniture(id).name}!`, H * 0.4, C.greenDark);
+    toast(this, this.placingStoredUid !== null
+      ? `Đã lấy ${furniture(id).name} khỏi kho!`
+      : `Đã mua ${isDecor ? decor(id).name : furniture(id).name}!`, H * 0.4, C.greenDark);
     this.placing = null;
+    this.placingStoredUid = null;
+    this.placingRot = 0;
+    this.placementCell = null;
+    this.ghost?.destroy();
+    this.ghost = null;
+    this.overlay.clear();
     this.blocked.clear();
     this.redraw();
+  }
+
+  private startPlacing(type: string, storedUid: number | null, rot: 0 | 1): void {
+    this.placing = type;
+    this.placingStoredUid = storedUid;
+    this.placingRot = rot;
+    this.ghost?.destroy();
+    this.ghost = null;
+    this.overlay.clear();
+    this.placementCell = null;
+    if (DATA.decor.some((item) => item.id === type)) return;
+    for (let y = 0; y < DATA.land.rows; y++) {
+      for (let x = 0; x < DATA.land.cols; x++) {
+        if (placementError(G.state, type, x, y, rot) === null) {
+          this.showPlacementPreview({ x, y });
+          return;
+        }
+      }
+    }
+  }
+
+  private stopPlacing(): void {
+    this.placing = null;
+    this.placingStoredUid = null;
+    this.placingRot = 0;
+    this.placementCell = null;
+    this.ghost?.destroy();
+    this.ghost = null;
+    this.overlay.clear();
+  }
+
+  private showPlacementPreview(cell: { x: number; y: number }): void {
+    if (!this.placing || DATA.decor.some((item) => item.id === this.placing)) return;
+    this.placementCell = cell;
+    this.paintFootprint(this.placing, cell.x, cell.y, this.placingRot);
+    this.ghost?.destroy();
+    this.ghost = this.fixtureView({ uid: -1, type: this.placing, x: cell.x, y: cell.y, rot: this.placingRot })
+      .setAlpha(0.55).setDepth(55);
+  }
+
+  private rotatePlacement(): void {
+    if (!this.placing || DATA.decor.some((d) => d.id === this.placing)) return;
+    const def = furniture(this.placing);
+    if (def.w === def.h) return;
+    this.placingRot = this.placingRot ? 0 : 1;
+    if (this.placementCell) {
+      this.showPlacementPreview(this.placementCell);
+    } else {
+      this.ghost?.destroy();
+      this.ghost = null;
+    }
+    this.redraw();
+  }
+
+  private stow(fixture: Fixture): void {
+    const result = stowFixture(G.state, fixture.uid);
+    if (result === 'fixed') { toast(this, 'Nội thất cố định không thể cất'); return; }
+    if (result !== 'ok') return;
+    this.selected = null;
+    this.blocked.clear();
+    toast(this, `Đã cất ${furniture(fixture.type).name}. Có thể lấy ra miễn phí sau.`);
+    this.redraw();
+  }
+
+  private showStoredFixtures(): void {
+    const stored = G.state.storedFixtures;
+    if (!stored.length) return;
+    const groups = new Map<string, { fixture: Fixture; count: number }>();
+    for (const fixture of stored) {
+      const group = groups.get(fixture.type);
+      if (group) group.count++;
+      else groups.set(fixture.type, { fixture, count: 1 });
+    }
+    dialog(this, {
+      icon: '📦', title: 'Nội thất đang cất', body: 'Chọn món để lấy ra và đặt lại miễn phí.',
+      buttons: [...groups.values()].map(({ fixture, count }) => ({
+        label: `${furniture(fixture.type).name}${count > 1 ? ` ×${count}` : ''}`,
+        color: C.blue,
+        onTap: () => {
+          this.startPlacing(fixture.type, fixture.uid, fixture.rot);
+          this.selected = null;
+          this.redraw();
+        },
+      })),
+    });
   }
 
   private rotate(f: Fixture): void {
@@ -417,7 +561,9 @@ export class BuildScene extends Phaser.Scene {
   private askUnlock(id: string): void {
     const p = plot(id);
     const status = plotStatus(G.state, id);
-    const body = status === 'level' ? `Cần level ${p.level}.` : `Mở ${p.name} (${plotCells(p).length} ô${p.storageOnly ? ', chỉ đặt kệ kho' : ''}) với giá ${formatMoney(p.cost)}.${status === 'money' ? '\nChưa đủ tiền.' : ''}`;
+    const body = status === 'level' ? `Cần level ${p.level}.` : p.generatorOnly
+      ? `Mở ô kỹ thuật riêng (${plotCells(p).length} ô) miễn phí ở level ${p.level}. Ô này chỉ dành cho máy phát điện, không chiếm chỗ bán hàng.`
+      : `Mở ${p.name} (${plotCells(p).length} ô${p.storageOnly ? ', chỉ đặt kệ kho' : ''}) với giá ${formatMoney(p.cost)}.${status === 'money' ? '\nChưa đủ tiền.' : ''}`;
     dialog(this, { icon: '🏚️', title: p.name, body, buttons: status === 'available'
       ? [{ label: 'Để sau', color: C.grey }, { label: 'Mở', color: C.green, onTap: () => {
         if (unlockPlot(G.state, id) === 'open') {

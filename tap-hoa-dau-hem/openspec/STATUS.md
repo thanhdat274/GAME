@@ -11,15 +11,15 @@
 | `phase-2-shop-expansion` | 41 | 1 | 8.2 điện thoại thật. |
 | `phase-3-staff-and-manager` | 39 | 2 | 9.3 điện thoại thật, 9.4 deploy. |
 | `topdown-store-view` | 15 | 7 | 4.2–4.4 điện thoại/người chơi/deploy; 5.1–5.4 để cho change sau. |
-| `sticky-rice-shop` | 6 | 31 | Đợt A xong (storeView, shopTypes, save v6, giới hạn 6 tiệm); tiếp Đợt B (nguyên liệu, ngâm/hấp, món). |
+| `sticky-rice-shop` | 34 | 3 | Còn playtest viewport 375×812 (4.7, 5.6), điện thoại thật và deploy (6.4). |
 | `phase-4-events-food-branches` | — | — | Đã lưu trữ (`archive/2026-09-27-…`). |
 
-Tổng còn mở: 60 task (27/09/2026).
+Tổng còn mở: 32 task (27/09/2026).
 
 ## Kiểm tra trong repo
 
-- Vitest: 277/277 test qua; có kiểm thử lịch, EffectStack, migrate v4→v5, công thức, nhiệm vụ tuần và quà tuần, giao đơn tiệc, xe chuyển hàng giữ hạn dùng, lưới riêng cho từng chi nhánh, mục tiêu truyện, chi nhánh và thử việc đầu bếp.
-- `npm run build` qua (TypeScript + Vite + PWA); `npm run validate:events` và `npm run validate:recipes` đều qua.
+- Vitest hiện có 707 test: lượt full tuần tự qua 706/707; test duy nhất timeout 5 giây ở `tests/phase3.test.ts` (xe đẩy), nhưng chạy riêng qua trong 2.7 giây. Test `yearSimulation` trong lượt này bỏ ngày tối đa 433 ms. Nhóm test tiệm xôi/đơn nội bộ qua 33/33.
+- TypeScript, Vite/PWA build, `validate:events` và `validate:recipes` đều qua bằng Node runtime đóng gói. `npm` trực tiếp trả `EPERM` khi kiểm tra `C:\Users\Admin`; các script được chạy bằng binary local/Vite SSR.
 - `npm run playtest -- 30 5`: người chơi dùng "Gợi ý" lên L9 ở ngày ~21–22 (mục tiêu 20–30), hàng tươi hỏng 7–9% (mục tiêu < 10%), lãi ròng dương.
 - Chơi thử trình duyệt ở khung 375×812 giả lập: migrate bản v2 L7, mở đất, mua/kéo/xoay nội thất, chặn lối đi bị từ chối, nhập hàng, bán xả, mặc cả, ghi sổ, tổng kết và các màn Kho/Giá/Sổ nợ/Nhiệm vụ; ván mới L1 vẫn như giai đoạn 1. Chưa đo 60fps hay thử trên điện thoại thật.
 
@@ -86,3 +86,37 @@ Không đánh dấu hoàn thành các task yêu cầu thiết bị thật, Conso
 - Bản lưu v6 (`shopType`, `internalOrders`, `recurringOrders`, `soakBatches`, `cookedRice`) + migrate v5→v6, fixture `tests/fixtures/save-v5.json` 3 tiệm.
 - Giới hạn chuỗi đọc từ `balance.json › chain.maxStores` = 6. Khu Tiệm xôi đã có trong `branches.json` nhưng khóa bằng tính năng `shop_xoi` (thêm vào L29 ở Đợt B), nên người chơi chưa thấy thay đổi.
 - Vitest 441/441, build, `validate:events`, `validate:recipes` qua; chạy bản build ở 375×812 với bản lưu v5 thấy tạp hóa như cũ.
+
+## Tiệm xôi — Đợt B (27/09/2026)
+
+- Dữ liệu: nguyên liệu xôi mở ở L29 (bán cả ở tạp hóa), trà đá, 4 món xôi + 4 món xôi gói, biến thể "Thêm topping" tốn thêm nguyên liệu, thùng ngâm/xửng hấp/quầy xôi, `balance.stickyRice`, L29 thêm `shop_xoi`.
+- Core `stickyRice.ts`: ngâm (≥ 6 giờ, chua sau 24 giờ), hấp ra nếp chín (5 phần/kg), giữ nóng 5 giờ, nếp nguội chặn chất lượng, bỏ nếp thừa cuối ngày; `prepareRecipe` lấy `nep_chin` từ mẻ hấp cũ nhất.
+- Khách tiệm xôi gọi 1–3 món ở quầy theo đường cong mật độ riêng; 40% ngồi ăn nếu còn bàn sạch và có thể gọi thêm trà đá/sữa đậu nành. Tạp hóa không nấu được xôi.
+- UI: màn Bếp xôi (ngâm, hấp, nếp chín, menu), mini-game hấp và gói, nút Bếp xôi trong bảng tạm dừng, Bản đồ mở từ L29, "Ngâm cho mai" ở tổng kết.
+- Kiểm tra: Vitest (thêm `tests/stickyRice.test.ts`, gồm một ngày tiệm xôi chạy tự động), build, validator. Trên trình duyệt 375×812 đã xem Bản đồ, Bếp xôi (ngâm thật), mở cửa và mở Bếp giữa giờ bán; trình duyệt nhúng chỉ đạt 1 FPS nên chưa chơi thử mini-game và phục vụ khách thời gian thực (task 3.9 còn mở).
+- Khác spec: tiệm xôi mở cùng giờ chung 8h–20h nên cao điểm là 8h–10h thay vì 5h–10h.
+
+## Tiệm xôi — Đợt C (27/09/2026)
+
+- Đặt hàng nội bộ lấy mối từ `shopTypes.json`; hai tiệm giữ kho, kệ và quầy riêng. Nguyên liệu từ tạp hóa tới kho riêng của tiệm xôi vào sáng hôm sau theo FEFO; xôi gói giao vào ô sau quầy riêng của tạp hóa lúc 7h. Báo cáo tính vốn ở tiệm nhận và không trừ tiền chung hai lần.
+- Màn Nhập hàng có nút “Hàng nhà mình” ở hàng riêng bên dưới các nút mối sỉ; vào màn nội bộ để đặt một lần/đặt mỗi ngày, xem năng lực làm, số lượng, phí xe và đơn gần đây. Tên các chi nhánh cùng loại được phân biệt.
+- Tiệm xôi có quầy trưng bày riêng trong layout mặc định. Món xôi nằm ở quầy tiệm xôi để khách gọi; không cần đặt kệ tạp hóa. Khi chuyển xôi gói, hàng tới quầy sau của tiệm nhận.
+- Thợ nấu xôi ưu tiên đơn nội bộ; mô phỏng tiệm vắng chủ ghi số làm/bán/giao/hỏng và cảnh báo nếu thiếu thợ. Giá vốn hàng nội bộ hiện riêng theo tiệm.
+- Trình duyệt local xác nhận nút “Hàng nhà mình” mở đúng màn đơn nội bộ; màn này nêu rõ mỗi tiệm có kho/quầy riêng, nguyên liệu vào kho xôi và xôi gói vào quầy sau tạp hóa. Core test đã qua cả hai chiều và kịch bản tạp hóa chạy 3 ngày với xôi vắng chủ, đơn định kỳ tới quầy.
+- Đã cập nhật `docs/shop-types-json.md` và bảng trạng thái. Còn 5/37 task: viewport 375×812 (3.9, 4.7, 5.6), cân bằng chuỗi 6.1 chưa đạt mục tiêu, điện thoại thật và deploy (6.4). So sánh mô phỏng/đứng chơi 6.2 đã qua với cùng seed 1010: 181.000đ so với 194.500đ, lệch 6.9%.
+- TypeScript, Vite/PWA build, hai validator và 33 test tiệm xôi/đơn nội bộ qua. `npm run playtest` đã được mở rộng; lượt 10 ngày/1 seed hiện báo tỉ lệ lãi xôi/Chợ 577.6%, lãi ròng tăng thêm do đơn định kỳ -71.0%, hàng hỏng 0.4%, và bot Gợi ý không đủ vốn mở Chợ sau giỏ hàng. Chưa đánh dấu 6.1 hoàn thành.
+
+## Tiệm xôi — cân bằng 6.1 (27/09/2026)
+
+- Kịch bản chuỗi mới trong `npm run playtest` (chạy riêng: `npm run playtest -- 10 3 chain`): tạp hóa L30 đứng chơi bằng "Gợi ý" 3 ngày khởi động + 7 ngày đo, so từng cặp có/không có tiệm xôi cùng seed; tiệm xôi 2 thợ vắng chủ, nhập nguyên liệu mỗi sáng; tạp hóa đặt 6 xôi gói/ngày. Tiền tiệm xôi tách khỏi quỹ nhập hàng tạp hóa khi so lãi.
+- Kết quả (3 và 6 seed): lãi xôi ≈ 62% lãi Chợ ước tính (1 thợ ≈ 20%, 3 thợ ≈ 105%), xôi gói tăng lãi tạp hóa 6–8% (đã trừ gói bỏ và phí xe), hỏng/bỏ 6%, đủ tiền mở Chợ với vốn giả định 3.000.000đ. Các bot thường không đổi.
+- Lỗi tìm ra khi đo và đã sửa: mô phỏng cho một thợ làm ~75 phần/ngày trong khi đứng chơi chỉ ~15 (`cookPortionsPerHour` 6 → 1,2); thợ vắng chủ ngâm nếp theo số đã bán nên sản lượng tự giảm dần, và mức ngâm tối thiểu 20 phần vượt năng lực 1 thợ; mô phỏng bán theo giá niêm yết còn đứng chơi bán theo chất lượng; khách tạp hóa hầu như không hỏi xôi gói (thêm `sourcedRequestChance` = 0,1 cho `grocery`).
+- Test benchmark 100 ngày × 6 tiệm lấy lần nhanh nhất trong 3 lần chạy (trước đó chập chờn cả ở HEAD khi cả bộ test chạy song song).
+
+## Tiệm xôi — chơi thử 3.9 (27/09/2026)
+
+- Trình duyệt tích hợp, khung 375×812 giả lập trên máy tính, bản lưu L29 đứng ở tiệm xôi, 1 Thợ nấu xôi, bàn 2 chỗ; chơi 3 ngày game: ngâm ở Bếp xôi và bằng nút "Ngâm N kg cho mai" ở tổng kết, hấp (giữ lửa trong vùng xanh ra "Ngon", chất lượng 1,16; không giữ lửa ra "Tạm được" 0,75), làm món bằng mini-game chạm nguyên liệu, mở cửa (cảnh báo quầy chưa có xôi), bán, khách ngồi ăn gọi thêm và dọn bàn, tổng kết.
+- FPS lúc cao điểm 8h–10h: trung bình ~63, phần lớn 64–75, một lần tụt 18–36 trong vài giây rồi hồi. Chưa đo trên điện thoại thật.
+- Lỗi đã sửa: ghi chú "Thợ nấu xôi đã ngâm N kg" bị ghi đè ở `endDay`; thông báo "nếp đã nguội" hiện cả khi nếp còn nóng (nay phân biệt nếp nguội và mẻ hấp chưa đều); tiệm xôi dùng lời nhắc tạp hóa ("nạp kệ", "nhập & bày hàng", "Nhập thêm những món này", "Khu hay hết nhất", mẹo hàng tươi); nút "Về bếp" đè nút "GIỮ LỬA" sau khi hấp.
+- Cần quyết định cân bằng: khách tới tiệm xôi đứng chơi (~97/ngày) vượt xa số phần 1 thợ + người chơi làm kịp (~45–50). Không làm sẵn trước giờ mở thì chỉ ~41% khách được phục vụ và sao tụt từ 3,3 xuống 1,0 trong một ngày; làm sẵn 8 phần thì cao điểm phục vụ ~72%.
+- Đã sửa tiếp: ở tiệm xôi, tab "Bày kệ" buổi sáng thành "🍙 Quầy xôi" (thẻ tóm tắt món ở quầy, nếp chín, mẻ ngâm, nút vào Bếp xôi; nút "Tự bày" thành "Bếp xôi"; kho chỉ để xem, không chọn/kéo món). Nút "Nhập & bày hàng" giữa giờ thành "Nhập nguyên liệu", màn nhập bỏ tab bày kệ, và liệt kê đủ nguyên liệu (trước đó danh sách trống vì lọc theo chỗ trên kệ). Tạp hóa giữ nguyên.

@@ -46,6 +46,10 @@ export function applyLevelUps(state: GameState): LevelDef[] {
   while (state.level < target) {
     state.level++;
     gained.push(DATA.levels.levels[state.level - 1]);
+    if (state.level >= 21 && DATA.land.plots.some((plot) => plot.id === 'H') && !state.land.includes('H')) {
+      state.land.push('H');
+      state.lifetime.landsOpened = state.land.filter((id) => !DATA.land.plots.find((plot) => plot.id === id)?.generatorOnly).length;
+    }
   }
   return gained;
 }

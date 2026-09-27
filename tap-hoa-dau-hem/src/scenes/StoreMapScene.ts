@@ -14,11 +14,11 @@ import { ZONE_NAMES } from '../ui/shelves';
 import { Button } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
-const CELL = 40;
+const CELL = Math.floor((W - 16) / DATA.land.cols);
 const GX = (W - DATA.land.cols * CELL) / 2;
 const GY = 94;
 const DETAIL_TOP = GY + DATA.land.rows * CELL + 8;
-const DETAIL_BOTTOM = H - 50;
+const DETAIL_BOTTOM = H - 56;
 
 const GEOM: FloorGeom = { gx: GX, gy: GY, cell: CELL };
 
@@ -62,8 +62,8 @@ export class StoreMapScene extends Phaser.Scene {
 
     const foot = this.add.graphics();
     foot.fillStyle(C.hud, 1).fillRect(0, DETAIL_BOTTOM, W, H - DETAIL_BOTTOM);
-    new Button(this, 92, H - 25, { w: 164, h: 36, label: '📦 Xem nhà kho', size: 13, color: C.wood, onTap: () => this.select({ kind: 'warehouse' }) });
-    txt(this, 186, H - 25, '🟢 đủ  🟡 có ô hết  🔴 trống', { size: 10, color: HEX.cream, origin: [0, 0.5] });
+    new Button(this, 92, H - 28, { w: 164, h: 36, label: '📦 Xem nhà kho', size: 13, color: C.wood, onTap: () => this.select({ kind: 'warehouse' }) });
+    txt(this, 186, H - 28, '🟢 đủ  🟡 có ô hết  🔴 trống', { size: 10, color: HEX.cream, origin: [0, 0.5] });
 
     this.input.on('pointerup', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length || p.getDistance() > 10) return;

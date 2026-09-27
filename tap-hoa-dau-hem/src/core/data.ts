@@ -118,6 +118,10 @@ export interface Balance {
   zoneRefillSecondsPerSlot: number;
   scanComboSeconds: number;
   scanTipBonus: number;
+  /** Tỉ lệ khách trả thẻ/chuyển khoản (không cần thối tiền, không tip). */
+  cashlessChance: number;
+  /** Mỗi món trong đơn: xác suất khách tìm món tiệm chưa bán (nhắc người chơi nhập thêm). */
+  uncarriedAskChance: number;
   counterSlots: number;
   counterCapacity: number;
   counterRequestSeconds: number;
@@ -170,6 +174,28 @@ export interface Balance {
   dining: { mealSeconds: number; extraOrderSeconds: number; maxExtraOrders: number };
   /** Giới hạn số cửa hàng trong chuỗi (tính cả tiệm chính). */
   chain: { maxStores: number };
+  /** Tiệm xôi: phút game ngâm tối thiểu/tối đa, kg mỗi thùng, phần mỗi kg, phút giữ nóng, trần chất lượng nếp nguội. */
+  stickyRice: {
+    soakMinMinutes: number;
+    soakMaxMinutes: number;
+    kgPerSoakTank: number;
+    portionsPerKg: number;
+    warmMinutes: number;
+    coldQualityCap: number;
+    steamSeconds: number;
+    /** Giờ xe chở xôi gói tới tiệm đặt (phút trong ngày). */
+    orderDueMinute: number;
+    /** Đơn định kỳ tự tạm dừng sau số lần giao thiếu liên tiếp này. */
+    recurringShortLimit: number;
+    /** Đơn đã xong/hủy được dọn sau số ngày này. */
+    orderKeepDays: number;
+    /** Mô phỏng vắng chủ: phần/giờ của một thợ (nhân thêm 10%/điểm tốc độ), số giờ làm, khách bán lẻ/ngày, lượt quay bàn/ngày, phần tối thiểu tự ngâm. */
+    cookPortionsPerHour: number;
+    workHours: number;
+    simRetailPerDay: number;
+    tableTurnsPerDay: number;
+    minSimPortions: number;
+  };
   tax: TaxBalance;
 }
 
@@ -261,7 +287,7 @@ export interface StaffBalance {
   shifts: { name: string; from: number; to: number }[];
 }
 
-export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'branch_manager';
+export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'branch_manager' | 'xoi_cook';
 export type StatKey = 'speed' | 'accuracy' | 'friendly' | 'stamina';
 export type StaffStats = Record<StatKey, number>;
 export interface Look { shirt: string; pants: string; hair: string; skin: string }
@@ -284,6 +310,8 @@ export interface LandPlot {
   cost: number;
   queueBonus: number;
   storageOnly?: boolean;
+  /** Ô kỹ thuật riêng chỉ dành cho máy phát điện. */
+  generatorOnly?: boolean;
   /** Số khách duyệt hàng cùng lúc tăng thêm. */
   shopperBonus?: number;
   /** Mở mảnh này thì tiệm thành Mini Mart (đổi mặt tiền, có xe đẩy). */
@@ -316,7 +344,7 @@ export interface FurnitureDef {
   power: number;
   storageCells?: number;
   fixed?: boolean;
-  /** Hệ số sức chứa mỗi ô (kệ đôi = 2). */
+  /** Hệ số sức chứa trên mỗi ô cho nội thất dùng cấu hình cũ; kệ nhiều tầng khai báo thêm slots. */
   capacityMul?: number;
   /** Số cái tối đa được đặt. */
   limit?: number;
@@ -448,8 +476,14 @@ export interface ShopTypeDef {
   supplies: string[];
   /** Mặt hàng ưu tiên lấy từ tiệm nội bộ khi chuỗi có tiệm cung cấp. */
   sourcesFrom: string[];
+  /** Tỉ lệ mỗi khách hỏi thêm một món `sourcesFrom` đang có ở quầy (khách mua xôi gói ăn sáng). Thiếu = 0. */
+  sourcedRequestChance?: number;
   dineInChance: number;
   addOns: { productId: string; chance: number }[];
+  /** `shelves`: khách tự lấy hàng trên kệ; `counter`: khách chỉ gọi món ở quầy (tiệm xôi). */
+  service: 'shelves' | 'counter';
+  /** Có dùng các mảnh đất mở rộng (land.json) và điều kiện `requiresPlot` của nội thất không. */
+  landPlots: boolean;
 }
 
 export interface BranchDef {
@@ -482,6 +516,8 @@ export interface RecipeDef {
   shelfLifeDays: number;
   steps: string[];
   variants?: RecipeVariant[];
+  /** Đầu ra đóng gói để bán qua tiệm khác (xôi gói); khách tại tiệm không gọi món này. */
+  packaged?: boolean;
 }
 
 export interface RecipeVariant {
@@ -489,6 +525,8 @@ export interface RecipeVariant {
   name: string;
   priceDelta: number;
   qualityDelta: number;
+  /** Nguyên liệu tốn thêm khi chọn biến thể (vd. "Thêm topping"). */
+  extraIngredients?: Record<string, number>;
 }
 
 const CATEGORIES: Category[] = ['dry', 'snack', 'household', 'drink', 'fresh', 'frozen', 'counter'];
