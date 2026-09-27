@@ -207,6 +207,37 @@ describe('kệ hàng', () => {
     expect(() => assignSlot(s, 0, 0, 'the_cao')).toThrow('counter-only');
   });
 
+  it('tự bày: mỗi kệ một khu khác nhau, kệ trùng khu nhường cho nhóm hàng khác', () => {
+    const s = createNewGame();
+    s.level = 4;
+    s.zones = s.zones.map((_, i) => (i < 2 ? 'dry' : null));
+    for (let c = 0; c < 5; c++) s.shelves[0][c] = { productId: ['mi_goi', 'muoi', 'gao', 'duong', 'nuoc_mam'][c], qty: 3 };
+    s.shelves[1][0] = { productId: 'dau_an', qty: 2 };
+    s.warehouse = lotsFrom({ keo: 5, pin: 5 });
+    autoArrange(s);
+    const zones = [0, 1, 2].map((r) => zoneOf(s, r)).filter((z) => z);
+    expect(new Set(zones).size).toBe(zones.length);
+    // Món ở kệ trùng khu được dồn sang kệ chính của khu, không mất hàng.
+    expect(s.shelves[0].some((x) => x.productId === 'dau_an' && x.qty === 2)).toBe(true);
+    expect(s.shelves.flat().some((x) => x.productId === 'keo')).toBe(true);
+    expect(s.shelves.flat().some((x) => x.productId === 'pin')).toBe(true);
+  });
+
+  it('tự bày: khu nhiều món hơn một kệ thì món dư tràn sang kệ trống, sau khi nhóm khác đã có kệ', () => {
+    const s = createNewGame();
+    s.level = 16;
+    const drinks = ['nuoc_ngot', 'nuoc_suoi', 'tra_xanh', 'tang_luc', 'sua_hop', 'sua_dau_nanh', 'bia_lon', 'ca_phe_lon'];
+    s.warehouse = lotsFrom({ ...Object.fromEntries(drinks.map((id) => [id, 3])), mi_goi: 3 });
+    const unplaced = autoArrange(s);
+    expect(unplaced).toEqual([]);
+    const zones = [0, 1, 2].map((r) => zoneOf(s, r));
+    expect(zones.filter((z) => z === 'dry')).toHaveLength(1);
+    expect(zones.filter((z) => z === 'drink')).toHaveLength(2);
+    // Bấm lại vẫn giữ nguyên: món dư không bị đẩy về kho.
+    expect(autoArrange(s)).toEqual([]);
+    for (const id of drinks) expect(s.shelves.flat().some((x) => x.productId === id)).toBe(true);
+  });
+
   it('tự bày đặt mỗi món vào kệ cùng khu', () => {
     const s = createNewGame();
     s.level = 4;
