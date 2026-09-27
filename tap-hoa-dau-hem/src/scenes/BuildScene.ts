@@ -11,12 +11,19 @@ import { G, persist } from '../game';
 import { play } from '../ui/sound';
 import { furnitureImage } from '../ui/art';
 import { Button, dialog, toast } from '../ui/widgets';
+import { KineticScroll } from '../ui/scroll';
 import { C, H, HEX, W, emoji, setupCamera, txt } from '../ui/theme';
 
 const CELL = 46;
 const GX = (W - DATA.land.cols * CELL) / 2;
 const GY = 60;
 const PANEL_Y = GY + DATA.land.rows * CELL + 6;
+/** Dải thẻ "Mua thêm" (vuốt ngang). */
+const CARD_W = 82;
+const CARD_H = 106;
+const CARD_GAP = 8;
+const SHOP_TOP = PANEL_Y + 24;
+const SHOP_BOTTOM = SHOP_TOP + CARD_H + 8;
 
 const KIND_COLOR: Record<FurnitureKind, number> = {
   shelf: 0xa86f3a,
@@ -59,6 +66,10 @@ export class BuildScene extends Phaser.Scene {
   private blocked = new Set<number>();
   private drag: { uid: number; startX: number; startY: number; moved: boolean; cell: { x: number; y: number } | null; offset: { x: number; y: number } } | null = null;
   private ghost: Phaser.GameObjects.Container | null = null;
+  private shopRow: Phaser.GameObjects.Container | null = null;
+  private shopMask!: Phaser.GameObjects.Graphics;
+  private shopX = 0;
+  private shopMax = 0;
 
   constructor() {
     super('Build');
@@ -84,6 +95,17 @@ export class BuildScene extends Phaser.Scene {
     this.fixtureLayer = this.add.container(0, 0);
     this.overlay = this.add.graphics().setDepth(50);
     this.panelLayer = this.add.container(0, 0).setDepth(60);
+    this.shopRow = null;
+    this.shopX = 0;
+    this.shopMask = this.make.graphics({}, false).fillRect(0, SHOP_TOP - 4, W, SHOP_BOTTOM - SHOP_TOP + 4);
+    new KineticScroll(this, {
+      horizontal: true,
+      inView: (y) => y >= SHOP_TOP - 4 && y <= SHOP_BOTTOM,
+      enabled: () => !!this.shopRow?.active,
+      get: () => this.shopX,
+      set: (v) => { this.shopX = v; this.shopRow?.setX(-v); },
+      max: () => this.shopMax,
+    });
 
     // Chạm lên nút / hộp thoại (đối tượng tương tác) thì không xử lý như chạm lưới.
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => { if (!over.length) this.onDown(p); });
@@ -189,37 +211,75 @@ export class BuildScene extends Phaser.Scene {
       L.add(new Button(this, 176, PANEL_Y + 48, { w: 120, h: 36, label: def.fixed ? 'Không bán' : `Bán +${formatMoney(sellValue(sel.type))}`, size: 12, color: C.red, onTap: () => this.sell(sel) }).setEnabled(!def.fixed));
       L.add(new Button(this, 300, PANEL_Y + 48, { w: 90, h: 36, label: 'Bỏ chọn', size: 12, color: C.grey, onTap: () => { this.selected = null; this.redraw(); } }));
     } else {
-      L.add(txt(this, 12, PANEL_Y + 6, this.placing ? 'Đang chọn chỗ đặt…' : 'Mua thêm:', { size: 12, bold: true, color: HEX.cream }));
-      const items = catalog(s);
-      const cw = Math.min(66, (W - 16) / items.length - 4);
-      items.forEach((it, i) => {
-        const x = 8 + cw / 2 + i * (cw + 4);
-        const y = PANEL_Y + 58;
-        const def = it.decor ? null : furniture(it.id);
-        const missingPlot = !!def?.requiresPlot && !s.land.includes(def.requiresPlot);
-        const limitReached = !!def?.limit && s.fixtures.filter((f) => f.type === it.id).length >= def.limit;
-        const locked = s.level < it.level || missingPlot || limitReached;
-        const status = s.level < it.level ? `Lv ${it.level}` : missingPlot ? 'Mở Đất D' : limitReached ? 'Đã đủ' : formatMoney(it.cost);
-        const active = this.placing === it.id;
-        const b = new Button(this, x, y, {
-          w: cw, h: 70, size: 9, color: active ? C.yellow : locked ? C.grey : C.wood,
-          label: `\n\n${it.name}\n${status}`,
-          onTap: () => {
-            if (s.level < it.level) { toast(this, `Mở ở level ${it.level}`); return; }
-            if (missingPlot) { toast(this, 'Mở Đất D để mua món này'); return; }
-            if (limitReached) { toast(this, `Đã đủ số lượng ${it.name}`); return; }
-            this.placing = active ? null : it.id;
-            this.selected = null;
-            this.redraw();
-          },
-        });
-        const icon = furnitureImage(this, it.id, 0, -16, cw - 14, 26);
-        if (icon) b.add(icon.setAlpha(locked ? 0.5 : 1));
-        L.add(b);
-      });
+      L.add(txt(this, 12, PANEL_Y + 6, this.placing ? '📍 Đang đặt · chạm lại thẻ để bỏ' : '🛒 Mua thêm', { size: 13, bold: true, color: HEX.cream }));
+      this.renderShop(L);
     }
     L.add(new Button(this, 70, H - 28, { w: 116, h: 42, label: '✕ Hủy', size: 15, color: C.grey, onTap: () => this.cancel() }));
     L.add(new Button(this, W - 80, H - 28, { w: 136, h: 46, label: 'Xong ✓', size: 17, color: C.green, onTap: () => this.done() }));
+  }
+
+  /** Dải thẻ mua nội thất, vuốt ngang: món mua được xếp trước, món còn khóa xếp sau theo level. */
+  private renderShop(L: Phaser.GameObjects.Container): void {
+    const s = G.state;
+    const items = catalog(s).map((it) => {
+      const def = it.decor ? null : furniture(it.id);
+      const missingPlot = !!def?.requiresPlot && !s.land.includes(def.requiresPlot);
+      const limitReached = !!def?.limit && s.fixtures.filter((f) => f.type === it.id).length >= def.limit;
+      const tooLow = s.level < it.level;
+      return { it, missingPlot, limitReached, tooLow, locked: tooLow || missingPlot || limitReached };
+    });
+    items.sort((a, b) => Number(a.locked) - Number(b.locked) || (a.locked ? a.it.level - b.it.level : 0));
+    const row = this.add.container(-this.shopX, 0);
+    row.setMask(this.shopMask.createGeometryMask());
+    this.shopRow = row;
+    L.add(row);
+    const cy = SHOP_TOP + CARD_H / 2;
+    items.forEach(({ it, missingPlot, limitReached, tooLow, locked }, i) => {
+      const x = 10 + CARD_W / 2 + i * (CARD_W + CARD_GAP);
+      const active = this.placing === it.id;
+      const b = new Button(this, x, cy, {
+        w: CARD_W, h: CARD_H, label: '', radius: 12,
+        color: active ? C.yellow : locked ? 0x5a4a3e : C.wood,
+        stroke: active ? 0xffffff : undefined, strokeAlpha: 0.9,
+        onTap: () => {
+          if (tooLow) { toast(this, `Mở ở level ${it.level}`); return; }
+          if (missingPlot) { toast(this, 'Mở Đất D để mua món này'); return; }
+          if (limitReached) { toast(this, `Đã đủ số lượng ${it.name}`); return; }
+          this.placing = active ? null : it.id;
+          this.selected = null;
+          this.redraw();
+        },
+      });
+      // Khung sáng sau hình cho dễ nhìn.
+      const g = this.add.graphics();
+      g.fillStyle(0xfff4e0, locked ? 0.25 : 0.9).fillRoundedRect(-CARD_W / 2 + 6, -CARD_H / 2 + 6, CARD_W - 12, 40, 8);
+      b.add(g);
+      const icon = furnitureImage(this, it.id, 0, -CARD_H / 2 + 26, CARD_W - 20, 32) ?? emoji(this, 0, -CARD_H / 2 + 26, it.icon, 22);
+      b.add(icon.setAlpha(locked ? 0.45 : 1));
+      const name = txt(this, 0, -CARD_H / 2 + 51, it.name, {
+        size: 10, bold: true, color: locked ? '#d8c8b8' : HEX.white, origin: [0.5, 0], align: 'center', wrap: CARD_W - 8,
+      });
+      name.setMaxLines(2);
+      b.add(name);
+      // Nhãn giá / điều kiện ở đáy thẻ.
+      const status = tooLow ? `Cần Lv ${it.level}` : missingPlot ? 'Cần Đất D' : limitReached ? '✓ Đã đủ' : formatMoney(it.cost);
+      const poor = !locked && s.money < it.cost;
+      const chip = this.add.graphics();
+      chip.fillStyle(0x000000, 0.35).fillRoundedRect(-CARD_W / 2 + 6, CARD_H / 2 - 24, CARD_W - 12, 18, 9);
+      b.add(chip);
+      b.add(txt(this, 0, CARD_H / 2 - 15, status, {
+        size: 10, bold: true, origin: [0.5, 0.5],
+        color: locked ? '#e0d0c0' : poor ? '#ff8a7a' : '#ffe082',
+      }));
+      row.add(b);
+    });
+    const contentW = 20 + items.length * (CARD_W + CARD_GAP) - CARD_GAP;
+    this.shopMax = Math.max(0, contentW - W);
+    this.shopX = Math.min(this.shopX, this.shopMax);
+    row.setX(-this.shopX);
+    if (this.shopMax > 0 && !this.placing) {
+      L.add(txt(this, W - 12, PANEL_Y + 8, 'vuốt ngang ›', { size: 10, color: HEX.muted, origin: [1, 0] }));
+    }
   }
 
   // ---------- Thao tác ----------
