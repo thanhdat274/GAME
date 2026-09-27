@@ -172,22 +172,30 @@ export function productTexture(scene: Phaser.Scene, id: string): string | null {
   return rows ? spriteTexture(scene, `icon_${id}`, rows) : null;
 }
 
+/** Ngoại hình chủ tiệm, dùng chung cho texture và sprite đứng quầy. */
+const OWNER_LOOK: CustomerType = {
+  id: 'owner',
+  name: 'Chủ tiệm',
+  prefs: {},
+  patience: 0,
+  maxItems: 0,
+  tipMul: 0,
+  counterRequestChance: 0,
+  weight: 0,
+  shirt: '#e57373',
+  pants: '#3e2723',
+  hair: '#1b1b1b',
+  skin: '#f2c9a0',
+};
+
 /** Người chơi (chủ tiệm) nhìn từ sau quầy. */
 export function ownerTexture(scene: Phaser.Scene): string {
-  return customerTexture(scene, {
-    id: 'owner',
-    name: 'Chủ tiệm',
-    prefs: { dry: 0, snack: 0, household: 0 },
-    patience: 0,
-    maxItems: 0,
-    tipMul: 0,
-    counterRequestChance: 0,
-    weight: 0,
-    shirt: '#e57373',
-    pants: '#3e2723',
-    hair: '#1b1b1b',
-    skin: '#f2c9a0',
-  });
+  return customerTexture(scene, OWNER_LOOK);
+}
+
+/** Chủ tiệm đứng quầy: dùng chung bộ vẽ nhân vật pixel với nhân viên/khách. */
+export function ownerSprite(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjects.Image {
+  return customerSprite(scene, x, y, OWNER_LOOK);
 }
 
 /** Biểu tượng mặt hàng: hình tròn màu + emoji. */

@@ -95,7 +95,7 @@ export function applyLiveShopCommand(
       result = true;
       break;
     case 'refillShelf':
-      requirePhase(state, 'morning');
+      requireStocking(state);
       result = refillSlot(state, command.shelf, command.slot);
       break;
     case 'assignCounter':

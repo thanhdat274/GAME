@@ -3,7 +3,7 @@ import { avgSold, slowMovers, staffTable } from '../src/core/analytics';
 import { addRule, applyPlanogram, lockPlanogram, runRestockRules, suggestRule } from '../src/core/autorestock';
 import { createCustomer } from '../src/core/customers';
 import { DATA } from '../src/core/data';
-import { DaySession, endDay, openShop, runDayHeadless, setManagerMode, startNextDay } from '../src/core/day';
+import { DaySession, endDay, openShop, runDayHeadless, setManagerMode, startNextDay, type Incident } from '../src/core/day';
 import { createPhoneOrder, orderShortfall } from '../src/core/delivery';
 import { buyFixture, placeAnywhere, plot, plotCells, plotStatus, unlockPlot } from '../src/core/layout';
 import { applyOfflineIncome, offlineElapsed } from '../src/core/offline';
@@ -741,19 +741,26 @@ describe('chế độ quản lý', () => {
   });
 
   it('khách phàn nàn thu ngân thối sai: "Xin lỗi + bù tiền"', () => {
-    const s = fullShop(20, 60);
-    setManagerMode(s, true);
-    addStaff(s, 'cashier', { accuracy: 1 });
-    s.staff[0].personality = 'hay_quen';
-    openShop(s);
-    const d = new DaySession(s, 12);
-    runDayHeadless(d);
-    const complaint = d.incidents.find((i) => i.kind === 'complaint')!;
+    // Nhân viên chính xác thấp nên vài chục khách/ngày gần như chắc có ít nhất 1 lần thối sai;
+    // thử vài seed để không phụ thuộc đúng một seed cố định (thời lượng quét/thối có thể đổi theo cân bằng).
+    let complaint: Incident | undefined;
+    let d!: DaySession;
+    let s!: GameState;
+    for (let seed = 1; seed <= 20 && !complaint; seed++) {
+      s = fullShop(20, 60);
+      setManagerMode(s, true);
+      addStaff(s, 'cashier', { accuracy: 1 });
+      s.staff[0].personality = 'hay_quen';
+      openShop(s);
+      d = new DaySession(s, seed);
+      runDayHeadless(d);
+      complaint = d.incidents.find((i) => i.kind === 'complaint');
+    }
     expect(complaint).toBeDefined();
     const money = s.money;
-    expect(d.resolveIncident(complaint.id, 'apologize')).toBe(true);
-    expect(s.money).toBe(money - complaint.amount!);
-    expect(d.resolveIncident(complaint.id, 'dismiss')).toBe(false);
+    expect(d.resolveIncident(complaint!.id, 'apologize')).toBe(true);
+    expect(s.money).toBe(money - complaint!.amount!);
+    expect(d.resolveIncident(complaint!.id, 'dismiss')).toBe(false);
   });
 });
 

@@ -12,6 +12,7 @@ import { chromeIntentUrl, detectInAppBrowser } from '../services/inAppBrowser';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
 import { getPendingConflict, onSyncStatus, resolveConflict, startSync, syncNow, type SyncStatus } from '../services/sync';
 import { loadDiscarded, saveDiscarded } from '../services/cloudSave';
+import { fetchMyRank, fetchTopLeaderboard } from '../services/leaderboard';
 import { joinLiveShop, liveShopEnabled } from '../services/liveShop';
 import { applyOfflineIncome, offlineElapsed, offlineUnlocked, type OfflineReport } from '../core/offline';
 import { formatMoney } from '../core/state';
@@ -426,6 +427,7 @@ export class TitleScene extends Phaser.Scene {
   private showSignedInMenu(): void {
     const buttons: DialogButton[] = [
       { label: this.syncStatus === 'error' ? 'Thử lại đồng bộ' : 'Lưu ngay', color: C.green, onTap: () => { void syncNow(true).then(() => toast(this, this.statusText(this.syncStatus, this.syncMessage ?? undefined))); } },
+      { label: '🏆 Bảng xếp hạng', color: C.wood, onTap: () => { void this.showLeaderboard(); } },
       ...(liveShopEnabled() ? [{ label: '🤝 Chơi chung trên hai máy', color: C.blue, onTap: () => { void this.joinSharedShop(); } } as DialogButton] : []),
       { label: 'Đăng xuất', color: C.blue, onTap: () => { void this.signOut(); } },
       { label: 'Xóa tài khoản', color: C.red, onTap: () => this.confirmDeleteAccount() },
@@ -436,6 +438,34 @@ export class TitleScene extends Phaser.Scene {
     buttons.splice(buttons.length - 1, 0, { label: 'Quyền riêng tư', color: C.wood, onTap: () => { window.open('./privacy.html', '_blank', 'noopener'); } });
     const lastSync = G.state.sync.lastSyncedAt ? new Date(G.state.sync.lastSyncedAt).toLocaleString('vi-VN') : 'Chưa có';
     dialog(this, { icon: '☁️', title: this.account?.displayName ?? 'Tài khoản Google', body: `${this.account?.email ?? ''}\n${this.statusText(this.syncStatus, this.syncMessage ?? undefined)}\nLần đồng bộ cuối: ${lastSync}`, buttons, portraitKey: this.accountAvatarTextureKey });
+  }
+
+  private async showLeaderboard(): Promise<void> {
+    const uid = this.account?.uid;
+    if (!uid) return;
+    try {
+      const [top, mine] = await Promise.all([fetchTopLeaderboard(10), fetchMyRank(uid)]);
+      const inTop10 = top.some((e) => e.uid === uid);
+      const lines = top.length
+        ? top.map((e, i) => `${this.medalIcon(i + 1)} ${e.displayName} — ${formatMoney(e.money)} · Lv ${e.level}${e.uid === uid ? '  👈 bạn' : ''}`)
+        : ['Chưa có ai trên bảng xếp hạng.'];
+      if (mine && !inTop10) lines.push('···', `${this.medalIcon(mine.rank)} ${mine.entry.displayName} — ${formatMoney(mine.entry.money)} · Lv ${mine.entry.level}  👈 bạn`);
+      const myStats = mine
+        ? `\n\nThống kê của bạn:\nHạng #${mine.rank} · Lv ${mine.entry.level} · Ngày ${mine.entry.day}`
+        : '\n\nBạn chưa có trong bảng xếp hạng. Hãy đồng bộ cloud ít nhất một lần để tham gia.';
+      dialog(this, {
+        icon: '🏆',
+        title: 'Bảng xếp hạng',
+        body: lines.join('\n') + myStats,
+        buttons: [{ label: 'Đóng', color: C.grey }],
+      });
+    } catch (error) {
+      toast(this, error instanceof Error ? error.message : 'Không tải được bảng xếp hạng.');
+    }
+  }
+
+  private medalIcon(rank: number): string {
+    return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
   }
 
   private async joinSharedShop(): Promise<void> {
