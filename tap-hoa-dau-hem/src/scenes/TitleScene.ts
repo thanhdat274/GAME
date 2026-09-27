@@ -6,7 +6,7 @@ import { isMaxLevelSimulation } from '../core/simulationMode';
 import { drawStorefront } from '../ui/art';
 import { play, setSoundEnabled, startMusic, stopMusic } from '../ui/sound';
 import { Button, dialog, toast, type DialogButton } from '../ui/widgets';
-import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
+import { C, H, HEX, W, setEdgeColors, setupCamera, txt } from '../ui/theme';
 import { currentAccount, deleteCurrentAccount, googleSignInErrorMessage, signInWithGoogle, signOutGoogle, type AccountUser } from '../services/auth';
 import { chromeIntentUrl, detectInAppBrowser } from '../services/inAppBrowser';
 import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/firebase';
@@ -55,10 +55,7 @@ export class TitleScene extends Phaser.Scene {
     this.accountAvatarMask = undefined;
     this.accountAvatarTextureKey = undefined;
     setupCamera(this);
-    if (typeof document !== 'undefined') {
-      document.body.style.setProperty('--thdh-bg', 'linear-gradient(to bottom, #eb6434 0%, #eb6434 50%, #473b35 50%, #473b35 100%)');
-      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#eb6434');
-    }
+    setEdgeColors('#eb6434', '#473b35');
 
     // Vẽ toàn bộ phối cảnh tiệm tạp hóa hoài niệm (bầu trời, mây trôi, ánh nắng, tiệm cổ xưa, dây đèn vàng, mèo tam thể, vỉa hè)
     drawStorefront(this, W / 2, 352, G.state.land.includes('D'));

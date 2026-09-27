@@ -39,6 +39,9 @@
         margin: 0;
         padding: 0;
         overflow: hidden;
+        /* Nền đặc: iOS 26 lấy màu nền của phần tử fixed ở mép màn hình để tô thanh trạng thái;
+           không có màu (chỉ có canvas) thì iOS phủ lớp kính mờ lên phần trên cùng của game. */
+        background-color: var(--thdh-edge-top, #2b1d14);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -48,6 +51,25 @@
         touch-action: none;
         max-width: 100%;
         max-height: 100%;
+      }
+      /* Hai dải nền đặc che vùng tai thỏ / thanh Home. WebKit (iOS 26) dò phần tử fixed ngay mép
+         trên/dưới: gặp dải có màu đặc thì dùng màu đó cho thanh hệ thống, không làm mờ nội dung. */
+      .edge {
+        position: fixed;
+        left: 0;
+        right: 0;
+        z-index: 5;
+        pointer-events: none;
+      }
+      #edge-top {
+        top: 0;
+        background-color: var(--thdh-edge-top, #2b1d14);
+        height: env(safe-area-inset-top, 0px);
+      }
+      #edge-bottom {
+        bottom: 0;
+        background-color: var(--thdh-edge-bottom, #2b1d14);
+        height: env(safe-area-inset-bottom, 0px);
       }
       #rotate {
         display: none;
@@ -81,6 +103,8 @@
   </head>
   <body>
     <div id="game"></div>
+    <div id="edge-top" class="edge"></div>
+    <div id="edge-bottom" class="edge"></div>
     <div id="rotate"><div class="phone">📱</div>Xoay dọc điện thoại để chơi</div>
     <script type="module" src="/src/main.ts"></script>
   </body>

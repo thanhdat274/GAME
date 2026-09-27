@@ -55,6 +55,7 @@ export class ScrollArea {
   }
 
   setHeight(h: number): void {
+    clipInputToView(this.content, this.top, this.bottom);
     this.height = h;
     this.culler.reset();
     this.setScroll(this.scroll);
@@ -80,7 +81,31 @@ export class ScrollArea {
 
   add(items: Phaser.GameObjects.GameObject | Phaser.GameObjects.GameObject[]): void {
     this.content.add(items);
+    for (const item of Array.isArray(items) ? items : [items]) clipInputToView(item, this.top, this.bottom);
   }
+}
+
+const clipped = new WeakSet<object>();
+
+/**
+ * Mặt nạ chỉ che phần hình, không che vùng chạm: ô bị cuộn khuất dưới footer vẫn "nuốt" cú chạm
+ * của nút nằm dưới nó (vd. "Tự bày"). Bọc hit-test để đối tượng trong vùng cuộn chỉ nhận chạm
+ * khi điểm chạm nằm trong khung nhìn [top, bottom] (tọa độ thế giới).
+ */
+export function clipInputToView(obj: Phaser.GameObjects.GameObject, top: number, bottom: number): void {
+  const input = obj.input;
+  if (input && !clipped.has(input)) {
+    clipped.add(input);
+    const inner = input.hitAreaCallback;
+    const go = obj as Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Transform & { displayOriginX?: number; displayOriginY?: number };
+    input.hitAreaCallback = (area: unknown, x: number, y: number, target: Phaser.GameObjects.GameObject) => {
+      if (!inner(area, x, y, target)) return false;
+      if (!go.getWorldTransformMatrix) return true;
+      const world = go.getWorldTransformMatrix().transformPoint(x - (go.displayOriginX ?? 0), y - (go.displayOriginY ?? 0));
+      return world.y >= top && world.y <= bottom;
+    };
+  }
+  if (obj instanceof Phaser.GameObjects.Container) for (const child of obj.list) clipInputToView(child, top, bottom);
 }
 
 /** Thẻ nền phong cách nhãn hàng tiệm tạp hóa cổ điển, có gờ nổi nhẹ. */

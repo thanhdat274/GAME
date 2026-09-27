@@ -80,10 +80,20 @@ export const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Em
 /** Đặt camera để hệ tọa độ luôn là 360x640 dù canvas thật lớn gấp đôi. */
 export function setupCamera(scene: Phaser.Scene): void {
   scene.cameras.main.setZoom(ZOOM).centerOn(W / 2, H / 2).setBackgroundColor(C.bg);
-  if (typeof document !== 'undefined') {
-    document.body.style.setProperty('--thdh-bg', '#2b1d14');
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#2b1d14');
-  }
+  setEdgeColors('#2b1d14');
+}
+
+/**
+ * Màu nền đặc của hai dải tai thỏ / thanh Home (index.html) theo màn hiện tại.
+ * Phải là màu đặc (không gradient): iOS 26 đọc màu này để tô thanh hệ thống thay vì làm mờ game.
+ */
+export function setEdgeColors(top: string, bottom = top): void {
+  if (typeof document === 'undefined') return;
+  const style = document.body.style;
+  style.setProperty('--thdh-bg', top === bottom ? top : `linear-gradient(to bottom, ${top} 0%, ${top} 50%, ${bottom} 50%, ${bottom} 100%)`);
+  style.setProperty('--thdh-edge-top', top);
+  style.setProperty('--thdh-edge-bottom', bottom);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', top);
 }
 
 export interface TextOpts {

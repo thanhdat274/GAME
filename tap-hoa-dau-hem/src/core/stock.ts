@@ -526,10 +526,14 @@ function zoneTakenElsewhere(state: GameState, shelf: number, zone: ShelfZone, zo
 /**
  * Giữa giờ bán: mỗi món trong kho chưa có ô nào trên kệ được xếp vào một ô trống hợp lệ.
  * Không nạp thêm ô đang bày (việc đó dùng nút + có thời gian nạp ở màn bán).
+ * Ô đã bán hết mà kho cũng hết món cũ được dùng lại cho món mới.
  */
 export function planNewProducts(state: GameState): { placements: { shelf: number; slot: number; productId: string }[]; unplaced: string[] } {
   const rows = usableShelves(state);
   const taken = new Set<string>();
+  const inStock = new Set(state.warehouse.filter((lot) => lot.qty > 0).map((lot) => lot.productId));
+  // Ô trống, hoặc ô đã bán hết mà kho cũng hết món đó: dùng lại được cho món mới (như bày tay).
+  const free = (s: GameState['shelves'][number][number]) => !s.productId || (s.qty === 0 && s.clearance === undefined && !inStock.has(s.productId));
   const zones = new Map(rows.map((r) => [r, zoneOf(state, r)]));
   const placements: { shelf: number; slot: number; productId: string }[] = [];
   const unplaced: string[] = [];
@@ -543,7 +547,7 @@ export function planNewProducts(state: GameState): { placements: { shelf: number
       const zone = zones.get(r);
       if (zone && zone !== p.category) continue;
       if (!zone && !spill && zoneTakenElsewhere(state, r, p.category as ShelfZone, (o) => zones.get(o) ?? null)) continue;
-      const c = state.shelves[r].findIndex((s, i) => !s.productId && !taken.has(`${r}:${i}`));
+      const c = state.shelves[r].findIndex((s, i) => free(s) && !taken.has(`${r}:${i}`));
       if (c < 0) continue;
       if (!zone) zones.set(r, p.category as ShelfZone);
       taken.add(`${r}:${c}`);
