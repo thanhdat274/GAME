@@ -1,5 +1,5 @@
 import { computeTip, customerPayment, judgeChange, type ChangeResult } from './change';
-import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, shopDensityAt, type Customer, type OrderLine } from './customers';
+import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, shopDensityAt, type Customer, type OrderLine, type PaymentMethod } from './customers';
 import { recordDay } from './analytics';
 import { applyPlanogram, planogramProduct, runRestockRules } from './autorestock';
 import { DATA, hasFeature, product, type Category, type RecipeDef } from './data';
@@ -368,6 +368,9 @@ export class DaySession {
     const waiting = [...this.queue, ...this.ready, ...inLanes].filter((c) => c.status === 'waiting' || c.status === 'scanning' || c.status === 'paying' || c.status === 'bargain' || c.status === 'credit');
     const cat = hasCat(this.state);
     for (const c of waiting) {
+      // Sau khi đóng cửa, khách nhân viên đang tính tiền được phục vụ nốt, không bị đuổi giữa giao dịch.
+      // Khách chờ người chơi thì vẫn hết kiên nhẫn, để ngày kết thúc được khi không ai đứng quầy.
+      if (this.closed && this.lanes.some((lane) => lane.job?.customerId === c.id)) continue;
       let rate = c === this.front || this.lanes.some((l) => l.queue[0] === c) ? 1 : b.queuePatienceRate;
       // Khách thấy chủ tiệm đang bận nạp kệ thì chờ thong thả hơn.
       if (!this.playerAtCounter && !this.autoPlayer && c.lane === 0) rate *= b.topDown.awayPatienceRate;
@@ -387,9 +390,10 @@ export class DaySession {
     }
     const c = this.front;
     if (c?.status === 'scanning') this.tickCounterRequest(c, dt);
-    if (c?.status === 'waiting' && c.askLeft && (this.playerAtCounter || this.autoPlayer)) c.askLeft = Math.max(0, c.askLeft - dt);
+    if (c?.status === 'waiting' && c.askLeft && c.askLeft > 0 && (this.playerAtCounter || this.autoPlayer)) c.askLeft = Math.max(0, c.askLeft - dt);
     this.promoteFront();
     this.tickLanes(dt);
+    this.balanceCheckoutQueues();
     if (this.autoPlayer) this.autoServe(dt);
 
     if (this.closed && this.customers.length === 0 && !this.ended) {
@@ -684,6 +688,14 @@ export class DaySession {
     return true;
   }
 
+  private requestStockFetch(c: Customer): boolean {
+    const available = this.state.staff.some((s) => (s.role === 'refill' || s.role === 'stocker')
+      && this.workerOf(s.id)?.present && (this.closed || this.isOnShift(s)));
+    if (!available) return false;
+    this.tasks.upsert(`fetch:${c.id}`, 'fetch', 20_000 - c.id);
+    return true;
+  }
+
   /** Vào quầy: 0 = quầy người chơi, số khác = id quầy nhân viên. */
   private joinLane(c: Customer, laneId: number): void {
     c.lane = laneId;
@@ -716,15 +728,50 @@ export class DaySession {
     return best?.id ?? null;
   }
 
+  /** Chuyển khách còn đang chờ sang quầy vắng hơn; không ngắt giao dịch đang xử lý. */
+  private balanceCheckoutQueues(): void {
+    const queues = [
+      ...(this.playerLaneOpen() ? [{ id: 0, queue: this.queue, busy: false }] : []),
+      ...this.lanes.filter((lane) => !lane.closing).map((lane) => ({ id: lane.id, queue: lane.queue, busy: lane.job !== null })),
+    ];
+    if (queues.length < 2) return;
+
+    let changed = false;
+    // Chuyển từng khách đang chờ từ hàng dài sang hàng ngắn cho đến khi cân bằng.
+    while (true) {
+      const source = [...queues].sort((a, b) => b.queue.length - a.queue.length)[0];
+      const target = [...queues].sort((a, b) => a.queue.length - b.queue.length)[0];
+      if (!source || !target || source === target || source.queue.length - target.queue.length <= 1) break;
+
+      const activeId = source.busy ? (source.queue[0]?.id ?? null) : null;
+      let index = -1;
+      for (let i = source.queue.length - 1; i >= 0; i--) {
+        const c = source.queue[i];
+        if (c.id !== activeId && c.status === 'waiting') { index = i; break; }
+      }
+      if (index < 0) break;
+      const [customer] = source.queue.splice(index, 1);
+      customer.lane = target.id;
+      target.queue.push(customer);
+      changed = true;
+    }
+    if (changed) this.events.emit('lanesChanged', undefined);
+  }
+
   private promoteFront(): void {
     const c = this.front;
     if (!c || c.status !== 'waiting') return;
     if (!this.playerAtCounter && !this.autoPlayer) return;
     if (c.order.some(askable)) {
-      // Khách đi tới quầy hỏi món hết, người đứng quầy kiểm kho: mất vài giây rồi mới tính tiền.
+      // Nhân viên kho/tiếp hàng lấy món khách hỏi; người chơi chỉ chờ món được mang ra.
       if (c.askLeft === undefined) {
-        c.askLeft = DATA.balance.askStockSeconds;
         this.events.emit('stockAsking', c);
+        c.askLeft = this.requestStockFetch(c) ? -1 : DATA.balance.askStockSeconds;
+      }
+      // Nhân viên kho hết ca giữa chừng: người đứng quầy tự đi kiểm kho.
+      if (c.askLeft < 0) {
+        if (this.requestStockFetch(c)) return;
+        c.askLeft = DATA.balance.askStockSeconds;
       }
       if (c.askLeft > 0) return;
       if (!this.askForMissing(c)) return;
@@ -822,9 +869,11 @@ export class DaySession {
     if (this.zoneRefills.some((r) => r.zone === zone)) return false;
     const slots: { shelf: number; slot: number }[] = [];
     for (const shelf of usableShelves(this.state)) {
-      if (zoneOf(this.state, shelf) !== zone) continue;
-      this.state.shelves[shelf].forEach((_, index) => {
-        if (canRefill(this.state, shelf, index)) slots.push({ shelf, slot: index });
+      const fridge = shelfKind(this.state, shelf) === 'fridge';
+      if (!fridge && zoneOf(this.state, shelf) !== zone) continue;
+      this.state.shelves[shelf].forEach((slot, index) => {
+        const matchesZone = fridge ? slot.productId !== null && product(slot.productId).category === zone : true;
+        if (matchesZone && canRefill(this.state, shelf, index)) slots.push({ shelf, slot: index });
       });
     }
     if (!slots.length) return false;
@@ -904,18 +953,47 @@ export class DaySession {
     this.startPayment(c);
   }
 
+  private pickPaymentMethod(): PaymentMethod {
+    if (this.rng.next() >= DATA.balance.cashlessChance) return 'cash';
+    return this.rng.next() < 0.5 ? 'card' : 'transfer';
+  }
+
   private startPayment(c: Customer): void {
     const total = orderTotal(c, this.state);
     c.comboTipEligible = c.scanStartedAt !== null && this.elapsed - c.scanStartedAt <= DATA.balance.scanComboSeconds;
     c.total = total;
-    c.bill = customerPayment(total, this.rng);
+    c.paymentMethod = this.pickPaymentMethod();
+    c.bill = c.paymentMethod === 'cash' ? customerPayment(total, this.rng) : total;
     c.changeDue = c.bill - total;
     c.status = 'paying';
     c.changeStartedAt = this.elapsed;
     this.tray = [];
     this.events.emit('paymentStarted', c);
-    if (c.changeDue === 0) this.completeSale(c, this.tipFor(c, false), 0);
+    if (c.paymentMethod !== 'cash') this.completeSale(c, 0, 0);
+    else if (c.changeDue === 0) this.completeSale(c, this.tipFor(c, false), 0);
     else if (this.state.settings.autoChange) this.autoChange();
+  }
+
+  choosePaymentMethod(method: PaymentMethod): boolean {
+    const c = this.front;
+    if (!c || c.status !== 'paying' || c.paymentMethod) return false;
+    if (method === 'cash') {
+      c.paymentMethod = 'cash';
+      c.bill = customerPayment(c.total, this.rng);
+      c.changeDue = c.bill - c.total;
+      c.changeStartedAt = this.elapsed;
+      this.tray = [];
+      this.events.emit('paymentStarted', c);
+      if (c.changeDue === 0) this.completeSale(c, this.tipFor(c, false), 0);
+      else if (this.state.settings.autoChange) this.autoChange();
+      return true;
+    }
+    c.paymentMethod = method;
+    c.bill = c.total;
+    c.changeDue = 0;
+    this.tray = [];
+    this.completeSale(c, 0, 0);
+    return true;
   }
 
   /** Người chơi trả lời khách mặc cả: bớt thì giảm tiền, không bớt thì khách có thể bỏ về. */
@@ -1089,7 +1167,7 @@ export class DaySession {
   private completeSale(c: Customer, tip: number, lost: number, credit = false, staff?: Staff): void {
     const b = DATA.balance;
     const t = this.state.today;
-    c.total = Math.round(c.total * prestigeRevenueMultiplier(this.state) / 1000) * 1000;
+    c.total = Math.round(c.total * prestigeRevenueMultiplier(this.state) / 500) * 500;
     let items = 0;
     for (const line of c.order) {
       if (line.scanned <= 0) continue;
@@ -1199,6 +1277,14 @@ export class DaySession {
 
   private finish(c: Customer, reason: LeaveReason, stars: number): void {
     const wasFront = this.front === c;
+    const fetchKey = `fetch:${c.id}`;
+    this.tasks.complete(fetchKey);
+    for (const worker of this.workers) {
+      if (worker.task !== fetchKey) continue;
+      worker.task = null;
+      worker.left = 0;
+      worker.idle = DATA.balance.staff.refillCheckSeconds;
+    }
     c.status = 'done';
     if (reason !== 'closed') {
       recordRating(this.state, stars);
@@ -1525,6 +1611,16 @@ export class DaySession {
       this.jobDone(s);
       return;
     }
+    if (key.startsWith('fetch:')) {
+      const customerId = Number(key.slice('fetch:'.length));
+      const customer = [...this.queue, ...this.lanes.flatMap((lane) => lane.queue)].find((c) => c.id === customerId);
+      if (customer) {
+        customer.askLeft = 0;
+        this.askForMissing(customer);
+      }
+      this.jobDone(s);
+      return;
+    }
     const [, rs, cs] = key.split(':');
     const r = Number(rs);
     const c = Number(cs);
@@ -1557,8 +1653,13 @@ export class DaySession {
       if (!lane.job) {
         if (lane.closing || c.status !== 'waiting') continue;
         if (c.order.some(askable)) {
-          // Khách hỏi món hết: thu ngân kiểm kho trước rồi mới quét.
+          // Nhân viên kho/tiếp hàng lấy món khách hỏi; thu ngân không phải rời quầy.
           if (c.askLeft === undefined) this.events.emit('stockAsking', c);
+          if ((c.askLeft === undefined || c.askLeft < 0) && this.requestStockFetch(c)) {
+            c.askLeft = -1;
+            continue;
+          }
+          // Không có nhân viên kho/tiếp hàng đang làm: thu ngân tự kiểm kho như trước.
           c.askLeft = DATA.balance.askStockSeconds;
           lane.job = { customerId: c.id, phase: 'ask', left: DATA.balance.askStockSeconds * timeFactor(s, w.tired) };
           continue;
@@ -1644,6 +1745,7 @@ export class DaySession {
       } else c.maxStars = b.bargain.declineMaxStars;
     }
     c.total = total;
+    c.paymentMethod = this.pickPaymentMethod();
     c.status = 'paying';
     lane.job = { customerId: c.id, phase: 'change', left: b.staff.changeSeconds * timeFactor(s, w.tired) };
   }
@@ -1651,6 +1753,11 @@ export class DaySession {
   private staffChange(lane: Lane, c: Customer, s: Staff): void {
     const cfg = DATA.balance.staff;
     lane.job = null;
+    if (c.paymentMethod !== 'cash') {
+      this.jobDone(s);
+      this.completeSale(c, 0, 0, false, s);
+      return;
+    }
     let lost = 0;
     if (this.rng.next() < errorChance(s, this.state.day)) {
       const amount = this.rng.pick(cfg.wrongChangeValues);

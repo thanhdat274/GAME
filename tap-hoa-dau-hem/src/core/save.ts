@@ -1,11 +1,12 @@
 import { compressSave, decompressSave } from './compress';
 import { DATA, product } from './data';
 import { applyLevelUps } from './progression';
-import { createNewGame, defaultFixtures, emptySlots, syncActiveStore, type GameState, type Lot } from './state';
+import { arrangeStorageRacks } from './layout';
+import { createNewGame, defaultFixtures, emptySlots, syncActiveStore, type GameState, type Lot, type Slot } from './state';
 
 export const SAVE_KEY = 'thdh.save.v1';
 export const BACKUP_KEY = 'thdh.save.v1.bak';
-export const CURRENT_VERSION = 6;
+export const CURRENT_VERSION = 7;
 /** Bản lưu trước khi migrate lên version mới, giữ 14 ngày để khôi phục. */
 export const PRE_MIGRATE_KEY = 'thdh.save.premigrate';
 const PRE_MIGRATE_DAYS = 14;
@@ -154,6 +155,30 @@ const migrations: Record<number, Migration> = {
     internalOrders: [],
     recurringOrders: [],
   }),
+  /** v6 -> v7: đổi tủ lạnh hiện có thành tủ 2 cánh, giữ nguyên diện tích đặt và hàng đang bày. */
+  6: (state) => {
+    const migrateFridges = (raw: Record<string, unknown>): Record<string, unknown> => {
+      const fixtures = Array.isArray(raw.fixtures) ? raw.fixtures as Record<string, unknown>[] : [];
+      const shelves = Array.isArray(raw.shelves) ? raw.shelves as Slot[][] : [];
+      for (const fixture of fixtures) {
+        if (fixture.type !== 'fridge') continue;
+        fixture.rot = fixture.rot === 1 ? 0 : 1;
+        const index = fixture.shelf;
+        if (typeof index !== 'number' || !Array.isArray(shelves[index])) continue;
+        if (shelves[index].length < 24) shelves[index].push(...emptySlots(24 - shelves[index].length));
+      }
+      return { ...raw, fixtures, shelves };
+    };
+    const stores = Array.isArray(state.stores) ? state.stores as Record<string, unknown>[] : [];
+    return {
+      ...migrateFridges(state),
+      version: 7,
+      stores: stores.map((store) => ({
+        ...store,
+        data: migrateFridges((store.data && typeof store.data === 'object') ? store.data as Record<string, unknown> : {}),
+      })),
+    };
+  },
 };
 
 /** Kệ / tủ từ bản lưu cũ (ít ô hơn) được nới thêm ô trống cho đủ số ô hiện tại. */
@@ -170,6 +195,12 @@ function knownProduct(id: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Mảnh I/J/K cũ được gộp thành một mảnh I liền nhau. */
+function normalizeLandIds(ids: string[]): string[] {
+  const normalized = ids.map((id) => id === 'J' || id === 'K' ? 'I' : id);
+  return [...new Set(normalized)];
 }
 
 /** Các productId trong bản lưu mà bản game này không biết (bản lưu từ phiên bản mới hơn). */
@@ -205,12 +236,17 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
   const result = {
     ...base,
     ...loaded,
+    land: (() => {
+      const ids = normalizeLandIds(loaded.land ?? base.land);
+      return ids.includes('H') || (loaded.level ?? base.level) < 21 ? ids : [...ids, 'H'];
+    })(),
     settings: { ...base.settings, ...loaded.settings },
     zones: loaded.zones?.length ? loaded.zones : base.zones,
     counter: loaded.counter?.length ? loaded.counter : base.counter,
     fixtures: loaded.fixtures?.length ? loaded.fixtures : base.fixtures,
+    storedFixtures: Array.isArray(loaded.storedFixtures) ? loaded.storedFixtures : [],
     diningTables: Array.isArray(loaded.diningTables) ? loaded.diningTables : [],
-    nextUid: Math.max(loaded.nextUid ?? 0, ...(loaded.fixtures ?? base.fixtures).map((f) => f.uid + 1)),
+    nextUid: Math.max(loaded.nextUid ?? 0, ...(loaded.fixtures ?? base.fixtures).map((f) => f.uid + 1), ...(loaded.storedFixtures ?? []).map((f) => f.uid + 1)),
     lifetime: { ...base.lifetime, ...loaded.lifetime },
     today: { ...base.today, ...loaded.today },
     sync: { ...base.sync, ...loaded.sync },
@@ -248,6 +284,27 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
     } : base.tax,
     version: CURRENT_VERSION,
   } as GameState;
+  arrangeStorageRacks(result);
+  if (result.level >= 21) {
+    const generator = result.fixtures.find((fixture) => fixture.type === 'generator');
+    if (generator) { generator.x = 8; generator.y = 0; generator.rot = 0; }
+    for (const store of result.stores) {
+      const data = store.data as Record<string, unknown>;
+      if (Array.isArray(data.land)) data.land = normalizeLandIds(data.land as string[]);
+      if (Array.isArray(data.land) && Array.isArray(data.fixtures)) {
+        arrangeStorageRacks(data as unknown as Pick<GameState, 'land' | 'fixtures'>);
+      }
+      const land = Array.isArray(data.land) ? data.land as string[] : [];
+      if (!land.includes('H')) data.land = [...land, 'H'];
+      const fixtures = Array.isArray(data.fixtures) ? data.fixtures as { type: string; x: number; y: number; rot: number }[] : [];
+      const storedGenerator = fixtures.find((fixture) => fixture.type === 'generator');
+      if (storedGenerator) { storedGenerator.x = 8; storedGenerator.y = 0; storedGenerator.rot = 0; }
+    }
+  }
+  for (const store of result.stores) {
+    const data = store.data as Record<string, unknown>;
+    if (Array.isArray(data.land)) data.land = normalizeLandIds(data.land as string[]);
+  }
   padShelves(result.shelves);
   for (const store of result.stores) if (Array.isArray(store.data?.shelves)) padShelves(store.data.shelves as GameState['shelves']);
   syncActiveStore(result);

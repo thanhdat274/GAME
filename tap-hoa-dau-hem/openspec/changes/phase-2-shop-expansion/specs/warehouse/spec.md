@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Bậc kho
-Sức chứa kho SHALL bằng sức chứa gốc theo bậc (kệ gỗ 30, kệ sắt 50, kho lớn 80 ô) cộng thêm 10 ô cho mỗi kệ kho đặt trên mặt bằng.
+Sức chứa kho SHALL bằng sức chứa gốc theo bậc (kệ gỗ 30, kệ sắt 50, kho lớn 80 ô) cộng thêm 20 ô cho mỗi kệ kho đặt trên mặt bằng.
 
 #### Scenario: Nâng cấp kho
 - **WHEN** người chơi level 8 trả 250.000đ nâng lên kệ sắt
@@ -9,7 +9,7 @@ Sức chứa kho SHALL bằng sức chứa gốc theo bậc (kệ gỗ 30, kệ 
 
 #### Scenario: Thêm kệ kho
 - **WHEN** người chơi đặt 2 kệ kho lên sân sau
-- **THEN** sức chứa tăng thêm 20 ô
+- **THEN** sức chứa tăng thêm 40 ô
 
 ### Requirement: Màn quản lý kho
 Màn Kho SHALL liệt kê từng lô hàng (món, số lượng, ngày hết hạn), tổng ô đã dùng / sức chứa, lọc theo nhóm.

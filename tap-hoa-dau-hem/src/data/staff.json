@@ -23,7 +23,10 @@
   },
   "names": [
     "Anh Tuấn", "Chị Hằng", "Bé Ngọc", "Anh Khoa", "Chị Thảo", "Anh Phúc", "Cô Mai", "Anh Dũng",
-    "Chị Vy", "Bé Hân", "Anh Long", "Chị Trang", "Anh Nam", "Chị Yến", "Anh Hiếu", "Chị My"
+    "Chị Vy", "Bé Hân", "Anh Long", "Chị Trang", "Anh Nam", "Chị Yến", "Anh Hiếu", "Chị My",
+    "Chú Bình", "Cô Hoa", "Anh Minh", "Chị Linh", "Bé Trâm", "Anh Quân", "Chị Ngân", "Anh Huy",
+    "Chị Diễm", "Anh Tài", "Cô Loan", "Chị Phương", "Anh Sơn", "Bé Thư", "Chị Nhung", "Anh Vinh",
+    "Cô Út", "Anh Bảo", "Chị Oanh", "Anh Khánh", "Bé Nhi", "Chị Thanh", "Anh Trí", "Cô Hòa"
   ],
   "looks": [
     { "shirt": "#4fc3f7", "pants": "#263238", "hair": "#111111", "skin": "#e8b98a" },

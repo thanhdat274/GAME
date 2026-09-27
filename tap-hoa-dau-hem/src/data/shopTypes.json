@@ -16,9 +16,12 @@
     "fixtures": [
       "shelf",
       "fridge",
+      "fridge_single",
       "freezer",
       "storage_rack",
       "shelf_double",
+      "shelf_3",
+      "shelf_4",
       "counter",
       "counter2",
       "food_grill",

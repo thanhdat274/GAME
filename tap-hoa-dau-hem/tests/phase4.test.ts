@@ -273,16 +273,45 @@ describe('nền tảng phase 4a', () => {
     expect(ensureDiningTables(state)[0].status).toBe('clean');
   });
 
-  it('hồ sơ mô phỏng max level mở đủ chi nhánh và bàn pha chế', () => {
+  it('hồ sơ mô phỏng max level mở toàn bộ catalog và nạp đầy các mặt bằng', () => {
     const state = createMaxLevelSimulation();
     expect(state.level).toBe(DATA.levels.maxLevel);
-    expect(state.stores).toHaveLength(4);
+    expect(state.stores).toHaveLength(DATA.branches.length + 1);
     expect(state.activeStoreId).toBe('main');
     expect(state.activeRecipes).toContain('tra_sua');
-    expect(ensureDiningTables(state).map((table) => table.status)).toEqual(['clean', 'clean']);
+    expect(state.shelves).toHaveLength(9);
+    const shelfSlots = Object.fromEntries(state.fixtures.filter((fixture) => fixture.shelf !== undefined)
+      .map((fixture) => [fixture.type, state.shelves[fixture.shelf!].length]));
+    expect(shelfSlots).toMatchObject({ shelf: 12, fridge: 24, fridge_single: 8, freezer: 12, shelf_double: 24, shelf_3: 36, shelf_4: 48 });
+    expect(state.fixtures.filter((fixture) => fixture.type === 'shelf')).toHaveLength(3);
+    expect(state.fixtures.map((fixture) => fixture.type)).toEqual(expect.arrayContaining(['fridge', 'fridge_single', 'freezer', 'shelf_double', 'shelf_3', 'shelf_4', 'storage_rack', 'counter2', 'food_table_4', 'food_grill', 'hot_kettle', 'bread_case', 'blender', 'sugarcane_press', 'drink_table_2']));
+    const allFixtureTypes = new Set([
+      ...state.fixtures.map((fixture) => fixture.type),
+      ...state.stores.flatMap((store) => (store.data.fixtures as { type: string }[] ?? []).map((fixture) => fixture.type)),
+    ]);
+    expect(DATA.shopTypes.find((shop) => shop.id === 'grocery')!.fixtures.every((type) => allFixtureTypes.has(type))).toBe(true);
+    expect(ensureDiningTables(state).map((table) => table.status)).toEqual(['clean', 'clean', 'clean']);
     expect(state.money).toBeGreaterThan(0);
+    expect(state.shelves.flat().every((slot) => !!slot.productId && slot.qty === DATA.balance.slotCapacity)).toBe(true);
     expect(warehouseCellsUsed(state.warehouse)).toBeLessThanOrEqual(warehouseCapacity(state));
-    expect(state.counter.some((slot) => slot.productId === null)).toBe(true);
+    const stocked = new Set([
+      ...state.warehouse.map((lot) => lot.productId),
+      ...state.shelves.flat().map((slot) => slot.productId).filter((id): id is string => !!id),
+      ...state.counter.map((slot) => slot.productId).filter((id): id is string => !!id),
+      ...state.stores.flatMap((store) => [
+        ...(store.data.warehouse as { productId: string }[] ?? []).map((lot) => lot.productId),
+        ...(store.data.counter as { productId: string | null }[] ?? []).map((slot) => slot.productId).filter((id): id is string => !!id),
+      ]),
+    ]);
+    expect(DATA.products.filter((item) => !item.recipeOnly).every((item) => stocked.has(item.id))).toBe(true);
+    expect(state.fixtures.some((fixture) => fixture.type === 'chau_cay')
+      || state.stores.some((store) => (store.data.fixtures as { type: string }[] ?? []).some((fixture) => fixture.type === 'chau_cay'))).toBe(true);
+    expect(state.staff.length).toBeGreaterThan(0);
+    expect(state.activeRecipes).toHaveLength(DATA.shopTypes.find((shop) => shop.id === 'grocery')!.recipes.length);
+    for (const type of ['shelf_double', 'shelf_3', 'shelf_4']) {
+      const def = DATA.furniture.find((item) => item.id === type)!;
+      expect(def.slots * DATA.balance.slotCapacity).toBeGreaterThan(DATA.balance.slotCapacity);
+    }
   });
 
   it('giữ nhịp danh hiệu sau khi rút ngắn EXP lên level 35', () => {

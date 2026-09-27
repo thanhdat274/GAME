@@ -19,6 +19,7 @@ import {
   type Cart,
 } from './stock';
 import { DATA, product, supplier, type Category } from './data';
+import type { PaymentMethod } from './customers';
 import type { GameState } from './state';
 
 /** Authoritative shared state stored by the live-session backend. */
@@ -51,6 +52,7 @@ export type LiveShopCommand =
   | { type: 'undoBill' }
   | { type: 'autoChange' }
   | { type: 'giveChange' }
+  | { type: 'choosePaymentMethod'; method: PaymentMethod }
   | { type: 'setPreference'; key: 'autoScan' | 'autoChange'; value: boolean }
   | { type: 'closeEarly' }
   | { type: 'nextDay' };
@@ -158,6 +160,7 @@ export function applyLiveShopCommand(
     case 'resolveBargain':
     case 'resolveCredit':
     case 'giveChange':
+    case 'choosePaymentMethod':
     case 'closeEarly': {
       const runtime = requireDayRuntime(aggregate);
       const session = DaySession.restore(state, runtime);
@@ -171,6 +174,7 @@ export function applyLiveShopCommand(
         case 'undoBill': session.undoBill(); result = true; break;
         case 'autoChange': result = session.autoChange(); break;
         case 'giveChange': result = session.giveChange(); break;
+        case 'choosePaymentMethod': result = session.choosePaymentMethod(command.method); break;
         case 'resolveBargain': result = session.resolveBargain(command.accept); break;
         case 'resolveCredit': result = session.resolveCredit(command.grant); break;
         case 'closeEarly': result = session.closeEarly(); break;
@@ -248,6 +252,9 @@ function validateLiveShopCommand(command: LiveShopCommand): void {
       return;
     case 'addBill':
       if (!DATA.balance.drawer.includes(Number(command.value))) throw new Error('Mệnh giá không hợp lệ.');
+      return;
+    case 'choosePaymentMethod':
+      if (!['cash', 'card', 'transfer'].includes(String(command.method))) throw new Error('Cách thanh toán không hợp lệ.');
       return;
     case 'autoArrange':
     case 'openShop':

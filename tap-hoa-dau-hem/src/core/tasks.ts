@@ -1,7 +1,7 @@
 import type { StaffRole } from './data';
 
 /** Loại việc trong tiệm. Người chơi và nhân viên đều nhận việc từ cùng một hàng đợi. */
-export type TaskKind = 'serve' | 'refill' | 'receive' | 'deliver' | 'watch';
+export type TaskKind = 'serve' | 'fetch' | 'refill' | 'receive' | 'deliver' | 'watch';
 
 export interface Task {
   /** Khóa duy nhất, ví dụ "refill:3:2" hay "deliver:5". */
@@ -15,8 +15,8 @@ export interface Task {
 /** Việc mỗi vai trò nhận, theo thứ tự ưu tiên của vai trò. */
 export const ROLE_TASKS: Record<StaffRole, TaskKind[]> = {
   cashier: ['serve'],
-  refill: ['refill', 'watch'],
-  stocker: ['receive', 'refill'],
+  refill: ['fetch', 'refill', 'watch'],
+  stocker: ['fetch', 'receive', 'refill'],
   delivery: ['deliver'],
   chef: [],
   barista: [],

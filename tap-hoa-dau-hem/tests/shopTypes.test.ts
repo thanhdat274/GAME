@@ -178,7 +178,7 @@ describe('bản lưu v6', () => {
     expect(state.staff).toEqual(v5.staff);
   });
 
-  it('tải v5 từ localStorage: ghi lại ở v6 và giữ bản trước migrate', () => {
+  it('tải v5 từ localStorage: ghi lại ở bản mới nhất và giữ bản trước migrate', () => {
     const store = memoryStore();
     store.setItem(SAVE_KEY, JSON.stringify(saveV5));
     const res = loadGame(store);
@@ -186,7 +186,7 @@ describe('bản lưu v6', () => {
     if (res.status !== 'ok') return;
     expect(JSON.parse(store.getItem(PRE_MIGRATE_KEY)!).version).toBe(5);
     saveGame(res.state, store);
-    expect(JSON.parse(store.getItem(SAVE_KEY)!).version).toBe(6);
+    expect(JSON.parse(store.getItem(SAVE_KEY)!).version).toBe(CURRENT_VERSION);
   });
 
   it('mẻ ngâm, nếp chín và đơn định kỳ được lưu/tải nguyên vẹn; 6 tiệm < 1 MB', () => {

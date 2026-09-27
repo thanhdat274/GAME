@@ -34,7 +34,7 @@ type Tab = 'buy' | 'arrange';
 /** Hướng dẫn ngắn khi một hệ thống mới mở khóa (hiện 1 lần, buổi sáng hôm sau). */
 const TUTORIALS: Record<string, { icon: string; title: string; body: string }> = {
   land: { icon: '🏗️', title: 'Mở rộng tiệm', body: 'Vào ☰ Tiệm → Sắp xếp để mở Đất A, đặt thêm kệ và kéo thả nội thất.' },
-  fridge: { icon: '🧊', title: 'Tủ lạnh', body: 'Đồ uống để tủ lạnh bán chạy hơn. Mua tủ lạnh trong chế độ Sắp xếp; mỗi tủ tốn 5.000đ tiền điện/ngày.' },
+  fridge: { icon: '🧊', title: 'Tủ lạnh 1/2 cánh', body: 'Chọn tủ lạnh 1 cánh (1×1, sức chứa 8 ô, 3.000đ điện/ngày) hoặc 2 cánh (2 ô, sức chứa 24 ô, 8.000đ điện/ngày) trong chế độ Sắp xếp.' },
   quests: { icon: '🎯', title: 'Nhiệm vụ hằng ngày', body: 'Mỗi ngày có 3 nhiệm vụ. Xong thì vào ☰ Tiệm → Nhiệm vụ để nhận thưởng.' },
   pricing: { icon: '💲', title: 'Chỉnh giá bán', body: 'Tăng giá thì lãi hơn nhưng khách dễ chê. Chỉnh ở ☰ Tiệm → Giá bán.' },
   anh_ba: { icon: '🚚', title: 'Đại lý Anh Ba', body: 'Rẻ hơn 10% nhưng giao 15:00 hôm sau, đơn tối thiểu 200.000đ. Chọn ở tab Nhập hàng.' },
@@ -65,7 +65,7 @@ const FOOT_Y = H - FOOT_H;
 const LIST_BOTTOM = FOOT_Y - 4;
 const ROW_H = 74;
 /** Chiều cao hàng món chưa mở khóa (không có nút +/-, khỏi cần chỗ cho hàng nút). */
-const LOCKED_ROW_H = 58;
+const LOCKED_ROW_H = 68;
 const CHIP_VIEW_BOTTOM = FOOT_Y - 4;
 /** Thứ tự và nhãn các nhóm hàng trong lưới kho (tab Bày kệ): hàng tươi sống / mau hỏng lên trước. */
 const CHIP_GROUPS: { cat: Category; icon: string; name: string; note: string; color: string }[] = [
@@ -96,16 +96,24 @@ interface Row {
   bg?: Phaser.GameObjects.Graphics;
 }
 
+type ProductFilter = Category | 'all';
+interface FilterRow { category: Category; height: number; root: Phaser.GameObjects.Container }
+
 export class MorningScene extends Phaser.Scene {
   private hud!: Hud;
   private tab: Tab = 'buy';
   private cart: Cart = {};
   private rows: Row[] = [];
+  private filterRows: FilterRow[] = [];
+  private categoryFilter: ProductFilter = 'all';
+  private categoryBtns: { filter: ProductFilter; button: Button }[] = [];
   private buyLayer!: Phaser.GameObjects.Container;
   private arrangeLayer!: Phaser.GameObjects.Container;
   private list!: Phaser.GameObjects.Container;
+  private filterEmptyText: Phaser.GameObjects.Text | null = null;
   private listH = 0;
   private listScroll: KineticScroll | null = null;
+  private resetListCuller: (() => void) | null = null;
   private cartText!: Phaser.GameObjects.Text;
   private cartWarn!: Phaser.GameObjects.Text;
   private buyBtn!: Button;
@@ -173,6 +181,9 @@ export class MorningScene extends Phaser.Scene {
     window.addEventListener('thdh-live-updated', onLiveUpdated);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.removeEventListener('thdh-live-updated', onLiveUpdated));
     this.cart = {};
+    this.categoryFilter = 'all';
+    this.filterRows = [];
+    this.categoryBtns = [];
     this.selected = null;
     this.pauseLayer = null;
     const g = this.add.graphics();
@@ -403,65 +414,98 @@ export class MorningScene extends Phaser.Scene {
       this.supplierNote = txt(this, 14, 126, '', { size: 10, color: HEX.muted, wrap: W - 28 });
       this.buyLayer.add(this.supplierNote);
     }
+    const filters: { id: ProductFilter; label: string }[] = [
+      { id: 'all', label: 'Tất cả' }, { id: 'dry', label: 'Đồ khô' }, { id: 'snack', label: 'Ăn vặt' },
+      { id: 'household', label: 'Đồ dùng' }, { id: 'drink', label: 'Đồ uống' }, { id: 'fresh', label: 'Đồ tươi' },
+      { id: 'frozen', label: 'Đông lạnh' }, { id: 'counter', label: 'Sau quầy' }, { id: 'food', label: 'Đồ ăn' },
+      { id: 'beverage', label: 'Pha chế' },
+    ];
+    const gridTop = hasWholesaleTabs ? 164 : 132;
+    const cols = 5;
+    const gap = 3;
+    const buttonW = (W - 20 - gap * (cols - 1)) / cols;
+    filters.forEach(({ id, label }, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const button = new Button(this, 10 + buttonW / 2 + col * (buttonW + gap), gridTop + row * 27, {
+        w: buttonW, h: 24, radius: 4, label, size: 10,
+        color: id === this.categoryFilter ? C.red : C.wood,
+        onTap: () => this.setProductFilter(id),
+      });
+      this.categoryBtns.push({ filter: id, button });
+      this.buyLayer.add(button);
+    });
     if (hasInternalSuppliers) {
-      const y = hasWholesaleTabs ? 168 : 126;
-      this.buyLayer.add(new Button(this, W / 2, y, { w: 160, h: 26, radius: 5, label: '🏪 Hàng nhà mình', size: 11, color: C.blue, onTap: () => this.scene.start('Internal', { back: 'Morning' }) }));
+      this.buyLayer.add(new Button(this, W / 2, gridTop + 66, { w: 160, h: 26, radius: 5, label: '🏪 Hàng nhà mình', size: 11, color: C.blue, onTap: () => this.scene.start('Internal', { back: 'Morning' }) }));
     }
-    // Dành khoảng trống dọc riêng biệt cho mối sỉ, ghi chú và nút nội bộ, không để chồng lên nhau.
-    if (hasWholesaleTabs) {
-      this.listTop = hasInternalSuppliers ? 186 : 144;
-    } else {
-      this.listTop = hasInternalSuppliers ? 144 : 100;
-    }
+    // Supplier note, category filters, and internal supply each get their own row.
+    this.listTop = gridTop + 2 * 27 + (hasInternalSuppliers ? 48 : 14);
     this.list = this.add.container(0, this.listTop + 16);
     const maskG = this.make.graphics({}, false).fillRect(0, this.listTop + 14, W, LIST_BOTTOM - this.listTop - 14);
     this.list.setMask(maskG.createGeometryMask());
+    this.filterEmptyText = txt(this, W / 2, 30, 'Không có mặt hàng trong nhóm này.', { size: 12, color: HEX.muted, origin: [0.5, 0.5] }).setVisible(false);
+    this.list.add(this.filterEmptyText);
     this.buyLayer.add([supplierLabel, this.list]);
 
     const unlocked = unlockedProducts(G.state.level, G.state);
     const locked = DATA.products.filter((p) => !unlocked.includes(p));
     this.rows = [];
+    this.filterRows = [];
     let y = 0;
     for (const p of [...unlocked, ...locked]) {
       const isLocked = locked.includes(p);
       const rowH = isLocked ? LOCKED_ROW_H : ROW_H;
-      const cy = y + rowH / 2 - 1;
+      const centerY = rowH / 2 - 1;
+      const root = this.add.container(0, y + centerY).setSize(W, rowH);
+      const rowObjects: Phaser.GameObjects.GameObject[] = [];
 
       // Nền thẻ sản phẩm phong cách nhãn hàng tiệm tạp hóa xưa
       const bg = this.add.graphics();
-      bg.fillStyle(0x1a120b, 0.15).fillRoundedRect(8, y + 3.5, W - 16, rowH - 6, 6);
-      bg.fillStyle(isLocked ? 0xeadbc3 : C.panel, 1).fillRoundedRect(8, y + 2, W - 16, rowH - 6, 6);
-      bg.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(9, y + 3, W - 18, rowH - 8, 5);
-      bg.lineStyle(1.5, C.panelEdge, 0.95).strokeRoundedRect(8, y + 2, W - 16, rowH - 6, 6);
+      bg.fillStyle(0x1a120b, 0.15).fillRoundedRect(8, 3.5 - centerY, W - 16, rowH - 6, 6);
+      bg.fillStyle(isLocked ? 0xeadbc3 : C.panel, 1).fillRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
+      bg.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(9, 3 - centerY, W - 18, rowH - 8, 5);
+      bg.lineStyle(1.5, C.panelEdge, 0.95).strokeRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
 
-      const icon = productIcon(this, 33, cy, p, isLocked ? 38 : 40);
-      const name = txt(this, 58, y + 10, p.name, { size: 13.5, bold: true });
-      const price = txt(this, 58, y + 29, `Nhập ${formatMoney(p.cost)} · bán ${formatMoney(priceOf(p.id, G.state))}`, { size: 10.5, color: HEX.muted });
-      const info = txt(this, 58, y + 47, '', { size: 10, color: HEX.green, wrap: W - 160 });
-      this.list.add([bg, icon, name, price, info]);
+      const icon = productIcon(this, 33, 0, p, isLocked ? 38 : 40);
+      const name = txt(this, 58, 10 - centerY, p.name, { size: 13.5, bold: true });
+      const price = txt(this, 58, 29 - centerY, `Nhập ${formatMoney(p.cost)} · bán ${formatMoney(priceOf(p.id, G.state))}`, { size: 10.5, color: HEX.muted });
+      const info = txt(this, 58, 47 - centerY, '', { size: 10, color: HEX.green, wrap: W - 160 });
+      rowObjects.push(bg, icon, name, price, info);
+      root.add(rowObjects);
+      this.list.add(root);
+      this.filterRows.push({ category: p.category, height: rowH, root });
 
       if (isLocked) {
         icon.setAlpha(0.4);
         name.setAlpha(0.5);
-        info.setText(`🔒 Mở ở level ${p.unlockLevel}`).setColor(HEX.grey);
+        const eventNames: Record<string, string> = { tet: 'Tết', mid_autumn: 'Trung thu', back_to_school: 'Khai giảng' };
+        const eventActive = p.eventOnly && G.state.activeEvents.some((event) => event.id === p.eventOnly);
+        const eventStocked = p.eventOnly && G.state.warehouse.some((lot) => lot.productId === p.id && lot.qty > 0)
+          || p.eventOnly && G.state.shelves.some((row) => row.some((slot) => slot.productId === p.id && slot.qty > 0));
+        const reason = p.unlockLevel > G.state.level
+          ? `🔒 Mở ở level ${p.unlockLevel}`
+          : p.eventOnly && !eventActive && !eventStocked
+            ? `🔒 Chỉ bán dịp ${eventNames[p.eventOnly] ?? 'sự kiện'}`
+            : `🔒 Không bán ở chi nhánh này`;
+        info.setText(reason).setColor(HEX.grey);
         y += rowH;
         continue;
       }
 
       // Cụm phím máy tính tiền vintage 90s: khung màn LCD ô liu ở giữa, phím cơ vuông 2 bên
       const stepperG = this.add.graphics();
-      stepperG.fillStyle(0xd5ddcc, 1).fillRoundedRect(248, cy - 13, 32, 26, 3);
-      stepperG.lineStyle(1, 0x828f78, 1).strokeRoundedRect(248, cy - 13, 32, 26, 3);
+      stepperG.fillStyle(0xd5ddcc, 1).fillRoundedRect(248, -13, 32, 26, 3);
+      stepperG.lineStyle(1, 0x828f78, 1).strokeRoundedRect(248, -13, 32, 26, 3);
 
-      const minus = new Button(this, 232, cy, { w: 26, h: 26, radius: 4, label: '−', color: C.woodLight, size: 15, onTap: () => this.changeQty(p.id, -1) });
-      const qty = txt(this, 264, cy, '0', { size: 14, bold: true, color: '#5a6652', origin: [0.5, 0.5] });
-      const plus = new Button(this, 296, cy, { w: 26, h: 26, radius: 4, label: '+', color: C.green, size: 15, onTap: () => this.changeQty(p.id, 1) });
-      const plus10 = new Button(this, 332, cy, { w: 32, h: 28, radius: 4, label: '+10', color: C.greenDark, size: 11, onTap: () => this.changeQty(p.id, 10) });
-      this.list.add([stepperG, minus, qty, plus, plus10]);
+      const minus = new Button(this, 232, 0, { w: 26, h: 26, radius: 4, label: '−', color: C.woodLight, size: 15, onTap: () => this.changeQty(p.id, -1) });
+      const qty = txt(this, 264, 0, '0', { size: 14, bold: true, color: '#5a6652', origin: [0.5, 0.5] });
+      const plus = new Button(this, 296, 0, { w: 26, h: 26, radius: 4, label: '+', color: C.green, size: 15, onTap: () => this.changeQty(p.id, 1) });
+      const plus10 = new Button(this, 332, 0, { w: 32, h: 28, radius: 4, label: '+10', color: C.greenDark, size: 11, onTap: () => this.changeQty(p.id, 10) });
 
-      const lack = txt(this, 58 + name.width + 8, y + 11, '', { size: 9.5, bold: true, color: HEX.white });
+      const lack = txt(this, 58 + name.width + 8, 11 - centerY, '', { size: 9.5, bold: true, color: HEX.white });
       lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1);
-      this.list.add(lack);
+      rowObjects.push(stepperG, minus, qty, plus, plus10, lack);
+      root.add(rowObjects.slice(5));
 
       this.rows.push({ p, qty, info, lack, minus, plus, plus10, price, bg });
       y += rowH;
@@ -477,7 +521,7 @@ export class MorningScene extends Phaser.Scene {
 
     this.cartText = txt(this, 12, FOOT_Y + 9, '', { size: 12.5, bold: true, color: HEX.cream });
     this.cartWarn = txt(this, 12, FOOT_Y + 28, '', { size: 10.5, color: '#ffb4a8', wrap: W - 24 });
-    const suggest = new Button(this, 49, H - 24, {
+    const suggest = new Button(this, 49, H - 28, {
       w: 78,
       h: 38,
       radius: 5,
@@ -490,8 +534,8 @@ export class MorningScene extends Phaser.Scene {
         this.refresh();
       },
     });
-    const clear = new Button(this, 126, H - 24, { w: 64, h: 38, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11.5, onTap: () => this.clearCart() });
-    this.buyBtn = new Button(this, 256, H - 24, { w: 172, h: 40, radius: 5, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => this.buy() });
+    const clear = new Button(this, 126, H - 28, { w: 64, h: 38, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11.5, onTap: () => this.clearCart() });
+    this.buyBtn = new Button(this, 256, H - 28, { w: 172, h: 40, radius: 5, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => this.buy() });
     this.buyLayer.add([foot, this.cartText, this.cartWarn, suggest, clear, this.buyBtn]);
   }
 
@@ -503,6 +547,7 @@ export class MorningScene extends Phaser.Scene {
       this.list.y = snap(top - offset);
       culler.cull(this.list, viewTop, LIST_BOTTOM);
     };
+    this.resetListCuller = () => { culler.reset(); setList(0); };
     this.listScroll = new KineticScroll(this, {
       inView: (y) => y > this.listTop && y < LIST_BOTTOM,
       enabled: () => this.tab === 'buy',
@@ -511,6 +556,23 @@ export class MorningScene extends Phaser.Scene {
       max: () => Math.max(0, this.listH - (LIST_BOTTOM - top)),
     });
     setList(0);
+  }
+
+  private setProductFilter(filter: ProductFilter): void {
+    this.categoryFilter = filter;
+    let y = 0;
+    for (const row of this.filterRows) {
+      const visible = filter === 'all' || row.category === filter;
+      row.root.setVisible(visible);
+      if (!visible) continue;
+      row.root.y = y + row.height / 2 - 1;
+      y += row.height;
+    }
+    this.filterEmptyText?.setVisible(y === 0);
+    this.listH = y + 10;
+    for (const { filter: id, button } of this.categoryBtns) button.setColor(id === filter ? C.red : C.wood);
+    this.listScroll?.stop();
+    this.resetListCuller?.();
   }
 
   private changeQty(id: string, delta: number): void {
@@ -1000,6 +1062,7 @@ export class MorningScene extends Phaser.Scene {
     this.hud.refresh();
     if (this.tab === 'buy') {
       for (const [id, b] of Object.entries(this.supplierBtns)) b.setColor(id === this.supplierId ? C.red : C.wood);
+      for (const { filter, button } of this.categoryBtns) button.setColor(filter === this.categoryFilter ? C.red : C.wood);
       this.supplierNote?.setText(supplier(this.supplierId).note);
       for (const r of this.rows) {
         const q = this.cart[r.p.id] ?? 0;

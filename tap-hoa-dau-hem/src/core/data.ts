@@ -118,6 +118,8 @@ export interface Balance {
   zoneRefillSecondsPerSlot: number;
   scanComboSeconds: number;
   scanTipBonus: number;
+  /** Tỉ lệ khách trả thẻ/chuyển khoản (không cần thối tiền, không tip). */
+  cashlessChance: number;
   counterSlots: number;
   counterCapacity: number;
   counterRequestSeconds: number;
@@ -306,6 +308,8 @@ export interface LandPlot {
   cost: number;
   queueBonus: number;
   storageOnly?: boolean;
+  /** Ô kỹ thuật riêng chỉ dành cho máy phát điện. */
+  generatorOnly?: boolean;
   /** Số khách duyệt hàng cùng lúc tăng thêm. */
   shopperBonus?: number;
   /** Mở mảnh này thì tiệm thành Mini Mart (đổi mặt tiền, có xe đẩy). */
@@ -338,7 +342,7 @@ export interface FurnitureDef {
   power: number;
   storageCells?: number;
   fixed?: boolean;
-  /** Hệ số sức chứa mỗi ô (kệ đôi = 2). */
+  /** Hệ số sức chứa trên mỗi ô cho nội thất dùng cấu hình cũ; kệ nhiều tầng khai báo thêm slots. */
   capacityMul?: number;
   /** Số cái tối đa được đặt. */
   limit?: number;

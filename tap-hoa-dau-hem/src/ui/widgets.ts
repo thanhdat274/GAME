@@ -242,7 +242,7 @@ export function dialog(
   });
   y += stack ? n * (btnH + gap) : btnH + gap;
   const h = y + 14;
-  const top = H / 2 - h / 2;
+  const top = Math.max(12, Math.round(H / 2 - h / 2));
   const bg = panel(scene, W / 2 - w / 2, top, w, h);
   layer.add(bg);
   for (const it of items) {

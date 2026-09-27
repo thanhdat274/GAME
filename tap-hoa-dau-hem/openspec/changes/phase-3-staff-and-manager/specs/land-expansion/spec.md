@@ -17,6 +17,16 @@ Khi tiệm có Đất D, khách SHALL có thể lấy xe đẩy và yêu cầu 3
 ### Requirement: Nhiều quầy thu ngân
 Khách SHALL xếp hàng vào quầy có ít người chờ nhất trong các quầy đang có người đứng.
 
+Mỗi quầy thu ngân được mua thêm MUST có một nhân viên vai trò thu ngân đã tuyển; người chơi không được tính thay cho nhân viên đó.
+
+#### Scenario: Chưa tuyển đủ thu ngân
+- **WHEN** tiệm có một thu ngân nhưng người chơi mua quầy thứ hai
+- **THEN** quầy thứ hai bị khóa mua/đặt và giao diện yêu cầu tuyển đủ hai thu ngân
+
+#### Scenario: Đã tuyển đủ thu ngân
+- **WHEN** tiệm có hai thu ngân và người chơi mua quầy thứ hai
+- **THEN** quầy thứ hai được mua và mỗi quầy có thể được một thu ngân vận hành
+
 #### Scenario: Hai quầy
 - **WHEN** quầy 1 có 3 khách chờ và quầy 2 có 1 khách
 - **THEN** khách mới xếp vào quầy 2

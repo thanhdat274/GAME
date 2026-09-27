@@ -24,6 +24,7 @@ export interface OrderLine {
 }
 
 export type CustomerStatus = 'entering' | 'browsing' | 'waiting' | 'scanning' | 'bargain' | 'credit' | 'paying' | 'fleeing' | 'done';
+export type PaymentMethod = 'cash' | 'card' | 'transfer';
 
 export interface Customer {
   id: number;
@@ -36,6 +37,7 @@ export interface Customer {
   bill: number;
   total: number;
   changeDue: number;
+  paymentMethod?: PaymentMethod;
   changeStartedAt: number;
   undos: number;
   shortAttempts: number;
@@ -257,8 +259,16 @@ export function createCustomer(id: number, level: number, rng: Rng, state?: Game
 
 /**
  * Tổng tiền các món đã quét, theo giá lúc khách lấy (kể cả bán xả), trừ phần bớt giá.
- * Làm tròn tới 1.000đ như tiệm thật (khay tiền không có tờ 500đ).
+ * Làm tròn tới 500đ, mệnh giá nhỏ nhất trong khay tiền.
  */
+export function roundedCashAmount(amount: number): number {
+  return Math.max(1000, Math.round(amount / 500) * 500);
+}
+
+export function discountedCashTotal(total: number, pct: number): number {
+  return roundedCashAmount(total * (100 - pct) / 100);
+}
+
 export function orderTotal(c: Customer, state?: GameState): number {
   const gross = c.order.reduce((sum, l) => {
     if (l.scanned <= 0) return sum;
@@ -266,7 +276,7 @@ export function orderTotal(c: Customer, state?: GameState): number {
     return sum + Math.round(unit * l.scanned);
   }, 0);
   const net = c.discountPct ? (gross * (100 - c.discountPct)) / 100 : gross;
-  return net > 0 ? Math.max(1000, Math.round(net / 1000) * 1000) : 0;
+  return net > 0 ? roundedCashAmount(net) : 0;
 }
 
 export function orderComplete(c: Customer): boolean {

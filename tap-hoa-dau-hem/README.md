@@ -7,6 +7,7 @@ Game quản lý tiệm tạp hóa nhỏ, xây bằng Phaser và Vite.
 ```sh
 npm ci
 npm run dev
+npm run playtest:max
 npm test
 npm run build
 npm run playtest -- 7 10
@@ -24,6 +25,6 @@ Chỉ chạy lệnh triển khai sau khi Firebase CLI đã đăng nhập đúng 
 
 ## Mô phỏng max level
 
-Mở `/?simulate=max` để tạo hồ sơ thử nghiệm level tối đa, mở đủ đất/chi nhánh, có hàng và trang thiết bị để xem nội dung cuối game. Hồ sơ dùng localStorage riêng (`thdh.simulation.max.*`), không ghi đè save thường và tắt đồng bộ cloud trong chế độ mô phỏng.
+Chạy `npm run playtest:max` để mở hồ sơ thử nghiệm đầy đủ: level tối đa, tất cả chi nhánh và đất tạp hóa, danh mục hàng trong kho của chuỗi, nhân viên, công thức, trang trí và nội thất của các loại tiệm. Mặt bằng tiệm chính bày kín tất cả ô kệ để kiểm tra giao diện và độ mượt với lượng tài nguyên lớn; các thiết bị được phân bổ qua chuỗi để giữ lối đi thông thoáng. Kệ gỗ có 12 ô, kệ đôi 24 ô, kệ 3 có 36 ô, kệ 4 có 48 ô; mỗi ô chứa 20 món. Mỗi lần chạy lệnh sẽ tạo hồ sơ sạch; trong game, hồ sơ giữ thay đổi khi refresh. Hồ sơ dùng localStorage riêng (`thdh.simulation.max.*`), không ghi đè save thường và tắt đồng bộ cloud.
 
-Đặt lại hồ sơ mô phỏng bằng `/?simulate=max&reset=1`. Sau khi tải xong, bỏ `&reset=1` khỏi URL để những lần tải sau giữ tiến trình mô phỏng.
+Để mở tiếp hồ sơ đã thử trước đó, chạy `npm run dev` rồi mở `/?simulate=max`.

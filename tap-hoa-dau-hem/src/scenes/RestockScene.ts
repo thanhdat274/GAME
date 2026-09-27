@@ -17,6 +17,7 @@ import { Button, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
 type Tab = 'buy' | 'arrange';
+type ProductFilter = Category | 'all';
 
 const ROW_H = 74;
 const FOOT_H = 104;
@@ -47,6 +48,8 @@ export class RestockScene extends Phaser.Scene {
   private list!: ScrollArea;
   private chips!: ScrollArea;
   private supplierBtns: Record<string, Button> = {};
+  private categoryBtns: { filter: ProductFilter; button: Button }[] = [];
+  private categoryFilter: ProductFilter = 'all';
   private supplierNote: Phaser.GameObjects.Text | null = null;
   private cartText!: Phaser.GameObjects.Text;
   private cartWarn!: Phaser.GameObjects.Text;
@@ -54,6 +57,8 @@ export class RestockScene extends Phaser.Scene {
   private shelves!: ShelfView;
   private whLabel!: Phaser.GameObjects.Text;
   private hint!: Phaser.GameObjects.Text;
+  private arrangeBusy = false;
+  private arrangeButton!: Button;
 
   private get shelfRows(): number {
     return SHELF_VIEW_ROWS;
@@ -76,6 +81,8 @@ export class RestockScene extends Phaser.Scene {
     this.busy = false;
     this.selected = null;
     this.supplierBtns = {};
+    this.categoryBtns = [];
+    this.categoryFilter = 'all';
     this.supplierNote = null;
     if (!supplierUnlocked(G.state, this.supplierId)) this.supplierId = 'co_tu';
     // Tiệm chỉ bán ở quầy (tiệm xôi) không có kệ: màn này chỉ còn phần nhập nguyên liệu.
@@ -124,6 +131,7 @@ export class RestockScene extends Phaser.Scene {
         const b = new Button(this, 68 + i * 124, top + 10, { w: 112, h: 28, size: 11.5, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => {
           this.supplierId = sp.id;
           this.cart = {};
+          this.list.setScroll(0);
           this.renderBuy();
         } });
         this.supplierBtns[sp.id] = b;
@@ -134,7 +142,35 @@ export class RestockScene extends Phaser.Scene {
     } else {
       this.buyLayer.add(txt(this, 14, top + 6, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay vào kho', { size: 12, color: HEX.muted }));
     }
-    this.list = new ScrollArea(this, top + (this.supplierNote ? 42 : 28), FOOT_Y - 4);
+    const filters: { id: ProductFilter; label: string }[] = [
+      { id: 'all', label: 'Tất cả' },
+      { id: 'dry', label: 'Đồ khô' },
+      { id: 'snack', label: 'Ăn vặt' },
+      { id: 'household', label: 'Đồ dùng' },
+      { id: 'drink', label: 'Đồ uống' },
+      { id: 'fresh', label: 'Đồ tươi' },
+      { id: 'frozen', label: 'Đông lạnh' },
+      { id: 'counter', label: 'Sau quầy' },
+      { id: 'food', label: 'Đồ ăn' },
+      { id: 'beverage', label: 'Pha chế' },
+    ];
+    const gridTop = top + (this.supplierNote ? 53 : 39);
+    const cols = 5;
+    const gap = 3;
+    const buttonW = (W - 20 - gap * (cols - 1)) / cols;
+    filters.forEach(({ id, label }, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const button = new Button(this, 10 + buttonW / 2 + col * (buttonW + gap), gridTop + row * 27, {
+        w: buttonW, h: 24, radius: 4, label, size: 10,
+        color: id === this.categoryFilter ? C.red : C.wood,
+        onTap: () => { this.categoryFilter = id; this.list.setScroll(0); this.renderBuy(); },
+      });
+      this.categoryBtns.push({ filter: id, button });
+      this.buyLayer.add(button);
+    });
+    const listTop = gridTop + 2 * 27 + 1;
+    this.list = new ScrollArea(this, listTop, FOOT_Y - 4);
 
     const foot = this.add.graphics();
     foot.fillStyle(C.hud, 1).fillRoundedRect(0, FOOT_Y, W, FOOT_H, { tl: 8, tr: 8, bl: 0, br: 0 });
@@ -145,7 +181,7 @@ export class RestockScene extends Phaser.Scene {
 
     this.cartText = txt(this, 12, FOOT_Y + 9, '', { size: 12.5, bold: true, color: HEX.cream });
     this.cartWarn = txt(this, 12, FOOT_Y + 28, '', { size: 10.5, color: '#ffb4a8', wrap: W - 24 });
-    const suggest = new Button(this, 49, H - 24, { w: 78, h: 38, radius: 5, label: '🪄 Gợi ý', color: C.blue, size: 12.5, onTap: () => {
+    const suggest = new Button(this, 49, H - 28, { w: 78, h: 38, radius: 5, label: '🪄 Gợi ý', color: C.blue, size: 12.5, onTap: () => {
       const sug = suggestRestockCart(G.state, this.supplierId);
       this.cart = sug.cart;
       this.suggested = new Set(Object.keys(sug.cart));
@@ -159,8 +195,8 @@ export class RestockScene extends Phaser.Scene {
       }
       this.renderBuy();
     } });
-    const clear = new Button(this, 126, H - 24, { w: 64, h: 38, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11.5, onTap: () => { this.cart = {}; this.renderBuy(); } });
-    this.buyBtn = new Button(this, 256, H - 24, { w: 172, h: 40, radius: 5, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => void this.buy() });
+    const clear = new Button(this, 126, H - 28, { w: 64, h: 38, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11.5, onTap: () => { this.cart = {}; this.renderBuy(); } });
+    this.buyBtn = new Button(this, 256, H - 28, { w: 172, h: 40, radius: 5, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => void this.buy() });
     this.buyLayer.add([foot, this.cartText, this.cartWarn, suggest, clear, this.buyBtn]);
   }
 
@@ -173,10 +209,16 @@ export class RestockScene extends Phaser.Scene {
   private renderBuy(): void {
     const s = G.state;
     for (const [id, b] of Object.entries(this.supplierBtns)) b.setColor(id === this.supplierId ? C.red : C.wood);
+    for (const { filter, button } of this.categoryBtns) button.setColor(filter === this.categoryFilter ? C.red : C.wood);
     this.supplierNote?.setText(supplier(this.supplierId).note);
     this.list.clear();
     // Món vừa gợi ý lên đầu, rồi tới món khách hỏi mà hết hàng hôm nay.
-    const items = this.products().sort((a, b) => (this.suggested.has(b.id) ? 1 : 0) - (this.suggested.has(a.id) ? 1 : 0) || (s.today.missed[b.id] ?? 0) - (s.today.missed[a.id] ?? 0));
+    const items = this.products()
+      .filter((p) => this.categoryFilter === 'all' || p.category === this.categoryFilter)
+      .sort((a, b) => (this.suggested.has(b.id) ? 1 : 0) - (this.suggested.has(a.id) ? 1 : 0) || (s.today.missed[b.id] ?? 0) - (s.today.missed[a.id] ?? 0));
+    if (!items.length) {
+      this.list.add(txt(this, W / 2, 28, 'Chưa có sản phẩm khả dụng trong nhóm này.', { size: 12, color: HEX.muted, origin: [0.5, 0.5] }));
+    }
     items.forEach((p, i) => {
       const y = i * ROW_H;
       const missed = s.today.missed[p.id] ?? 0;
@@ -220,7 +262,7 @@ export class RestockScene extends Phaser.Scene {
 
       this.list.add(itemsToAdd);
     });
-    this.list.setHeight(items.length * ROW_H + 8);
+    this.list.setHeight(items.length ? items.length * ROW_H + 8 : 56);
 
     const check = checkCart(s, this.cart, this.supplierId);
     const sp = supplier(this.supplierId);
@@ -316,9 +358,9 @@ export class RestockScene extends Phaser.Scene {
     const foot = this.add.graphics();
     foot.fillStyle(C.hud, 1).fillRect(0, FOOT_Y, W, H - FOOT_Y);
     const note = txt(this, 12, FOOT_Y + 10, 'Bày xong bấm "Bán tiếp" để mở lại tiệm.', { size: 11, color: HEX.cream });
-    const auto = new Button(this, 76, H - 30, { w: 132, h: 46, label: '✨ Tự bày', color: C.blue, onTap: () => void this.autoArrange() });
-    const resume = new Button(this, W - 84, H - 30, { w: 152, h: 48, label: 'Bán tiếp ▶', color: C.red, size: 17, onTap: () => this.close() });
-    this.arrangeLayer.add([this.shelves, g, this.whLabel, this.hint, foot, note, auto, resume]);
+    this.arrangeButton = new Button(this, 76, H - 38, { w: 132, h: 46, label: '✨ Tự bày', color: C.blue, onTap: () => void this.autoArrange() });
+    const resume = new Button(this, W - 84, H - 38, { w: 152, h: 48, label: 'Bán tiếp ▶', color: C.red, size: 17, onTap: () => this.close() });
+    this.arrangeLayer.add([this.shelves, g, this.whLabel, this.hint, foot, note, this.arrangeButton, resume]);
   }
 
   private renderArrange(): void {
@@ -399,28 +441,45 @@ export class RestockScene extends Phaser.Scene {
 
   /** Tự bày giữa giờ bán: nạp các ô đang có nút + xanh, rồi xếp món chưa có ô vào ô trống hợp lệ. */
   private async autoArrange(): Promise<void> {
+    if (this.arrangeBusy) return;
+    this.arrangeBusy = true;
+    this.arrangeButton.setEnabled(false);
     // Ô cần nạp tính trước khi xếp món mới: món mới chưa có ô nên không trùng với các ô này.
     const refills: { shelf: number; slot: number }[] = [];
     for (const shelf of usableShelves(G.state)) {
       G.state.shelves[shelf].forEach((_, slot) => { if (canRefill(G.state, shelf, slot)) refills.push({ shelf, slot }); });
     }
     const { placements, unplaced } = planNewProducts(G.state);
-    if (!refills.length && !placements.length && !unplaced.length) { toast(this, 'Kệ đã đầy, món nào trong kho cũng đã có ô.', H * 0.62); return; }
-    let ok = true;
-    for (const { shelf, slot } of refills) {
-      if (G.liveSnapshot) { if (!(ok = await this.liveCommand({ type: 'refillShelf', shelf, slot }))) break; }
-      else refillSlot(G.state, shelf, slot);
-    }
-    for (const { shelf, slot, productId } of ok ? placements : []) {
-      if (G.liveSnapshot) { if (!(await this.liveCommand({ type: 'assignShelf', shelf, slot, productId }))) break; }
-      else assignSlot(G.state, shelf, slot, productId);
-    }
-    if (refills.length || placements.length) play('pick');
-    if (!G.liveSnapshot) persist();
-    this.renderArrange();
-    if (unplaced.length) {
-      const groups = [...new Set(unplaced.map((id) => ZONE_NAMES[product(id).category as Exclude<Category, 'counter'>]?.toLowerCase() ?? 'sau quầy'))].join(', ');
-      toast(this, `Không đủ kệ/tủ cho nhóm: ${groups} (${unplaced.length} món)`, H * 0.62, C.redDark);
+    try {
+      if (!refills.length && !placements.length && !unplaced.length) {
+        toast(this, 'Kệ đã đầy, món nào trong kho cũng đã có ô.', H * 0.62);
+        return;
+      }
+      let ok = true;
+      for (const { shelf, slot } of refills) {
+        if (G.liveSnapshot) { if (!(ok = await this.liveCommand({ type: 'refillShelf', shelf, slot }))) break; }
+        else refillSlot(G.state, shelf, slot);
+      }
+      let placed = 0;
+      for (const { shelf, slot, productId } of ok ? placements : []) {
+        if (G.liveSnapshot) { if (!(await this.liveCommand({ type: 'assignShelf', shelf, slot, productId }))) break; }
+        else assignSlot(G.state, shelf, slot, productId);
+        placed++;
+      }
+      if (refills.length || placed) play('pick');
+      if (!G.liveSnapshot) persist();
+      this.renderArrange();
+      if (unplaced.length) {
+        const groups = [...new Set(unplaced.map((id) => ZONE_NAMES[product(id).category as Exclude<Category, 'counter'>]?.toLowerCase() ?? 'sau quầy'))].join(', ');
+        toast(this, `Đã xếp ${placed} món. Không đủ kệ/tủ cho nhóm: ${groups} (${unplaced.length} món)`, H * 0.62, C.redDark);
+      } else {
+        toast(this, `Đã tự bày xong${placed ? ` · ${placed} món mới` : ''}${refills.length ? ` · nạp ${refills.length} ô` : ''}.`, H * 0.62, C.greenDark);
+      }
+    } catch (error) {
+      toast(this, error instanceof Error ? `Tự bày bị lỗi: ${error.message}` : 'Tự bày bị lỗi.', H * 0.5, C.red);
+    } finally {
+      this.arrangeBusy = false;
+      this.arrangeButton.setEnabled(true);
     }
   }
 

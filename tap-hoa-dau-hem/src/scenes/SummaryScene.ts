@@ -221,9 +221,9 @@ export class SummaryScene extends Phaser.Scene {
       new Button(this, W / 2, H - 100 - lift, { w: 220, h: 40, label: `🎯 Nhận ${unclaimed} thưởng nhiệm vụ`, color: C.green, size: 13, onTap: () => this.scene.start('Quests', { back: 'Summary' }) });
     }
 
-    new Button(this, W / 2, H - 42, {
+    new Button(this, W / 2, H - 44, {
       w: 220,
-      h: 56,
+      h: 52,
       label: 'Ngày mới ☀️',
       color: C.red,
       size: 18,

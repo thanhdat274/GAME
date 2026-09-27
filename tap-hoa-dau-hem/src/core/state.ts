@@ -112,6 +112,8 @@ export interface StaffBoard {
   /** Ngày làm mới bảng gần nhất. */
   day: number;
   list: Candidate[];
+  /** Số ứng viên ban đầu; bảng không tự tuyển thêm người sau mỗi lần thuê. */
+  targetCount?: number;
 }
 
 /** Quy tắc "Khi tồn [món] dưới X thì nhập Y từ [mối]". */
@@ -519,7 +521,7 @@ export interface ActiveEvent {
 }
 
 export interface GameState {
-  version: 6;
+  version: 7;
   day: number;
   phase: Phase;
   /** Phút trong ngày (480 = 08:00) khi đang mở cửa. */
@@ -531,13 +533,15 @@ export interface GameState {
   warehouse: Lot[];
   /** Hàng giao tới khi kho đầy; phải dọn trước khi mở cửa. */
   holding: Lot[];
-  /** Ô bày hàng của từng nội thất có ô (kệ, tủ lạnh, tủ đông). 3 kệ đầu là kệ gốc giai đoạn 1. */
+  /** Ô bày hàng của từng nội thất có ô (kệ, tủ lạnh 1/2 cánh, tủ đông). 3 kệ đầu là kệ gốc giai đoạn 1. */
   shelves: Slot[][];
   /** Nhóm hàng của từng kệ; null nghĩa là chưa được gán khu. */
   zones: ShelfZone[];
   /** Tồn kho hàng chỉ bán khi khách yêu cầu ở quầy. */
   counter: Slot[];
   fixtures: Fixture[];
+  /** Nội thất đã mua nhưng cất khỏi mặt bằng; có thể đặt lại mà không trả tiền. */
+  storedFixtures: Fixture[];
   diningTables: DiningTableState[];
   nextUid: number;
   /** Mảnh đất đã mở (id trong land.json). */
@@ -656,7 +660,7 @@ export function createNewGame(): GameState {
   const b = DATA.balance;
   const fixtures = defaultFixtures();
   const state: GameState = {
-    version: 6,
+    version: 7,
     day: 1,
     phase: 'morning',
     clock: b.openMinute,
@@ -669,6 +673,7 @@ export function createNewGame(): GameState {
     zones: Array.from({ length: MAX_SHELVES }, () => null),
     counter: emptySlots(DATA.balance.counterSlots),
     fixtures,
+    storedFixtures: [],
     diningTables: [],
     nextUid: fixtures.length + 1,
     land: [],
@@ -737,7 +742,7 @@ export function createNewGame(): GameState {
 }
 
 const STORE_KEYS = [
-  'warehouse', 'holding', 'shelves', 'zones', 'counter', 'fixtures', 'diningTables', 'nextUid', 'land', 'warehouseTier', 'prices',
+  'warehouse', 'holding', 'shelves', 'zones', 'counter', 'fixtures', 'storedFixtures', 'diningTables', 'nextUid', 'land', 'warehouseTier', 'prices',
   'deliveries', 'ledger', 'regulars', 'quests', 'weeklyQuests', 'partyOrder', 'partyOrderWeek', 'decorOwned', 'lifetime', 'tutorialsSeen', 'ratings', 'reviews', 'yesterdaySold', 'yesterdayMissed',
   'yesterdayComplaints', 'today', 'lastGrandmaDay', 'seenIntro', 'lastSummary', 'announcedLevel', 'staff', 'staffBoard',
   'fixedCandidateUsed', 'schedule', 'scheduleReady', 'rules', 'planogram', 'analytics', 'managerStats', 'manager', 'wageDebt',
@@ -764,6 +769,7 @@ export function storeView(state: GameState, storeId: string): StoreData {
   const data = store.data as Partial<StoreData>;
   data.warehouse ??= [];
   data.holding ??= [];
+  data.storedFixtures ??= [];
   data.counter ??= [];
   data.soakBatches ??= [];
   data.cookedRice ??= [];
@@ -806,8 +812,13 @@ export function activateStore(state: GameState, id: string): boolean {
     else if (key === 'partyOrder') state.partyOrder = null;
     else if (key === 'partyOrderWeek') state.partyOrderWeek = -1;
     else if (key === 'reviews') state.reviews = [];
+    else if (key === 'storedFixtures') state.storedFixtures = [];
     else if (key === 'soakBatches') state.soakBatches = [];
     else if (key === 'cookedRice') state.cookedRice = [];
+  }
+  if (state.level >= 21 && DATA.land.plots.some((plot) => plot.id === 'H') && !state.land.includes('H')) {
+    state.land.push('H');
+    state.lifetime.landsOpened = state.land.filter((plotId) => !DATA.land.plots.find((plot) => plot.id === plotId)?.generatorOnly).length;
   }
   return true;
 }

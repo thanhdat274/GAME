@@ -609,6 +609,40 @@ PRODUCT_SPRITES.bat_lua = [
 ];
 
 /** Nội thất nhìn chính diện; kích thước khớp footprint (1 ô = 16 điểm ảnh). */
+function makeFridgeSprite(width: number, height: number, single: boolean): Sprite {
+  const pixels = Array.from({ length: height }, () => Array(width).fill('.')) as string[][];
+  const rect = (x: number, y: number, w: number, h: number, fill: string, border?: string) => {
+    for (let py = y; py < y + h; py++) for (let px = x; px < x + w; px++) {
+      pixels[py][px] = border && (px === x || px === x + w - 1 || py === y || py === y + h - 1) ? border : fill;
+    }
+  };
+  if (single) {
+    rect(4, 0, 8, 2, 'L', 'k');
+    rect(2, 2, 12, 13, 'L', 'k');
+    rect(3, 3, 10, 9, 'i', 'S');
+    rect(11, 6, 1, 4, 's');
+    rect(3, 12, 10, 2, 'S', 'k');
+    rect(4, 15, 3, 1, 'g');
+    rect(9, 15, 3, 1, 'g');
+  } else {
+    rect(6, 0, 20, 3, 'L', 'k');
+    rect(2, 2, 28, 12, 'L', 'k');
+    rect(3, 4, 12, 8, 'i', 'S');
+    rect(17, 4, 12, 8, 'i', 'S');
+    rect(15, 3, 2, 10, 'S', 'k');
+    rect(14, 7, 1, 3, 's');
+    rect(17, 7, 1, 3, 's');
+    rect(4, 6, 10, 1, 'W');
+    rect(18, 6, 10, 1, 'W');
+    rect(4, 9, 10, 1, 'W');
+    rect(18, 9, 10, 1, 'W');
+    rect(2, 14, 28, 1, 'g', 'k');
+    rect(5, 15, 4, 1, 'S');
+    rect(23, 15, 4, 1, 'S');
+  }
+  return pixels.map((row) => row.join(''));
+}
+
 export const FURNITURE_SPRITES: Record<string, Sprite> = {
   shelf: [
     'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk',
@@ -628,40 +662,8 @@ export const FURNITURE_SPRITES: Record<string, Sprite> = {
     'kkkeeeeeeeeeeeeeeeeeeeeeeeeeekkk',
     'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk',
   ],
-  fridge: [
-    'kkkkkkkkkkkkkkkk',
-    'kLLLLLLLLLLLLLLk',
-    'kLLwLLwLLwLLwLLk',
-    'kLLLLLLLLLLLLLLk',
-    'kWWWWWWWWWWWWWWk',
-    'kWSSSSSSSSSSSSWk',
-    'kWSwwiiiiiiiiSWk',
-    'kWSwwriwniwyiSWk',
-    'kWSirrinniyyiSWk',
-    'kWSirrinniyyiSWk',
-    'kWSirrinniyyiSWk',
-    'kWSssssssssssSWk',
-    'kWSiiiiiiiiiiSWk',
-    'kWSiwoiwliwpkSWk',
-    'kWSiooillippkSWk',
-    'kWSiooillippkSWk',
-    'kWSiooillippkSWk',
-    'kWSssssssssskSWk',
-    'kWSiiiiiiiiikSWk',
-    'kWSiwriwLiwniSWk',
-    'kWSirriLLinniSWk',
-    'kWSirriLLinniSWk',
-    'kWSirriLLinniSWk',
-    'kWSssssssssssSWk',
-    'kWSiiiiiiiiiiSWk',
-    'kWSllllllllllSWk',
-    'kWSllllllllllSWk',
-    'kWSSSSSSSSSSSSWk',
-    'kWWWWWWWWWWWWWWk',
-    'kggggggggggggggk',
-    'kggggggggggggggk',
-    'kkkkkkkkkkkkkkkk',
-  ],
+  fridge: makeFridgeSprite(32, 16, false),
+  fridge_single: makeFridgeSprite(16, 16, true),
   freezer: [
     '.SSSSSSSSSSSSSSSSSSSSSSSSSSSSSS.',
     '.SiwiiiiwiiiiwiiiiwiiiiwiiiiwiS.',
@@ -682,21 +684,21 @@ export const FURNITURE_SPRITES: Record<string, Sprite> = {
   ],
   storage_rack: [
     '.S............S.',
-    '.Sbbyybb......S.',
-    '.SbttttbbbbbbbS.',
-    '.SbttttbbccccbS.',
-    '.SbbbbbbbbbbbbS.',
+    '.S............S.',
+    '.S.kkkk...kkkkS.',
+    '.S.kbbbk.ktttkS.',
+    '.S.kbYbk.ktYtkS.',
+    '.S.kkkk...kkkkS.',
     '.ssssssssssssss.',
-    '.SbbbbbbbyyybbS.',
-    '.SbcccbbtttttbS.',
-    '.SbcccbbtttttbS.',
-    '.SbbbbbbbbbbbbS.',
+    '.S.kkkk...kkkkS.',
+    '.S.ktttk.kbbbkS.',
+    '.S.ktYtk.kbYbkS.',
+    '.S.kkkk...kkkkS.',
     '.ssssssssssssss.',
-    '.S.bbbyyyybbb.S.',
-    '.S.bttttttttb.S.',
-    '.S.bttttttttb.S.',
-    '.S.bbbbbbbbbb.S.',
-    '.ssssssssssssss.',
+    '.S.kkkk...kkkkS.',
+    '.S.kbbbk.ktttkS.',
+    '.S.kbYbk.ktYtkS.',
+    '.S.kkkk...kkkkS.',
   ],
   counter: [
     '..................kkkkkkkkkkk...',
@@ -716,6 +718,24 @@ export const FURNITURE_SPRITES: Record<string, Sprite> = {
     'kbbbBbbbbbBbbbbbBbbbbbBbbbbbBbbk',
     'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk',
   ],
+  generator: [
+    '................................',
+    '..........kkkkkkkkkk............',
+    '.........kssssssssssk............',
+    '.........kskkkkskkksk............',
+    '...kkkkkkkrrrrrrrrrrkkkkkkk......',
+    '..krrrrrrrkrkkkkkkkkrkrrrrrrk.....',
+    '..krrrrrrrkrdddddddkkrkrrrrrk.....',
+    '..krrrrrrrkrdkdkdkdkrkrrrrrrk.....',
+    '..krrrrrrrkrdddddddkkrkrrrrrk.....',
+    '..krrrrrrrkrrrrrrrrrkrrrrrrrk.....',
+    '..kkkkkkkkkkkkkkkkkkkkkkkkkkk.....',
+    '....kkkk................kkkk......',
+    '...kdddk..............kdddk.......',
+    '..kdddddkk..........kkdddddk........',
+    '..kkkkkkkk..........kkkkkkkk.......',
+    '................................',
+  ].map((row) => row.padEnd(32, '.').slice(0, 32)),
   chau_cay: [
     '................',
     '.......n........',
@@ -756,6 +776,8 @@ export const FURNITURE_SPRITES: Record<string, Sprite> = {
 
 // Giai đoạn 3: kệ đôi khung thép (chứa gấp đôi) và quầy thu ngân 2 (máy tính tiền màu xanh dương).
 FURNITURE_SPRITES.shelf_double = FURNITURE_SPRITES.shelf.map((row) => row.replace(/[te]/g, 's').replace(/B/g, 'S'));
+FURNITURE_SPRITES.shelf_3 = FURNITURE_SPRITES.shelf_double;
+FURNITURE_SPRITES.shelf_4 = FURNITURE_SPRITES.shelf_double;
 FURNITURE_SPRITES.counter2 = FURNITURE_SPRITES.counter.map((row) => row.replace(/n/g, 'l'));
 
 // Phase 4 product art: reuse matching item silhouettes until bespoke sprites are drawn.
@@ -1779,12 +1801,229 @@ Object.assign(PRODUCT_SPRITES, {
   ],
 } satisfies Record<string, Sprite>);
 
-// Phase 4 fixtures inherit footprint-compatible cabinet art as temporary placeholders.
-for (const [id, source] of Object.entries({
-  food_grill: 'counter', hot_kettle: 'storage_rack', bread_case: 'shelf', food_table_2: 'storage_rack', food_table_4: 'counter',
-  drink_counter: 'counter', blender: 'storage_rack', sugarcane_press: 'counter', drink_table_2: 'storage_rack', generator: 'counter',
-  thung_ngam: 'storage_rack', xung_hap: 'storage_rack',
-})) FURNITURE_SPRITES[id] = FURNITURE_SPRITES[source];
+// Lô hàng đa dạng cho tiệm lớn hơn: gói khô, bánh kẹo, chăm sóc cá nhân,
+// rau thịt, đồ đông lạnh và đồ uống đều có sprite riêng theo cùng phong cách pixel.
+Object.assign(PRODUCT_SPRITES, {
+  ca_moi_hop: groceryJar8('r', 'w', 'Y'),
+  dau_do: groceryBag8('R', 'r', 't'),
+  bot_cacao: groceryBag8('b', 't', 'Y'),
+  bot_cari: groceryBag8('Y', 'o', 'r'),
+  ngu_vi_huong: groceryJar8('t', 'Y', 'b'),
+  sa_te: groceryJar8('r', 'Y', 'R'),
+  dau_nanh_hat: groceryBag8('Y', 'n', 't'),
+  mi_y_kho: groceryBag8('Y', 'r', 'o'),
+  banh_quy_oreo: groceryBag8('b', 'w', 'L'),
+  banh_chocopie: groceryBag8('b', 'r', 'Y'),
+  snack_khoai_tay: groceryBag8('Y', 'o', 'r'),
+  socola_thanh: groceryBag8('b', 't', 'R'),
+  bap_rang_caramel: groceryBag8('Y', 'w', 'o'),
+  banh_cracker: groceryBag8('t', 'Y', 'b'),
+  rong_bien_cuon: groceryBag8('n', 'w', 'N'),
+  keo_bac_ha: groceryBag8('l', 'w', 'n'),
+  sua_bot_tre_em: groceryCarton8('w', 'p', 'q'),
+  nuoc_suc_mieng: drinkBottle8('L', 'w', 'l'),
+  sua_rua_mat: drinkBottle8('p', 'w', 'q'),
+  kem_duong_da: groceryJar8('w', 'p', 'q'),
+  giay_khan_mat: groceryCarton8('w', 'L', 's'),
+  mieng_rua_chen: groceryBag8('n', 'Y', 'o'),
+  binh_xit_con_trung: drinkBottle8('n', 'Y', 'r'),
+  xa_lach: pixelSprite8('...nn...', '..knnk..', '.knnnNk.', 'knnwwnnk', 'knnNnnnk', '.knnnnk.', '..knnk..', '...kk...'),
+  dua_gia: pixelSprite8('..k.k...', '.knknk..', 'knnnnnk.', '.knnkn..', 'knnknnk.', '.knnnk..', '..kk....', '........'),
+  khoai_mon: pixelSprite8('........', '..kkk...', '.kvvvVk.', 'kvvVvvvk', 'kvvvvvvk', '.kvvvVk.', '..kkk...', '........'),
+  nam_bao_ngu: pixelSprite8('..kkkk..', '.kwwwwk.', 'kwwWwwwk', '.knnNnk.', '..knnk..', '..knnk..', '..knnk..', '..kkkk..'),
+  ca_ro_phi: pixelSprite8('........', '..kkk...', '.kLLLk..', 'kLtwwLk.', '.kLLLkk.', '..kkkk..', '........', '........'),
+  muc_tuoi: pixelSprite8('........', '..kkkk..', '.kwwwwk.', 'kwwWwwk.', '.kwwwwk.', '..kwwk..', '.k.k.k..', '........'),
+  thit_xay: pixelSprite8('........', '..kkkk..', '.krrrrk.', 'krrRrrrk', 'krrwwrrk', '.krrrrk.', '..kkkk..', '........'),
+  ca_hoi_tuoi: pixelSprite8('........', '..kkk...', '.ktRttk.', 'ktRwwttk', '.ktRttkk', '..kkkk..', '........', '........'),
+  cha_muc: groceryBag8('w', 's', 'L'),
+  vien_tha_lau: groceryBag8('t', 'r', 'Y'),
+  ca_hoi_dong_lanh: groceryBag8('p', 'w', 'L'),
+  bap_non_dong_lanh: groceryBag8('Y', 'n', 'L'),
+  milo_hop: drinkCarton8('b', 'w', 'R'),
+  sua_dau_nanh_hop: drinkCarton8('Y', 'n', 'w'),
+  tra_sua_chai: drinkBottle8('b', 't', 'B'),
+  nuoc_dua_tuoi_chai: drinkBottle8('w', 'n', 't'),
+  nuoc_cam_hop: drinkCarton8('o', 'Y', 'r'),
+  ca_phe_sua_lon: drinkCan8('b', 'w', 'Y'),
+  nuoc_sam: drinkBottle8('b', 'Y', 'n'),
+} satisfies Record<string, Sprite>);
+
+// Các biến thể nước đóng lon/chai/hộp có cùng dáng bao bì nhưng phối màu và nhãn pixel riêng.
+function drinkCan8(body: string, label: string, detail: string): Sprite {
+  return pixelSprite8(
+    '...ss...', `...k${body}k..`, `.k${body.repeat(4)}k.`, `k${body.repeat(6)}k`,
+    `k${body}${label}${label}${body.repeat(3)}k`, `k${body}${detail}${detail}${body.repeat(3)}k`,
+    `.k${body.repeat(4)}k.`, '..kkkk..',
+  );
+}
+
+function drinkBottle8(body: string, label: string, cap: string): Sprite {
+  return pixelSprite8(
+    `..k${cap}k...`, `...k${body}k..`, `..k${body.repeat(2)}k..`, `.k${body.repeat(4)}k.`,
+    `k${body}${label}${label}${body.repeat(3)}k`, `k${body.repeat(6)}k`, `.k${body.repeat(4)}k.`, '..kkkk..',
+  );
+}
+
+function drinkCarton8(body: string, label: string, top: string): Sprite {
+  return pixelSprite8(
+    `..k${top.repeat(2)}k..`, `.k${body.repeat(4)}k.`, `k${body.repeat(6)}k`,
+    `k${body}${label}${label}${body.repeat(3)}k`, `k${body.repeat(6)}k`,
+    `k${body}${top}${top}${body.repeat(3)}k`, `.k${body.repeat(4)}k.`, '..kkkk..',
+  );
+}
+
+Object.assign(PRODUCT_SPRITES, {
+  coca_cola_plus: drinkCan8('r', 'w', 'Y'),
+  pepsi_chanh: drinkCan8('L', 'y', 'n'),
+  fanta_nho: drinkCan8('v', 'w', 'V'),
+  fanta_dau: drinkCan8('R', 'p', 'r'),
+  mirinda_vai: drinkCan8('p', 'w', 'r'),
+  mirinda_dua: drinkCan8('o', 'Y', 'y'),
+  schweppes_tonic: drinkCan8('s', 'w', 'L'),
+  aquafina_soda: drinkCan8('L', 'i', 'w'),
+  milkis_dua_gang: drinkCan8('l', 'w', 'n'),
+  milkis_chuoi: drinkCan8('Y', 'w', 'y'),
+  soda_vai_genki: drinkBottle8('p', 'w', 'V'),
+  tea_plus_oolong_chanh: drinkBottle8('n', 'y', 'N'),
+  tea_plus_oolong_dao: drinkBottle8('t', 'p', 'r'),
+  tea_plus_oolong_truyen_thong: drinkBottle8('n', 'w', 'N'),
+  fuze_tea_bi_dao: drinkBottle8('n', 'Y', 'N'),
+  fuze_tea_chanh_sa: drinkBottle8('n', 'y', 'N'),
+  fuze_tea_vai: drinkBottle8('p', 'w', 'V'),
+  twister_cam: drinkBottle8('o', 'Y', 'r'),
+  nuoc_nho_trang_gas: drinkBottle8('c', 'Y', 'w'),
+  nuoc_tao_ep: drinkCarton8('r', 'w', 'Y'),
+  nuoc_le_ep: drinkCarton8('n', 'w', 'Y'),
+  nuoc_luu: drinkCarton8('R', 'p', 'r'),
+  yakult: drinkBottle8('w', 'r', 'r'),
+  yomost_dau: drinkCarton8('p', 'w', 'r'),
+  yomost_luu: drinkCarton8('R', 'w', 'p'),
+  probi_dao: drinkBottle8('t', 'p', 'r'),
+  betagen_cam: drinkBottle8('o', 'w', 'r'),
+  ca_phe_sua_chai: drinkBottle8('b', 'c', 'B'),
+  sua_socola_hop: drinkCarton8('B', 'c', 'b'),
+  sua_dau_phong: drinkCarton8('t', 'Y', 'b'),
+} satisfies Record<string, Sprite>);
+
+// Chuẩn hóa pixel art cho footprint của từng nội thất.
+function fitFurnitureSprite(width: number, rows: string[]): Sprite {
+  const height = 16;
+  const vertical = rows.length >= height
+    ? rows.slice(0, height)
+    : [...Array(Math.floor((height - rows.length) / 2)).fill('.'.repeat(width)), ...rows, ...Array(Math.ceil((height - rows.length) / 2)).fill('.'.repeat(width))];
+  return vertical.map((row) => {
+    const clipped = row.slice(0, width);
+    const left = Math.floor((width - clipped.length) / 2);
+    return `${'.'.repeat(left)}${clipped}${'.'.repeat(width - left - clipped.length)}`;
+  });
+}
+
+// Góc đồ ăn, bàn ghế và quầy nước: mỗi nội thất có dáng riêng thay vì dùng hình tủ/quầy chung.
+Object.assign(FURNITURE_SPRITES, {
+  food_grill: fitFurnitureSprite(32, [
+    '........kkkkkkkkkkkk........', '.......ksssssssssssskk......',
+    '......kssssssssssssssk......', '.....kkkkkkkkkkkkkkkkkk.....',
+    '.....kBBBBBBBBBBBBBBBBk.....', '.....kBrrrrrrrrrrrrrrBk.....',
+    '.....kBrrrYrrYrrYrrrrBk.....', '.....kBrrrYrrYrrYrrrrBk.....',
+    '.....kBrrrrrrrrrrrrrrBk.....', '.....kBBBBBBBBBBBBBBBBk.....',
+    '.....kttttttttttttttttk.....', '.....kkkkkkkkkkkkkkkkkk.....',
+    '........kBkk....kkBk.........', '........kkkk....kkkk.........',
+  ]),
+  hot_kettle: fitFurnitureSprite(16, [
+    '......kYk.......', '......k.k.......', '.....k...k......',
+    '.......k........', '....kkkkkkkk....', '..kkcwwwwwwckk..',
+    '.kcwwwwwwwwwck.', 'kwcwwwwwwwwwcwk', 'kwcwwwwwwwwwcwk',
+    '.kccccccccccck.', '..kkkkkkkkkkkk..', '...kBBBBBBBk....',
+    '...kkkkkkkkk....', '..kBkk....kkB...',
+  ]),
+  bread_case: fitFurnitureSprite(32, [
+    '....kkkkkkkkkkkkkkkkkkkk....', '...ksssssssssssssssssssskk..',
+    '..ksiiiiiiiiiiiiiiiiiiiisk..', '..ksicccccccccccccccccccisk..',
+    '..ksicYYcYYcYYcYYcYYcYYcisk.', '..ksicttcttccttccttccttcisk.',
+    '..ksicccccccccccccccccccisk..', '..ksiiiiiiiiiiiiiiiiiiiisk..',
+    '..ksBBBBBBBBBBBBBBBBBBBBSk..', '..kkkkkkkkkkkkkkkkkkkkkkkk..',
+    '...kBkk..............kkBk...', '...kkkk..............kkkk...',
+  ]),
+  food_table_2: fitFurnitureSprite(16, [
+    '....kkkkkkkk....', '...kttttttttk...', '..kttttttttttk..',
+    '..kttttttttttk..', '..kkkkkkkkkkkk..',
+    '...kB......Bk...', '...kB......Bk...', '...kB......Bk...',
+    '...kB......Bk...', '...kB......Bk...', '...kB......Bk...',
+    '..kkk......kkk..',
+  ]),
+  drink_table_2: fitFurnitureSprite(16, [
+    '....kkkkkkkk....', '...kLLLLLLLLk...', '..kLllllllllLLk.',
+    '..kLLLLLLLLLLk..', '..kkkkkkkkkkkk..',
+    '...kB......Bk...', '...kB......Bk...', '...kB......Bk...',
+    '...kB......Bk...', '...kB......Bk...', '...kB......Bk...',
+    '..kkk......kkk..',
+  ]),
+  food_table_4: fitFurnitureSprite(32, [
+    '....kkkkkkkkkkkkkkkkkkkk....', '...kttttttttttttttttttttk...',
+    '..kttttttttttttttttttttttk..', '..kkkkkkkkkkkkkkkkkkkkkkkk..',
+    '...kBkk....kkB....kkBkk.....', '...kkkk....kkk....kkkkk.....',
+    '...kBkk....kkB....kkBkk.....', '...kkkk....kkk....kkkkk.....',
+    '...kBkk....kkB....kkBkk.....', '...kkkk....kkk....kkkkk.....',
+  ]),
+  drink_counter: fitFurnitureSprite(32, [
+    '.........kkkkkkkkkkkk........', '........ksssssssssssskk......',
+    '........kLLLLLLLLLLLLLk......', '........kLwLLwLLwLLwLLLk......',
+    '........kkkkkkkkkkkkkkk.......', '...kk....kttttttttttttk........',
+    '..kYYk...kBBBBBBBBBBBBk........', '..kYYk...kBddddddddddBk........',
+    '..kkkk...kBdnNdkkdNndBk........', '.........kBddddddddddBk........',
+    '.........kBBBBBBBBBBBBk........', '.........kkkkkkkkkkkkkk........',
+    '..........kBkk......kkBk........', '..........kkkk......kkkk........',
+  ]),
+  blender: fitFurnitureSprite(16, [
+    '......kkkk......', '.....ksssssk.....', '.....kLiiLk.....',
+    '.....kLiiLk.....', '.....kLwYLk.....', '.....kLiiLk.....',
+    '.....kLLLLk.....', '.....kkkkkk.....', '....kBBBBBBk....',
+    '...kBYYYYYBk....', '...kBBBBBBBk....', '..kkkkkkkkkkk...',
+    '..kBkk....kkB...', '..kkkk....kkkk..',
+  ]),
+  sugarcane_press: fitFurnitureSprite(32, [
+    '......kkkkkk............kkkk....', '.....kssssssk..........ksssssk...',
+    '....ksssssssskk........kssssssk...', '....kkkkkkkkkkk........kkkkkkkk...',
+    '....kBBBBBBBBBk........kBBYYYYBk...', '....kBnNnNnNnBk........kBBYYYYBk...',
+    '....kBBBBBBBBBk........kBBYYYYBk...', '....kkkkkkkkkkk........kkkkkkkk...',
+    '....ksssssssssk....................', '....kBBBBBBBBBk....................',
+    '....kBBBBBBBBBk....................', '....kkkkkkkkkkk....................',
+    '.....kBkk..kkB......................', '.....kkkk..kkkk.....................',
+  ]),
+  thung_ngam: fitFurnitureSprite(16, [
+    '.....kkkkkk.....', '....kssssssk....', '...kBBBBBBBBk...',
+    '..kBttttttttBk..', '..kBttttttttBk..', '..kBttttttttBk..',
+    '..kBttttttttBk..', '..kBttttttttBk..', '..kBBBBBBBBBBk..',
+    '...kkkkkkkkkk...', '....kBkk..kkB...', '....kkkk..kkkk..',
+  ]),
+  xung_hap: fitFurnitureSprite(16, [
+    '......kYk.......', '.....k...k......', '......k.k.......',
+    '...kkkkkkkkkk...', '..kssssssssssk..', '.ksiiiiiiiiisk.',
+    '.ksicccccccisk.', '.ksicYYYYYYcisk.', '.ksicccwwccisk.',
+    '.ksicYYYYYYcisk.', '.ksicccccccisk.', '..ksssssssssk...',
+    '...kBBBBBBBBk...', '...kkkkkkkkkk...', '..kBkk....kkB...',
+  ]),
+});
+
+// Quầy xôi là tủ trưng bày riêng, dùng footprint 1×1 và khác hẳn kệ kho chung.
+FURNITURE_SPRITES.quay_xoi = [
+  '................',
+  '......kkkk......',
+  '....kkcccckk....',
+  '...kciiiiiick...',
+  '...kcYYccYYck...',
+  '...kcccccccck...',
+  '..kkkkkkkkkkkk..',
+  '..kttttttttttk..',
+  '..kBBBBBBBBBBk..',
+  '..kkBBBBBBBBkk..',
+  '....kB....kB....',
+  '....kB....kB....',
+  '....kkkkkkkk....',
+  '.......kk.......',
+  '................',
+  '................',
+];
 
 // Hàng bổ sung (vẽ từ các khuôn chai / lon / hộp / gói / túi dùng chung).
 Object.assign(PRODUCT_SPRITES, {
@@ -1936,22 +2175,325 @@ for (const [id, source] of Object.entries({
   xoi_dau_xanh_goi: 'banh_bao', xoi_man_goi: 'banh_bao', xoi_trung_goi: 'banh_bao', xoi_dua_goi: 'banh_bao',
 })) PRODUCT_SPRITES[id] = PRODUCT_SPRITES[source];
 
-// Quầy trưng bày xôi (1×1).
-FURNITURE_SPRITES.quay_xoi = [
-  '................',
-  '......kkkk......',
-  '....kkcccckk....',
-  '...kciiiiiick...',
-  '...kcYYccYYck...',
-  '...kcccccccck...',
-  '..kkkkkkkkkkkk..',
-  '..kttttttttttk..',
-  '..kBBBBBBBBBBk..',
-  '..kkBBBBBBBBkk..',
-  '....kB....kB....',
-  '....kB....kB....',
-  '....kkkkkkkk....',
-  '.......kk.......',
-  '................',
-  '................',
-];
+// Rau củ và trái cây mới: vẽ riêng theo lưới pixel 8x8, phóng mỗi pixel thành 2x2.
+function pixelSprite8(...rows: string[]): Sprite {
+  return rows.flatMap((row) => {
+    const doubled = [...row].map((pixel) => pixel + pixel).join('');
+    return [doubled, doubled];
+  });
+}
+
+Object.assign(PRODUCT_SPRITES, {
+  toi: pixelSprite8(
+    '...kk...', '..kcck..', '.kcccck.', '.kcwwck.', '..kcck..', '...kk...', '...kk...', '........',
+  ),
+  hanh_kho: pixelSprite8(
+    '...kk...', '..kttk..', '.kttttk.', '.ktWWtk.', '.kttttk.', '..kttk..', '...kk...', '........',
+  ),
+  ca_rot: pixelSprite8(
+    '...nn...', '..knnk..', '..kook..', '..koYk..', '...koYk.', '....kok.', '.....kk.', '........',
+  ),
+  dua_leo: pixelSprite8(
+    '........', '.kNNNk..', 'knnnnnk.', 'knnwnnk.', 'knnnNnk.', 'knnnnnk.', '.kNNNk..', '........',
+  ),
+  bap_cai: pixelSprite8(
+    '...nn...', '..knnnk.', '.knwnnnk', 'knnnnnnk', 'knnnNnnk', '.knnnnnk', '..kNNNk.', '........',
+  ),
+  bi_do: pixelSprite8(
+    '...nn...', '..knnk..', '.kYYYYk.', 'kYyYyYyk', 'kYyYyYyk', '.kYYYYk.', '..kYYk..', '........',
+  ),
+  bong_cai_xanh: pixelSprite8(
+    '..knk...', '.knnnk..', 'knNnnnnk', 'knnnNnnk', '.knnnnk.', '..kttk..', '..kttk..', '...kk...',
+  ),
+  kho_qua: pixelSprite8(
+    '........', '..kNNk..', '.knnnnnk', 'knNnnNnk', 'knnnnnnk', '.knnnnnk', '..kNNk..', '........',
+  ),
+  gung: pixelSprite8(
+    '........', '..kk....', '.kttkk..', 'ktttttk.', '.ktttk..', '..ktttk.', '..kttk..', '....kk..',
+  ),
+  rau_mui: pixelSprite8(
+    '...n....', '..knk...', '.knnnk..', 'knnNnnk.', '..knnnk.', '.knnnnk.', '..kttk..', '...kk...',
+  ),
+  bap: pixelSprite8(
+    '...nn...', '..knnk..', '.kyyYyk.', '.kYyYyk.', '.kyyYyk.', '.kYyYyk.', '..kyyk..', '...kk...',
+  ),
+  tao: pixelSprite8(
+    '...knk..', '..krrk..', '.krrrrk.', 'kRrrwrrk', 'krrrrrrk', '.krrrrk.', '..kkkk..', '........',
+  ),
+  na: pixelSprite8(
+    '...kn...', '..knnk..', '.knnnNk.', 'knnnnnnk', 'knNnnnnk', '.knnnnk.', '..kNNk..', '........',
+  ),
+  mang_cut: pixelSprite8(
+    '..nn....', '.knnk...', 'kvvvvvk.', 'kVvvVvvk', 'kvvvvvvk', '.kvvvvk.', '..kVVk..', '........',
+  ),
+  nho_xanh: pixelSprite8(
+    '...nn...', '..knnk..', '.knnnnk.', 'knnNnnnk', '.knnnnk.', '..knnk..', '...kk...', '........',
+  ),
+  nho_tim: pixelSprite8(
+    '...nn...', '..knnk..', '.kvvvvk.', 'kVvvVvvk', '.kvvvvk.', '..kvvk..', '...kk...', '........',
+  ),
+  thanh_long_trang: pixelSprite8(
+    '...nn...', '..knnk..', '.krrrrk.', 'krcccrrk', 'krcwcrrk', '.krrrrk.', '..krrk..', '........',
+  ),
+  thanh_long_tim: pixelSprite8(
+    '...nn...', '..knnk..', '.krrrrk.', 'krvvvrrk', 'krvVvrrk', '.krrrrk.', '..krrk..', '........',
+  ),
+  xoai: pixelSprite8(
+    '...nn...', '..knnk..', '.kYYYYk.', 'kYooYyYk', 'kYooYyYk', '.kYYYYk.', '..kYYk..', '........',
+  ),
+  cam: pixelSprite8(
+    '...kn...', '..koYk..', '.koooYk.', 'koowooYk', 'kYooooYk', '.kYYYYk.', '..kYYk..', '........',
+  ),
+  dua_hau: pixelSprite8(
+    '........', '.kNNNNk.', 'knnnnnnk', 'knrrrrnk', 'knrkrRnk', '.knnnnk.', '..kkkk..', '........',
+  ),
+  du_du: pixelSprite8(
+    '...nn...', '..knnk..', '.kYYYYk.', 'kYooYyYk', 'kYyooYYk', '.kYYYYk.', '..kYYk..', '........',
+  ),
+  thom: pixelSprite8(
+    '...n.n..', '..knnnk.', '...kYk..', '..kYYYk.', '.kYyYYk.', '.kYYYyk.', '..kYYk..', '...kk...',
+  ),
+  oi: pixelSprite8(
+    '...nn...', '..knnk..', '.knnnNk.', 'knnnnnnk', 'knwnnnnk', '.knnnnk.', '..kNNk..', '........',
+  ),
+  bo: pixelSprite8(
+    '...nn...', '..knnk..', '.kNNNNk.', 'knnnnnNk', 'knnnnnNk', '.knnNnk.', '..kNNk..', '........',
+  ),
+  mit: pixelSprite8(
+    '...nn...', '..knnk..', '.kYYYYk.', 'kYyYyYYk', 'kYYYYyYk', '.kYYYYk.', '..kYYk..', '........',
+  ),
+  chom_chom: pixelSprite8(
+    '...nn...', '.krkrk..', 'krRrRrk.', '.krRrRrk', 'krRrRrk.', '.krRrk..', '..krk...', '........',
+  ),
+  vai: pixelSprite8(
+    '....nn..', '...knnk.', '..krrk..', '.krrrrk.', '..krrk..', '...kk...', '........', '........',
+  ),
+  buoi: pixelSprite8(
+    '...kn...', '..kYYk..', '.kYYYYk.', 'kYyYYyyk', 'kYYYYYyk', '.kYYYYk.', '..kYYk..', '........',
+  ),
+  chanh_day: pixelSprite8(
+    '........', '..kvvk..', '.kvVVvvk', 'kvvvvvvk', 'kvVwVvvk', '.kvvvvvk', '..kVVk..', '........',
+  ),
+  banh_trang: pixelSprite8(
+    '........', '..kkkk..', '.kcccck.', 'kcttttck', 'kctwwtck', 'kcttttck', '.kcccck.', '..kkkk..',
+  ),
+  bot_nang: pixelSprite8(
+    '...kk...', '..kcck..', '.kcccck.', 'kccwwcck', 'kcccccck', 'kccYccck', '.kcccck.', '..kkkk..',
+  ),
+  bot_gao: pixelSprite8(
+    '...kk...', '..kcck..', '.kcccck.', 'kccwccck', 'kcccccck', 'kccYccck', '.kcccck.', '..kkkk..',
+  ),
+  nui_kho: pixelSprite8(
+    '........', '.kYYYYk.', 'kYyYyYYk', 'kYyYyYYk', '.kYYYYk.', '..kYYk..', '..kYYk..', '........',
+  ),
+  mi_trung_kho: pixelSprite8(
+    '........', '..kkkk..', '.kYYYYk.', 'kYyYyYyk', 'kYyYyYyk', '.kYYYYk.', '..kYYk..', '...kk...',
+  ),
+  mien_dong: pixelSprite8(
+    '........', '..kkkk..', '.kccck..', 'kcccccck', 'kccwccck', '.kcccck.', '..kcck..', '...kk...',
+  ),
+  nam_meo_kho: pixelSprite8(
+    '........', '...kk...', '..kbbk..', '.kBBBBk.', 'kBbBBbbk', '..kBBk..', '..kbbk..', '...kk...',
+  ),
+  nam_huong_kho: pixelSprite8(
+    '........', '...kk...', '..kttk..', '.kttttk.', 'kttWtWtk', '..kttk..', '..ktk...', '...kk...',
+  ),
+  tom_kho: pixelSprite8(
+    '........', '..krr...', '.krRrk..', 'krRRrrk.', '.krRrrk.', '..krRk..', '...kk...', '........',
+  ),
+  ca_kho: pixelSprite8(
+    '........', '..kkk...', '.ktttk..', 'kttwttk.', 'kttttttk', '.ktttk..', '..kkk...', '........',
+  ),
+  ot_bot: pixelSprite8(
+    '...kk...', '..krrk..', '.krrrrk.', 'krrrrrrk', 'krrrrrrk', '.krrrrk.', '..kkkk..', '..krrk..',
+  ),
+  tieu_hat: pixelSprite8(
+    '...kk...', '..kcck..', '.kcccck.', 'kcckkcck', 'kcckkcck', '.kcccck.', '..kcck..', '..kkkk..',
+  ),
+  dua_cot_hop: pixelSprite8(
+    '...kk...', '..kwwk..', '.kcccck.', 'kccwwcck', 'kcccccck', 'kcccccck', '.kcccck.', '..kkkk..',
+  ),
+  bap_rang_bo: pixelSprite8(
+    '........', '..kkkk..', '.kYYYYk.', 'kYwYwYYk', 'kYYwYwYk', '.kYYYYk.', '..kttk..', '..kkkk..',
+  ),
+  snack_bap: pixelSprite8(
+    '........', '.kkkkkk.', 'kYYYYYYk', 'kYyYwYYk', 'kYYyYYyk', 'kYYYYYYk', '.kYYYYk.', '..kkkk..',
+  ),
+  banh_xop: pixelSprite8(
+    '........', '.kkkkkk.', 'kttttttk', 'ktwttwtk', 'kttttttk', 'ktwttwtk', 'kttttttk', '.kkkkkk.',
+  ),
+  banh_trang_nuong: pixelSprite8(
+    '........', '..kkkk..', '.kttttk.', 'kttYYYYk', 'kYtYwYtk', 'kYYYYYYk', '.kttttk.', '..kkkk..',
+  ),
+  com_chay: pixelSprite8(
+    '........', '..kkkk..', '.kYYYYk.', 'kYtYtYYk', 'kYtYtYYk', '.kYYYYk.', '..kYYk..', '........',
+  ),
+  kho_bo: pixelSprite8(
+    '........', '.kkkkkk.', 'kBBBBBBk', 'kBtttBBk', 'kBtBBtBk', 'kBtttBBk', '.kBBBBk.', '..kkkk..',
+  ),
+  kho_muc: pixelSprite8(
+    '........', '..krrk..', '.krRrk..', 'krrrrrrk', '.krrrk..', '..krrk..', '.k.k.k..', '........',
+  ),
+  keo_mut: pixelSprite8(
+    '........', '...kkkk.', '..kpppk.', '.kpppppk', '.kpwpppk', '..kpppk.', '...ktk..', '...ktk..',
+  ),
+  keo_lac: pixelSprite8(
+    '........', '..kkkk..', '.kYYttk.', 'kYtYYttk', 'kYYtYttk', '.kYtYk..', '..kkkk..', '........',
+  ),
+  banh_dau_xanh: pixelSprite8(
+    '........', '.kkkkkk.', 'kcccccck', 'kcYYccck', 'kcYYYYck', 'kccYYcck', '.kcccck.', '..kkkk..',
+  ),
+  hat_dieu_rang: pixelSprite8(
+    '........', '..kkk...', '.ktttk..', 'ktttttk.', 'ktYtttk.', '.ktttk..', '..kkk...', '........',
+  ),
+  hat_huong_duong: pixelSprite8(
+    '........', '..knk...', '.knnnnk.', 'knnyynk.', '.knnNnk.', '..kNNk..', '...kk...', '........',
+  ),
+  me_say: pixelSprite8(
+    '........', '..kkkk..', '.kBBBBk.', 'kBttttBk', 'kBtttBBk', '.kBBBBk.', '..kBBk..', '........',
+  ),
+  mut_dua: pixelSprite8(
+    '........', '..kkkk..', '.kccck..', 'kccwwcck', '.kccck..', 'kccwwcck', '.kccck..', '..kkkk..',
+  ),
+  khoai_lang_say: pixelSprite8(
+    '........', '..kkkk..', '.kbbbk..', 'kbtYtbk.', 'kbYtYbk.', '.kbtbk..', '..kkkk..', '........',
+  ),
+  coca_cola_lon: pixelSprite8(
+    '...kk...', '..krrk..', '.krrrrk.', 'krrrrrrk', 'krrwwrrk', 'krrrrrrk', '.krrrrk.', '..kkkk..',
+  ),
+  coca_cola_zero: pixelSprite8(
+    '...kk...', '..kkkk..', '.kBBBBk.', 'kBBBBBBk', 'kBwwBBBk', 'kBBBBBBk', '.kBBBBk.', '..kkkk..',
+  ),
+  pepsi_lon: pixelSprite8(
+    '...kk...', '..krrk..', '.kLLLLk.', 'kLLLLLLk', 'kLwwLLLk', 'kLLLLLLk', '.kLLLLk.', '..kkkk..',
+  ),
+  pepsi_black: pixelSprite8(
+    '...kk...', '..kkkk..', '.kBBBBk.', 'kBBLLBBk', 'kBwwBBBk', 'kBBBBBBk', '.kBBBBk.', '..kkkk..',
+  ),
+  '7up_lon': pixelSprite8(
+    '...kk...', '..knnk..', '.knnnNk.', 'knnwwnnk', 'knnnnnNk', 'kNnnnnnk', '.knnnnk.', '..kkkk..',
+  ),
+  sprite_lon: pixelSprite8(
+    '...kk...', '..kLLk..', '.kLLLLk.', 'kLwwLLLk', 'kLnnLLLk', 'kLLLLLLk', '.kLLLLk.', '..kkkk..',
+  ),
+  mirinda_cam: pixelSprite8(
+    '...kk...', '..koYk..', '.koooYk.', 'koowooYk', 'koooooYk', 'kYooooYk', '.kYYYYk.', '..kkkk..',
+  ),
+  sting_dau: pixelSprite8(
+    '...kk...', '..krrk..', '.kppppk.', 'krrppppk', 'krwwrrrk', 'krrrrrrk', '.krrrrk.', '..kkkk..',
+  ),
+  sting_nhan_sam: pixelSprite8(
+    '...kk...', '..krrk..', '.kYYYYk.', 'kYtYYyYk', 'kYwwYYYk', 'kYYYYYYk', '.kYYYYk.', '..kkkk..',
+  ),
+  redbull_lon: pixelSprite8(
+    '...kk...', '..krrk..', '.kLLLLk.', 'kLLyyLLk', 'kLwwyyLk', 'kLLLLLLk', '.kLLLLk.', '..kkkk..',
+  ),
+  number1_chai: pixelSprite8(
+    '...kk...', '..krrk..', '.krrrrk.', 'krrrrrrk', 'krrwwrrk', 'krrrrrrk', '.krrrrk.', '..kkkk..',
+  ),
+  aquafina_chai: pixelSprite8(
+    '...kk...', '...kLL..', '..kLLk..', '.kLwwLk.', '.kLLLLk.', '..kLLk..', '..kLLk..', '...kk...',
+  ),
+  la_vie_chai: pixelSprite8(
+    '...kk...', '...knn..', '..knnk..', '.knwnk..', '.knnnk..', '..knnk..', '..knnk..', '...kk...',
+  ),
+  revive_chai: pixelSprite8(
+    '...kk...', '...kLL..', '..kLLk..', '.kLwwLk.', '.kLLLLk.', '..kLLk..', '..kLLk..', '...kk...',
+  ),
+  pocari_sweat: pixelSprite8(
+    '...kk...', '...kLL..', '..kllk..', '.kLwwLk.', '.kllllk.', '..kLLk..', '..kLLk..', '...kk...',
+  ),
+  tra_dao_chai: pixelSprite8(
+    '...kk...', '...krr..', '..krrk..', '.krrrk..', '.krwwrk.', '..krrk..', '..krrk..', '...kk...',
+  ),
+  sua_bap_hop: pixelSprite8(
+    '..kkkk..', '.kYYYYk.', 'kYYYYYYk', 'kYwYYYYk', 'kYYYYYYk', 'kYyYyYyk', 'kYYYYYYk', '.kkkkkk.',
+  ),
+  nuoc_nha_dam: pixelSprite8(
+    '..kkkk..', '.knnnnk.', 'knnnnnnk', 'knwwnnnk', 'knnNnnnk', 'knnnnnnk', 'knnnnnnk', '.kkkkkk.',
+  ),
+} satisfies Record<string, Sprite>);
+
+function groceryBag8(body: string, label: string, seal: string): Sprite {
+  return pixelSprite8(
+    '..kssk..', `.k${body.repeat(4)}k.`, `k${body.repeat(6)}k`,
+    `k${body}${label}${label}${body.repeat(3)}k`, `k${body.repeat(6)}k`,
+    `k${body}${seal}${seal}${body.repeat(3)}k`, `.k${body.repeat(4)}k.`, '..kkkk..',
+  );
+}
+
+function groceryJar8(body: string, label: string, lid: string): Sprite {
+  return pixelSprite8(
+    `..k${lid.repeat(2)}k..`, `.k${lid.repeat(4)}k.`, `.k${body.repeat(4)}k.`,
+    `k${body.repeat(6)}k`, `k${body}${label}${label}${body.repeat(3)}k`,
+    `k${body.repeat(6)}k`, '.kssssk.', '..kkkk..',
+  );
+}
+
+Object.assign(PRODUCT_SPRITES, {
+  hanh_tay: pixelSprite8(
+    '...kk...', '..kttk..', '.kttttk.', 'kttWtttk', 'kttttttk', '.kttttk.', '..kttk..', '...kk...',
+  ),
+  ot_chuong: pixelSprite8(
+    '...nn...', '..knnk..', '.knnnNk.', 'knnwwnnk', 'knnnnnNk', '.knnnnk.', '..kNNk..', '...kk...',
+  ),
+  ca_tim: pixelSprite8(
+    '...nn...', '..knnk..', '.kvvvVk.', 'kvvVvvvk', '.kvvvvvk', '..kvvvk.', '...kk...', '........',
+  ),
+  nam_kim_cham: pixelSprite8(
+    '.k.k.k..', 'kccckcck', '.kccck..', '..kcck..', '..kcck..', '..kcck..', '..kcck..', '..kkkk..',
+  ),
+  khoai_lang_tuoi: pixelSprite8(
+    '........', '..kkk...', '.kttttk.', 'kttYtttk', 'kttttttk', '.kttttk.', '..kkk...', '........',
+  ),
+  chanh_khong_hat: pixelSprite8(
+    '...nn...', '..knnk..', '.knnnNk.', 'knnYnnnk', 'knnnnnNk', '.knnnnk.', '..kNNk..', '...kk...',
+  ),
+  thit_bo: pixelSprite8(
+    '........', '..kkkk..', '.krrrrk.', 'krrRrrrk', 'krrwwrrk', 'krrrrrrk', '.krrrrk.', '..kkkk..',
+  ),
+  thit_ga: pixelSprite8(
+    '........', '..kcck..', '.kcccck.', 'kccwwcck', 'kcccccck', '.kcccck.', '..kttk..', '...kk...',
+  ),
+  uc_ga: pixelSprite8(
+    '........', '..kkkk..', '.kccck..', 'kcccccck', 'kccwwcck', 'kcccccck', '.kcccck.', '..kkkk..',
+  ),
+  suon_heo: pixelSprite8(
+    '........', '..kkkk..', '.krrrk..', 'krrrwrrk', 'krrrrrrk', '.krrrk..', '..krrk..', '...kk...',
+  ),
+  ca_thu_tuoi: pixelSprite8(
+    '........', '..kkk...', '.ktttk..', 'kttwttk.', 'kttttttk', '.ktttk..', '..kkk...', '........',
+  ),
+  tom_tuoi: pixelSprite8(
+    '........', '..krr...', '.krRrk..', 'krRRrrk.', '.krRrrk.', '..krRk..', '...kk...', '........',
+  ),
+  khoai_tay_chien: groceryBag8('Y', 'w', 'o'),
+  ga_vien_dong_lanh: groceryBag8('c', 'o', 'r'),
+  pizza_dong_lanh: groceryBag8('R', 'Y', 'r'),
+  muc_khoanh_dong_lanh: groceryBag8('c', 's', 'L'),
+  rau_cu_dong_lanh: groceryBag8('n', 'Y', 'L'),
+  cha_ca_thac_lat: groceryBag8('w', 't', 'r'),
+  yen_mach: groceryCarton8('t', 'Y', 'b'),
+  ngu_coc: groceryCarton8('Y', 'r', 'o'),
+  mat_ong: groceryJar8('Y', 'w', 'b'),
+  bo_dau_phong: groceryJar8('t', 'Y', 'b'),
+  tuong_ca: drinkBottle8('r', 'w', 'R'),
+  sot_mayonnaise: drinkBottle8('w', 'Y', 's'),
+  banh_pia: groceryBag8('t', 'Y', 'r'),
+  keo_dua: groceryBag8('c', 'w', 't'),
+  banh_mochi: groceryBag8('p', 'w', 'r'),
+  hat_bi_rang: groceryBag8('n', 'Y', 'N'),
+  dau_ha_lan_say: groceryBag8('n', 'w', 'Y'),
+  khoai_tay_que: groceryBag8('Y', 'o', 't'),
+  nuoc_rua_tay: drinkBottle8('l', 'w', 'L'),
+  nuoc_lau_kinh: drinkBottle8('L', 'w', 'l'),
+  nuoc_tay_bon_cau: drinkBottle8('l', 'N', 'L'),
+  mang_boc_thuc_pham: groceryCarton8('s', 'w', 'L'),
+  khan_uot: groceryBag8('l', 'w', 'L'),
+  thuc_an_cho: groceryBag8('t', 'Y', 'b'),
+  thuc_an_meo: groceryBag8('b', 'w', 't'),
+} satisfies Record<string, Sprite>);
+
+function groceryCarton8(body: string, label: string, top: string): Sprite {
+  return drinkCarton8(body, label, top);
+}

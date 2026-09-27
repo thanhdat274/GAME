@@ -1,7 +1,7 @@
 import { DATA, hasFeature, type StaffRole, type StaffStats, type StatKey } from './data';
 import { Rng, daySeed } from './rng';
 import { doubleShift, removeFromSchedule, scheduleEnabled, setShift, shiftsOn, weekday, SHIFTS } from './schedule';
-import type { Candidate, GameState, Staff } from './state';
+import { storeView, type Candidate, type GameState, type Staff } from './state';
 
 export const STAT_KEYS: StatKey[] = ['speed', 'accuracy', 'friendly', 'stamina'];
 export const STAT_NAMES: Record<StatKey, string> = { speed: 'Tốc độ', accuracy: 'Chính xác', friendly: 'Thân thiện', stamina: 'Thể lực' };
@@ -76,24 +76,74 @@ function fixedCandidate(): Candidate {
 export function ensureBoard(state: GameState): Candidate[] {
   if (!hasFeature(state.level, 'staff')) return [];
   const board = state.staffBoard;
-  if (board && state.day - board.day < cfg().refreshDays) return board.list;
-  const rng = new Rng(daySeed(state.day, 0x57aff));
-  const roles = unlockedRoles(state);
-  const count = rng.int(cfg().candidateMin, cfg().candidateMax);
-  const list: Candidate[] = [];
-  const names = new Set(state.staff.map((s) => s.name));
-  if (!state.fixedCandidateUsed) {
-    list.push(fixedCandidate());
-    names.add(DATA.staff.fixedCandidate.name);
+  if (board && state.day - board.day < cfg().refreshDays) {
+    // Nâng các bảng đã lưu từ phiên bản cũ lên số ứng viên mới ngay, không cần đợi làm mới.
+    if (board.targetCount === undefined) {
+      const target = Math.max(cfg().candidateMin, board.list.length);
+      fillBoard(state, board.list, board.day, target);
+      board.targetCount = board.list.length;
+    }
+    return board.list;
   }
-  for (let i = 0; list.length < count && i < 30; i++) {
-    const c = makeCandidate(rng, `c${state.day}_${i}`, roles);
-    if (names.has(c.name)) continue;
+  const rng = new Rng(daySeed(state.day, 0x57aff));
+  const count = rng.int(cfg().candidateMin, cfg().candidateMax);
+  const list = fillBoard(state, [], state.day, count);
+  state.staffBoard = { day: state.day, list, targetCount: count };
+  return list;
+}
+
+function fillBoard(state: GameState, current: Candidate[], day: number, targetCount: number): Candidate[] {
+  const list = current;
+  const rng = new Rng(daySeed(day, 0x57aff));
+  // Giữ nguyên thứ tự sinh ban đầu để các bảng mới vẫn ổn định theo ngày.
+  rng.int(cfg().candidateMin, cfg().candidateMax);
+  const roles = unlockedRoles(state);
+  const names = new Set([...state.staff.map((s) => s.name), ...list.map((c) => c.name)]);
+  const ids = new Set(list.map((c) => c.id));
+  if (!state.fixedCandidateUsed && !ids.has(DATA.staff.fixedCandidate.id) && list.length < targetCount) {
+    const fixed = fixedCandidate();
+    if (!names.has(fixed.name)) list.push(fixed);
+    names.add(fixed.name);
+    ids.add(fixed.id);
+  }
+  for (let i = 0; list.length < targetCount && i < 120; i++) {
+    const c = makeCandidate(rng, `c${day}_${i}`, roles);
+    if (names.has(c.name) || ids.has(c.id)) continue;
     names.add(c.name);
+    ids.add(c.id);
     list.push(c);
   }
-  state.staffBoard = { day: state.day, list };
   return list;
+}
+
+export interface CandidateRecommendation {
+  candidate: Candidate;
+  reason: string;
+}
+
+/** Ưu tiên vai trò tiệm còn thiếu, sau đó xét chỉ số hợp vai và mặt bằng lương. */
+export function recommendCandidate(state: GameState, candidates: Candidate[]): CandidateRecommendation | null {
+  if (!candidates.length) return null;
+  const counts = new Map<StaffRole, number>();
+  for (const staff of state.staff) counts.set(staff.role, (counts.get(staff.role) ?? 0) + 1);
+  const slots = staffSlots(state.level);
+  const ranked = candidates.map((candidate, index) => {
+    const role = roleDef(candidate.role);
+    const roleCount = counts.get(candidate.role) ?? 0;
+    const need = roleCount === 0
+      ? (candidate.role === 'cashier' ? 95 : 72)
+      : candidate.role === 'cashier' && roleCount < 2 && slots > state.staff.length ? 22 : 0;
+    const totalStats = STAT_KEYS.reduce((sum, key) => sum + candidate.stats[key], 0);
+    const score = need + totalStats + candidate.stats[role.mainStat] * 2 - candidate.wage / 100_000;
+    return { candidate, index, score, roleCount, mainStat: role.mainStat };
+  });
+  ranked.sort((a, b) => b.score - a.score || a.index - b.index);
+  const best = ranked[0];
+  const role = roleDef(best.candidate.role);
+  const reason = best.roleCount === 0
+    ? `Tiệm chưa có ${role.name}`
+    : `${STAT_NAMES[best.mainStat]} ${best.candidate.stats[best.mainStat]} · hợp vai ${role.name}`;
+  return { candidate: best.candidate, reason };
 }
 
 export type HireResult = 'ok' | 'full' | 'missing' | 'role' | 'locked';
@@ -146,6 +196,24 @@ export function fire(state: GameState, id: string): number {
   state.staff = state.staff.filter((item) => item !== s);
   removeFromSchedule(state, id);
   return severance;
+}
+
+/** Move an employee and their shift schedule between branches. Capacity is per branch. */
+export function transferStaff(state: GameState, staffId: string, toStoreId: string): boolean {
+  const from = storeView(state, state.activeStoreId);
+  const to = storeView(state, toStoreId);
+  const index = from.staff.findIndex((staff) => staff.id === staffId);
+  if (index < 0 || toStoreId === state.activeStoreId || to.staff.length >= staffSlots(state.level)) return false;
+  const [staff] = from.staff.splice(index, 1);
+  const oldId = staff.id;
+  if (to.staff.some((item) => item.id === oldId)) staff.id = `${toStoreId}:${oldId}`;
+  to.staff.push(staff);
+  from.schedule ??= {};
+  to.schedule ??= {};
+  const shifts = from.schedule[oldId];
+  if (shifts) to.schedule[staff.id] = shifts;
+  delete from.schedule[oldId];
+  return true;
 }
 
 export function changeRole(state: GameState, id: string, role: StaffRole): boolean {

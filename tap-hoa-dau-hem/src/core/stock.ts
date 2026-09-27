@@ -388,7 +388,7 @@ function slotAt(state: GameState, shelf: number, slot: number) {
   return s;
 }
 
-/** Sức chứa mỗi ô của kệ (kệ đôi chứa gấp đôi). */
+/** Sức chứa mỗi ô; kệ đôi, kệ 3 và kệ 4 tăng số ô chứ không tăng sức chứa từng ô. */
 export function shelfCapacity(state: GameState, shelf: number): number {
   const f = fixtureOfShelf(state, shelf);
   return DATA.balance.slotCapacity * (f ? furniture(f.type).capacityMul ?? 1 : 1);
@@ -430,6 +430,9 @@ export function placeError(state: GameState, shelf: number, productId: string): 
   const p = product(productId);
   const kindError = kindAccepts(state, shelf, p);
   if (kindError) return kindError;
+  // Tủ lạnh là khu bảo quản theo nhiệt độ, không phải một quầy hàng theo danh mục.
+  // Có thể để chung đồ uống, đồ tươi và các mặt hàng yêu cầu bảo quản lạnh.
+  if (shelfKind(state, shelf) === 'fridge') return null;
   const zone = zoneOf(state, shelf);
   return zone && zone !== p.category ? 'wrong-zone' : null;
 }
@@ -454,7 +457,8 @@ export function assignSlot(state: GameState, shelf: number, slot: number, produc
   const error = placeError(state, shelf, productId);
   if (error) throw new Error(error);
   if (s.productId !== productId) clearSlot(state, shelf, slot);
-  if (!zoneOf(state, shelf)) state.zones[shelf] = product(productId).category as ShelfZone;
+  if (shelfKind(state, shelf) === 'fridge') state.zones[shelf] = null;
+  else if (!zoneOf(state, shelf)) state.zones[shelf] = product(productId).category as ShelfZone;
   s.productId = productId;
   return refillSlot(state, shelf, slot);
 }

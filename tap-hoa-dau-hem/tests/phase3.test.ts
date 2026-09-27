@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { beforeAll, afterAll, afterEach, describe, expect, it } from 'vitest';
 import { avgSold, slowMovers, staffTable } from '../src/core/analytics';
 import { addRule, applyPlanogram, lockPlanogram, runRestockRules, suggestRule } from '../src/core/autorestock';
 import { createCustomer } from '../src/core/customers';
@@ -22,6 +22,11 @@ import { addLot, autoArrange, shelfCapacity, takeOneFromSlot } from '../src/core
 import { PLAYER, TaskQueue } from '../src/core/tasks';
 import saveV3 from './fixtures/save-v3.json';
 import type { StaffRole, StaffStats } from '../src/core/data';
+
+// Các test tính tiền giả định khách trả tiền mặt; khách trả thẻ/chuyển khoản có test riêng.
+const cashlessChance = DATA.balance.cashlessChance;
+beforeAll(() => { DATA.balance.cashlessChance = 0; });
+afterAll(() => { DATA.balance.cashlessChance = cashlessChance; });
 
 const originals = {
   security: { ...DATA.balance.security },
@@ -163,11 +168,11 @@ describe('bản lưu v4', () => {
 });
 
 describe('tuyển dụng', () => {
-  it('lần đầu L10 luôn có Bé Lan (thu ngân, 25.000đ/ngày); bảng 3–4 người làm mới sau 2 ngày', () => {
+  it('lần đầu L10 luôn có Bé Lan (thu ngân, 25.000đ/ngày); bảng 7–9 người làm mới sau 2 ngày', () => {
     const s = shop(10);
     const list = ensureBoard(s);
-    expect(list.length).toBeGreaterThanOrEqual(3);
-    expect(list.length).toBeLessThanOrEqual(4);
+    expect(list.length).toBeGreaterThanOrEqual(DATA.balance.staff.candidateMin);
+    expect(list.length).toBeLessThanOrEqual(DATA.balance.staff.candidateMax);
     const lan = list.find((c) => c.id === 'be_lan')!;
     expect(lan).toMatchObject({ name: 'Bé Lan', role: 'cashier', wage: 25_000 });
     const others = list.filter((c) => c.id !== 'be_lan').map((c) => c.id);
@@ -407,11 +412,17 @@ describe('mini-mart, nhiều quầy, xe đẩy', () => {
     expect(buyFixture(s, 'counter2', 0, 0, 0)).toBe('plot');
     expect(plotStatus(s, 'D')).toBe('available');
     unlockPlot(s, 'D');
+    // Mỗi quầy phải có một thu ngân: quầy 2 cần tuyển đủ hai thu ngân.
+    addStaff(s, 'cashier');
+    expect(buyFixture(s, 'counter2', 0, 0, 0)).toBe('staff');
+    addStaff(s, 'cashier');
     expect(buyFixture(s, 'counter2', 0, 0, 0)).toBe('ok');
     expect(buyFixture(s, 'counter2', 2, 0, 0)).toBe('limit');
     expect(buyFixture(s, 'shelf_double', 0, 2, 0)).toBe('ok');
+    // Kệ đôi có gấp đôi số ô (24), mỗi ô chứa như kệ thường.
     const shelf = s.fixtures.find((f) => f.type === 'shelf_double')!.shelf!;
-    expect(shelfCapacity(s, shelf)).toBe(40);
+    expect(s.shelves[shelf]).toHaveLength(24);
+    expect(shelfCapacity(s, shelf)).toBe(20);
     expect(shelfCapacity(s, 0)).toBe(20);
   });
 
@@ -474,7 +485,8 @@ describe('nhân viên làm việc trong ngày', () => {
     expect(staffServed).toBeGreaterThan(5);
     expect(refills).toBeGreaterThan(0);
     expect(s.today.staffPerf[cashier.id].served).toBe(staffServed);
-    expect(s.today.staffPerf[refill.id].jobs).toBe(refills);
+    // Việc của nhân viên bổ sung kệ gồm nạp kệ và lấy món khách hỏi ở quầy.
+    expect(s.today.staffPerf[refill.id].jobs).toBeGreaterThanOrEqual(refills);
     const sum = endDay(s);
     expect(sum.wages).toBe(cashier.wage + refill.wage); // lương theo cấp hiện tại (có thể vừa lên cấp)
     expect(sum.journal!.some((j) => j.t.includes('vào ca'))).toBe(true);
@@ -508,7 +520,7 @@ describe('nhân viên làm việc trong ngày', () => {
 });
 
 describe('tổng kết có chi phí nhân sự', () => {
-  it('lãi gộp 400.000đ, lương 60.000đ, điện 13.000đ → lãi ròng 327.000đ; nhật ký theo giờ', () => {
+  it('lãi gộp 400.000đ, lương 60.000đ, điện 16.000đ → lãi ròng 324.000đ; nhật ký theo giờ', () => {
     const s = shop(12);
     unlockPlot(s, 'A');
     unlockPlot(s, 'B');
@@ -523,8 +535,8 @@ describe('tổng kết có chi phí nhân sự', () => {
     const sum = endDay(s);
     expect(sum.grossProfit).toBe(400_000);
     expect(sum.wages).toBe(60_000);
-    expect(sum.electricity).toBe(13_000);
-    expect(sum.netProfit).toBe(327_000);
+    expect(sum.electricity).toBe(16_000);
+    expect(sum.netProfit).toBe(324_000);
     expect(sum.journal!.map((j) => j.m)).toEqual([615, 700]);
   });
 });
