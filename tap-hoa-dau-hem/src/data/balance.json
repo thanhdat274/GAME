@@ -247,9 +247,9 @@
     "bonusAmount": 20000,
     "scoldAccuracy": 2,
     "severanceDays": 1,
-    "scanSecondsPerItem": 0.24,
-    "counterSeconds": 0.65,
-    "changeSeconds": 0.8,
+    "scanSecondsPerItem": 0,
+    "counterSeconds": 0,
+    "changeSeconds": 0,
     "bargainAcceptMax": 10,
     "wrongChangeValues": [
       1000,
