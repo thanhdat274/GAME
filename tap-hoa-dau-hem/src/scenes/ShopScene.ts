@@ -21,7 +21,7 @@ import { LiveMap } from '../ui/liveMap';
 import { ROW_PITCH, SHELF_VIEW_ROWS, ShelfView } from '../ui/shelves';
 import { play, setSoundEnabled, startMusic, stopMusic, vibrate } from '../ui/sound';
 import { Bar, Button, dialog, floatText, panel, toast } from '../ui/widgets';
-import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
+import { C, H, HEX, W, setEdgeColors, setupCamera, txt } from '../ui/theme';
 import { checkForUpdate, manualCheckMessage } from '../ui/updateBanner';
 import { perfEnabled, recordPerfSection } from '../ui/perfOverlay';
 
@@ -109,10 +109,7 @@ export class ShopScene extends Phaser.Scene {
   create(): void {
     setPlayClockRunning(true);
     setupCamera(this);
-    if (typeof document !== 'undefined') {
-      document.body.style.setProperty('--thdh-bg', 'linear-gradient(to bottom, #3b2618 0%, #3b2618 50%, #2b1d14 50%, #2b1d14 100%)');
-      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#3b2618');
-    }
+    setEdgeColors('#3b2618', '#2b1d14');
     this.views.clear();
     this.walkers.clear();
     this.panelMode = '';
