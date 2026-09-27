@@ -318,6 +318,40 @@ describe('khách hàng', () => {
   });
 });
 
+describe('khách tìm món tiệm có bán', () => {
+  it('phần lớn món trong đơn là món tiệm đang bán; thỉnh thoảng hỏi món tiệm chưa bán', () => {
+    const s = createNewGame();
+    s.level = 30;
+    // Tiệm chỉ bán 2 món đồ khô dù đã mở cả danh mục.
+    s.warehouse = lotsFrom({ mi_goi: 50, gao: 50 });
+    const r = new Rng(21);
+    const type = DATA.customers.find((c) => c.id === 'noi_tro')!;
+    let dry = 0;
+    let carried = 0;
+    for (let i = 0; i < 500; i++) {
+      for (const l of generateOrder(type, s.level, r, s)) {
+        if (DATA.products.find((p) => p.id === l.productId)!.category !== 'dry') continue;
+        dry++;
+        if (l.productId === 'mi_goi' || l.productId === 'gao') carried++;
+      }
+    }
+    const share = carried / dry;
+    expect(share).toBeGreaterThan(1 - DATA.balance.uncarriedAskChance - 0.05);
+    expect(share).toBeLessThan(1);
+  });
+
+  it('tiệm chưa bán món nào của nhóm thì khách vẫn hỏi món trong nhóm đó', () => {
+    const s = createNewGame();
+    s.level = 30;
+    s.warehouse = lotsFrom({ mi_goi: 50 });
+    const r = new Rng(22);
+    const type = DATA.customers.find((c) => c.id === 'noi_tro')!;
+    const categories = new Set<string>();
+    for (let i = 0; i < 300; i++) for (const l of generateOrder(type, s.level, r, s)) categories.add(DATA.products.find((p) => p.id === l.productId)!.category);
+    expect(categories.has('fresh')).toBe(true);
+  });
+});
+
 describe('level và sao', () => {
   it('mốc EXP', () => {
     expect(levelForExp(0)).toBe(1);

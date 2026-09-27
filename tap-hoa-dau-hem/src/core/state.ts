@@ -840,20 +840,41 @@ export function unlockedCategories(level: number): Category[] {
   return levelDef(level).categories;
 }
 
+/** Món thường (không theo sự kiện) đã mở theo level và loại tiệm; lọc lại cả danh mục mỗi lần khách tới rất tốn. */
+const baseUnlockedCache = new Map<string, Product[]>();
+
+function baseUnlocked(level: number, shop: ReturnType<typeof activeShopType> | null): Product[] {
+  const key = `${DATA.products.length}|${level}|${shop?.def.id ?? '*'}`;
+  let list = baseUnlockedCache.get(key);
+  if (!list) {
+    const cats = unlockedCategories(level);
+    list = DATA.products.filter((p) => !p.recipeOnly && !p.eventOnly && (!shop || shop.allowsProduct(p.id))
+      && p.unlockLevel <= level && (p.behindCounter ? level >= 3 : cats.includes(p.category)));
+    baseUnlockedCache.set(key, list);
+  }
+  return list;
+}
+
 export function unlockedProducts(level: number, state?: GameState): Product[] {
-  const cats = unlockedCategories(level);
   const shop = state ? activeShopType(state) : null;
-  return DATA.products.filter((p) => {
-    if (p.recipeOnly) return false;
-    if (shop && !shop.allowsProduct(p.id)) return false;
-    if (p.unlockLevel > level || !(p.behindCounter ? level >= 3 : cats.includes(p.category))) return false;
-    if (!p.eventOnly) return true;
-    if (!state) return false;
+  const list = [...baseUnlocked(level, shop)];
+  if (!state) return list;
+  // Món theo sự kiện: bán khi sự kiện đang diễn ra hoặc tiệm còn hàng.
+  const cats = unlockedCategories(level);
+  for (const p of DATA.products) {
+    if (!p.eventOnly || p.recipeOnly || (shop && !shop.allowsProduct(p.id))) continue;
+    if (p.unlockLevel > level || !(p.behindCounter ? level >= 3 : cats.includes(p.category))) continue;
     const active = state.activeEvents.some((event) => event.id === p.eventOnly);
     const stored = state.warehouse.some((lot) => lot.productId === p.id && lot.qty > 0)
       || state.shelves.some((row) => row.some((slot) => slot.productId === p.id && slot.qty > 0));
-    return active || stored;
-  });
+    if (active || stored) list.push(p);
+  }
+  // Giữ thứ tự danh mục như trước để khách bốc món theo cùng thứ tự (kết quả theo seed không đổi).
+  if (list.length > baseUnlocked(level, shop).length) {
+    const order = new Map(DATA.products.map((p, index) => [p.id, index]));
+    list.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  }
+  return list;
 }
 
 /** Số kệ gốc (giai đoạn 1) dùng được theo level. */

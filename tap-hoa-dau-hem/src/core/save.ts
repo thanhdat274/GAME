@@ -1,7 +1,8 @@
 import { compressSave, decompressSave } from './compress';
 import { DATA, product } from './data';
 import { applyLevelUps } from './progression';
-import { arrangeStorageRacks } from './layout';
+import { arrangeStorageRacks, stowMisplacedFixtures } from './layout';
+import { activeShopType, shopTypeOf } from './shopTypes';
 import { createNewGame, defaultFixtures, emptySlots, syncActiveStore, type GameState, type Lot, type Slot } from './state';
 
 export const SAVE_KEY = 'thdh.save.v1';
@@ -304,6 +305,15 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
   for (const store of result.stores) {
     const data = store.data as Record<string, unknown>;
     if (Array.isArray(data.land)) data.land = normalizeLandIds(data.land as string[]);
+  }
+  // Mảnh đất đổi hình giữa các phiên bản (KHO dời sát tiệm): cất nội thất nằm trên ô không còn hợp lệ.
+  stowMisplacedFixtures(result, activeShopType(result).def.landPlots);
+  for (const store of result.stores) {
+    if (store.id === result.activeStoreId) continue;
+    const data = store.data as Record<string, unknown>;
+    if (!Array.isArray(data.land) || !Array.isArray(data.fixtures)) continue;
+    if (!Array.isArray(data.storedFixtures)) data.storedFixtures = [];
+    stowMisplacedFixtures(data as unknown as Pick<GameState, 'land' | 'fixtures' | 'storedFixtures'>, shopTypeOf(store).def.landPlots);
   }
   padShelves(result.shelves);
   for (const store of result.stores) if (Array.isArray(store.data?.shelves)) padShelves(store.data.shelves as GameState['shelves']);

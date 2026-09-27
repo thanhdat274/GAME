@@ -31,7 +31,7 @@ export function plotAt(x: number, y: number): string | null {
   return DATA.land.plots.find((p) => p.rects.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h))?.id ?? null;
 }
 
-export function isOpenCell(state: GameState, x: number, y: number): boolean {
+export function isOpenCell(state: Pick<GameState, 'land'>, x: number, y: number): boolean {
   const owner = plotAt(x, y);
   return owner === 'initial' || (owner !== null && state.land.includes(owner));
 }
@@ -103,24 +103,53 @@ export function occupancy(state: GameState, ignoreUid?: number): Map<number, num
   return map;
 }
 
-/** Kiểm tra đặt nội thất; trả về null nếu hợp lệ. */
-export function placementError(state: GameState, type: string, x: number, y: number, rot: 0 | 1, ignoreUid?: number): PlaceError | null {
-  const occ = occupancy(state, ignoreUid);
+/** Lỗi đặt nội thất tại các ô của nó, chưa xét chồng lên nội thất khác. */
+function cellsError(land: Pick<GameState, 'land'>, type: string, x: number, y: number, rot: 0 | 1, racksNeedWarehouse: boolean): PlaceError | Cell[] {
   const kind = furniture(type).kind;
   const { door, cols, rows } = DATA.land;
-  // Tiệm không mở đất (tiệm xôi) không có KHO nên kệ kho đặt trong mặt bằng chính.
-  const racksNeedWarehouse = activeShopType(state).def.landPlots;
-  for (const c of fixtureCells({ type, x, y, rot })) {
+  const cells = fixtureCells({ type, x, y, rot });
+  for (const c of cells) {
     if (c.x < 0 || c.y < 0 || c.x >= cols || c.y >= rows) return 'bounds';
-    if (!isOpenCell(state, c.x, c.y)) return 'locked';
+    if (!isOpenCell(land, c.x, c.y)) return 'locked';
     if (c.x === door.x && c.y === door.y) return 'door';
     if (isStorageOnly(c.x, c.y) && kind !== 'storage') return 'storage-only';
     if (kind === 'storage' && racksNeedWarehouse && !isStorageOnly(c.x, c.y)) return 'storage-only';
-    if (isGeneratorOnly(c.x, c.y) && furniture(type).kind !== 'generator') return 'generator-only';
-    if (furniture(type).kind === 'generator' && !isGeneratorOnly(c.x, c.y)) return 'generator-only';
-    if (occ.has(key(c.x, c.y))) return 'overlap';
+    if (isGeneratorOnly(c.x, c.y) && kind !== 'generator') return 'generator-only';
+    if (kind === 'generator' && !isGeneratorOnly(c.x, c.y)) return 'generator-only';
   }
-  return null;
+  return cells;
+}
+
+/** Kiểm tra đặt nội thất; trả về null nếu hợp lệ. */
+export function placementError(state: GameState, type: string, x: number, y: number, rot: 0 | 1, ignoreUid?: number): PlaceError | null {
+  // Tiệm không mở đất (tiệm xôi) không có KHO nên kệ kho đặt trong mặt bằng chính.
+  const cells = cellsError(state, type, x, y, rot, activeShopType(state).def.landPlots);
+  if (!Array.isArray(cells)) return cells;
+  const occ = occupancy(state, ignoreUid);
+  return cells.some((c) => occ.has(key(c.x, c.y))) ? 'overlap' : null;
+}
+
+/**
+ * Cất vào kho nội thất những món không còn đặt hợp lệ, ví dụ khi bản mới đổi hình mảnh đất
+ * (ô F cũ thành KHO). Giữ nguyên uid và kệ hàng như khi người chơi tự cất. Trả về số món đã cất.
+ */
+export function stowMisplacedFixtures(data: Pick<GameState, 'land' | 'fixtures' | 'storedFixtures'>, racksNeedWarehouse: boolean): number {
+  const taken = new Set<number>();
+  const kept: Fixture[] = [];
+  let stowed = 0;
+  for (const fixture of data.fixtures) {
+    const cells = cellsError(data, fixture.type, fixture.x, fixture.y, fixture.rot, racksNeedWarehouse);
+    const fits = Array.isArray(cells) && !cells.some((c) => taken.has(key(c.x, c.y)));
+    if (fits || furniture(fixture.type).fixed) {
+      if (Array.isArray(cells)) for (const c of cells) taken.add(key(c.x, c.y));
+      kept.push(fixture);
+    } else {
+      data.storedFixtures.push(fixture);
+      stowed++;
+    }
+  }
+  data.fixtures = kept;
+  return stowed;
 }
 
 /** Ô khách đi được: đã mở, không bị nội thất chiếm, không thuộc sân sau (chỉ để kho). */

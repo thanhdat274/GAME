@@ -4,7 +4,7 @@ import { DaySession, endDay, openShop, startNextDay } from '../src/core/day';
 import { type Customer, type OrderLine } from '../src/core/customers';
 import { attraction, attractionMultiplier, buyDecor } from '../src/core/decor';
 import {
-  buyFixture, checkPaths, maxQueueFor, placementError, plot, plotStatus, sellValue, unlockPlot, walkTiles,
+  buyFixture, checkPaths, maxQueueFor, placementError, plot, plotCells, plotStatus, sellValue, unlockPlot, walkTiles,
 } from '../src/core/layout';
 import { canGiveCredit, debtLimit, markBadDebts, recordDebt, remindDebt, repaymentsToday } from '../src/core/ledger';
 import { cheapSpawnMultiplier, clampPrice, keepChance, priceRange, setPrice } from '../src/core/pricing';
@@ -114,6 +114,24 @@ describe('mặt bằng và nội thất', () => {
     expect(placementError(s, 'storage_rack', 3, 3, 0)).toBe('storage-only');
     expect(buyFixture(s, 'storage_rack', kho.x, kho.y, 0)).toBe('ok');
     expect(warehouseCapacity(s)).toBe(30 + 20);
+  });
+
+  it('KHO nằm sát tiệm; bản lưu cũ cất nội thất trên ô nay thành KHO và dời kệ kho vào KHO', () => {
+    // KHO (4×2) liền ngay bên phải Đất B, không cần mở F mới tới được.
+    const kho = plotCells(plot('C'));
+    expect(kho).toHaveLength(8);
+    const b = plotCells(plot('B'));
+    expect(kho.some((c) => b.some((d) => Math.abs(c.x - d.x) + Math.abs(c.y - d.y) === 1))).toBe(true);
+
+    const s = lvl(25);
+    s.land = ['A', 'B', 'C', 'F'];
+    // Vị trí theo bản đồ cũ: tủ lạnh 1 cánh ở F cũ (6,6), kệ kho ở KHO cũ (8,5).
+    s.fixtures.push({ uid: s.nextUid++, type: 'fridge_single', x: 6, y: 6, rot: 0 }, { uid: s.nextUid++, type: 'storage_rack', x: 8, y: 5, rot: 0 });
+    const loaded = migrate({ version: CURRENT_VERSION, state: structuredClone(s) as unknown as Record<string, unknown> });
+    expect(loaded.storedFixtures.map((f) => f.type)).toEqual(['fridge_single']);
+    const rack = loaded.fixtures.find((f) => f.type === 'storage_rack')!;
+    expect(kho.some((c) => c.x === rack.x && c.y === rack.y)).toBe(true);
+    expect(checkPaths(loaded).ok).toBe(true);
   });
 
   it('bố cục chặn lối đi bị phát hiện bằng BFS', () => {

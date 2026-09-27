@@ -761,7 +761,8 @@ export function sellFixture(state: GameState, uid: number): SellFixtureResult {
 export function suggestedTarget(state: GameState, p: Product): number {
   const cfg = DATA.balance.suggest;
   const demand = (state.yesterdaySold[p.id] ?? 0) + (state.yesterdayMissed[p.id] ?? 0);
-  // Hàng mau hỏng: nhập sát nhu cầu (không dự phòng), món mới thử ít để tránh hỏng. Hàng HSD dài nhập như hàng khô.
+  // Hàng mau hỏng: nhập sát nhu cầu (không dự phòng). Món chưa ai hỏi thì không nhập thử (newFresh = 0): khách
+  // thỉnh thoảng hỏi món tiệm chưa bán, số "hỏi mà không có" đó thành nhu cầu cho ngày sau. Hàng HSD dài nhập như hàng khô.
   if (isPerishable(p)) return demand > 0 ? Math.max(1, Math.ceil(demand * cfg.freshFactor)) : cfg.newFresh;
   const base = demand > 0 ? demand : p.price <= cfg.cheapPrice ? cfg.newCheap : cfg.newPricey;
   return Math.ceil(base * cfg.buffer) + 1;

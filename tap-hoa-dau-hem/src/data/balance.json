@@ -25,6 +25,7 @@
   "scanComboSeconds": 3,
   "scanTipBonus": 1000,
   "cashlessChance": 0.67,
+  "uncarriedAskChance": 0.1,
   "counterSlots": 4,
   "counterCapacity": 5,
   "counterRequestSeconds": 6,
@@ -46,7 +47,7 @@
     "newPricey": 5,
     "cheapPrice": 8000,
     "freshFactor": 0.8,
-    "newFresh": 3,
+    "newFresh": 0,
     "perishableMaxDays": 7
   },
   "orderLineWeights": [

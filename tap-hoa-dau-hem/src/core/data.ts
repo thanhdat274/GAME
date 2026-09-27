@@ -120,6 +120,8 @@ export interface Balance {
   scanTipBonus: number;
   /** Tỉ lệ khách trả thẻ/chuyển khoản (không cần thối tiền, không tip). */
   cashlessChance: number;
+  /** Mỗi món trong đơn: xác suất khách tìm món tiệm chưa bán (nhắc người chơi nhập thêm). */
+  uncarriedAskChance: number;
   counterSlots: number;
   counterCapacity: number;
   counterRequestSeconds: number;

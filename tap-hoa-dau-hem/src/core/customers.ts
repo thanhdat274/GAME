@@ -141,6 +141,14 @@ export function generateCounterOrder(type: CustomerType, rng: Rng, state: GameSt
 }
 
 /** Sinh giỏ hàng thông thường; hàng sau quầy được thêm riêng theo xác suất của khách. */
+/** Món tiệm có bán: đang được xếp vào ô kệ (kể cả ô đã hết) hoặc còn trong kho. */
+function carriedProducts(state: GameState): Set<string> {
+  const ids = new Set<string>();
+  for (const r of usableShelves(state)) for (const slot of state.shelves[r]) if (slot.productId) ids.add(slot.productId);
+  for (const lot of state.warehouse) if (lot.qty > 0) ids.add(lot.productId);
+  return ids;
+}
+
 export function generateOrder(type: CustomerType, level: number, rng: Rng, state?: GameState, cartUnits = 0): OrderLine[] {
   if (state && activeShopType(state).def.service === 'counter') return generateCounterOrder(type, rng, state);
   const cats = unlockedCategories(level);
@@ -148,6 +156,9 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
   // Món đang bán xả được chọn nhiều hơn.
   const clearance = new Set<string>();
   if (state) for (const r of usableShelves(state)) for (const s of state.shelves[r]) if (s.clearance && s.productId && s.qty > 0) clearance.add(s.productId);
+  // Khách chủ yếu tìm món tiệm có bán (đã xếp lên kệ hoặc còn trong kho); chỉ đôi khi hỏi món tiệm chưa bán.
+  // Nhờ vậy danh mục lớn hơn chỗ bày không làm phần lớn khách bỏ về vì "hết hàng".
+  const carried = state ? carriedProducts(state) : null;
   const effects = state ? EffectStack.forDay(state.day, state.calendarStartMonth, state.calendarStartYear, state.activeEvents) : null;
   const pickWeight = (id: string, price: number, category: string) => (1 / Math.sqrt(price))
     * (clearance.has(id) ? DATA.balance.clearance.pickWeightMul : 1) * (effects?.demand(category, id) ?? 1);
@@ -160,7 +171,9 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
     const catWeights = cats.map((c: Category) => (type.prefs[c] ?? 0) * (effects?.demand(c) ?? 1));
     const ci = rng.weightedIndex(catWeights);
     if (ci < 0) break;
-    const pool = products.filter((p) => p.category === cats[ci] && !lines.some((l) => l.productId === p.id));
+    const all = products.filter((p) => p.category === cats[ci] && !lines.some((l) => l.productId === p.id));
+    const sold = carried ? all.filter((p) => carried.has(p.id)) : all;
+    const pool = sold.length && (sold.length === all.length || rng.next() >= DATA.balance.uncarriedAskChance) ? sold : all;
     if (pool.length === 0) continue;
     // Món rẻ (mì gói, muối) được mua thường xuyên hơn món đắt (dầu ăn).
     const p = pool[rng.weightedIndex(pool.map((x) => pickWeight(x.id, x.price, x.category)))];
