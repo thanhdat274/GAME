@@ -30,11 +30,16 @@ export function customerTexture(scene: Phaser.Scene, t: CustomerType, frame: 0 |
   px(3, 0, 6, 2, hair);
   px(2, 1, 8, 2, hair);
   px(3, 2, 6, 5, skin);
-  if (t.id === 'noi_tro' || t.id === 'van_phong') {
+  if (t.id === 'noi_tro' || t.id === 'van_phong' || t.id === 'me_bim') {
     px(2, 2, 1, 6, hair);
     px(9, 2, 1, 6, hair);
   }
   if (t.id === 'xe_om') px(1, 1, 10, 1, 0x3b3b3b); // mũ
+  if (t.id === 'cong_nhan') { px(2, 0, 8, 2, 0xf9c80e); px(1, 1, 10, 1, 0xf9c80e); } // mũ bảo hộ
+  if (t.id === 'shipper') { px(2, 0, 8, 2, 0x43a047); px(1, 1, 10, 1, 0x2e7d32); } // mũ bảo hiểm
+  if (t.id === 'thanh_nien') { px(2, 0, 8, 2, 0xd32f2f); if (!back) px(8, 2, 3, 1, 0xd32f2f); } // mũ lưỡi trai
+  if (t.id === 'ba_ban_hang') { px(5, 0, 2, 1, 0xe8d9a8); px(3, 1, 6, 1, 0xe8d9a8); px(0, 2, 12, 1, 0xd8c48e); } // nón lá
+  if (t.id === 'khach_du_lich') { px(1, 1, 10, 1, 0xf5deb3); px(2, 0, 8, 1, 0xf5deb3); } // mũ rộng vành
   if (back) {
     // Nhìn từ sau lưng (sơ đồ trên xuống, đi lên): gáy tóc, không thấy mặt.
     px(3, 2, 6, 4, hair);
@@ -43,6 +48,9 @@ export function customerTexture(scene: Phaser.Scene, t: CustomerType, frame: 0 |
     px(4, 4, 1, 1, dark);
     px(7, 4, 1, 1, dark);
     px(5, 6, 2, 1, 0xc0605a);
+    if (t.id === 'sinh_vien') { px(3, 4, 6, 1, 0x333333); px(4, 4, 1, 1, 0x90caf9); px(7, 4, 1, 1, 0x90caf9); } // kính cận
+    if (t.id === 'khach_du_lich') px(3, 4, 6, 1, 0x111111); // kính râm
+    if (t.id === 'ong_cu') px(4, 5, 4, 1, 0xe0e0e0); // ria mép bạc
   }
   // Thân
   px(2, 7, 8, 7, shirt);
@@ -52,6 +60,13 @@ export function customerTexture(scene: Phaser.Scene, t: CustomerType, frame: 0 |
   px(10, 13, 1, 1, skin);
   if (t.id === 'hoc_sinh' && !back) px(5, 7, 2, 3, 0xd32f2f); // khăn quàng đỏ
   if (t.id === 'van_phong' && !back) px(5, 7, 2, 1, 0xffffff);
+  if (t.id === 'sinh_vien') {
+    if (back) px(3, 8, 6, 5, 0x6d4c41); // ba lô
+    else { px(3, 7, 1, 6, 0x6d4c41); px(8, 7, 1, 6, 0x6d4c41); } // quai ba lô
+  }
+  if (t.id === 'cong_nhan') px(2, 10, 8, 1, 0xff9800); // dải phản quang
+  if (t.id === 'khach_du_lich' && !back) px(5, 9, 2, 2, 0x333333); // máy ảnh
+  if (t.id === 'me_bim' && !back) px(3, 9, 4, 3, 0xfff3e0); // địu em bé
   // Quần + giày (khung 1: bước chân, một chân đưa lên trước)
   if (frame === 0) {
     px(3, 14, 6, 4, pants);
@@ -189,6 +204,29 @@ export function productIcon(scene: Phaser.Scene, x: number, y: number, p: Produc
   const k = Math.max(1, Math.floor((size * 0.88 * ZOOM) / 16));
   const img = scene.add.image(0, 0, key).setScale(k / ZOOM);
   return scene.add.container(x, y, [g, img]);
+}
+
+/**
+ * Tên món chữ nhỏ dưới icon trong ô kệ / ô kho: gói trong bề rộng `width`, tối đa `lines` dòng;
+ * dài hơn thì cắt dòng cuối và thêm "…".
+ */
+export function productName(
+  scene: Phaser.Scene, x: number, y: number, p: Product, width: number,
+  o: { size?: number; lines?: number; origin?: [number, number]; color?: string } = {},
+): Phaser.GameObjects.Text {
+  const maxLines = o.lines ?? 2;
+  const t = txt(scene, x, y, p.name, { size: o.size ?? 8, bold: true, color: o.color ?? HEX.ink, align: 'center', wrap: width, origin: o.origin ?? [0.5, 0] });
+  t.setLineSpacing(-3);
+  const lines = t.getWrappedText(p.name);
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines).map((line) => line.trimEnd());
+    let last = kept[maxLines - 1];
+    const fits = () => t.getWrappedText([...kept.slice(0, -1), `${last}…`].join('\n')).length <= maxLines;
+    while (last.length > 1 && !fits()) last = last.slice(0, -1).trimEnd();
+    kept[maxLines - 1] = `${last}…`;
+    t.setText(kept.join('\n'));
+  }
+  return t;
 }
 
 const BILL_COLORS: Record<number, number> = {

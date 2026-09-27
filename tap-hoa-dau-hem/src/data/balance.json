@@ -334,7 +334,9 @@
     "maxItems": 6,
     "patienceMul": 1.5,
     "types": [
-      "noi_tro"
+      "noi_tro",
+      "me_bim",
+      "ba_ban_hang"
     ]
   },
   "analytics": {

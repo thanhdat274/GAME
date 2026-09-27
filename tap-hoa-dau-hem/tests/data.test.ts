@@ -6,7 +6,7 @@ import { createNewGame } from '../src/core/state';
 describe('dữ liệu mặt hàng', () => {
   it('products.json hợp lệ và có đủ hàng các giai đoạn 1–4', () => {
     expect(validateProducts(DATA.products)).toEqual([]);
-    expect(DATA.products).toHaveLength(110);
+    expect(DATA.products).toHaveLength(133);
   });
 
   it('levels.json hợp lệ', () => {

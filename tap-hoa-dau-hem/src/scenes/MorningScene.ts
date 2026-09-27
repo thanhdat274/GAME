@@ -14,7 +14,7 @@ import { unrepliedCount } from '../core/reviews';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
 import { dispatchLiveCommand } from '../services/liveShop';
 import { suspendLiveShop } from '../services/liveShop';
-import { productIcon } from '../ui/art';
+import { productIcon, productName } from '../ui/art';
 import { Hud, HUD_H } from '../ui/hud';
 import { ShelfView, ZONE_NAMES, placeErrorText } from '../ui/shelves';
 import { play, setSoundEnabled, stopMusic, vibrate } from '../ui/sound';
@@ -715,9 +715,12 @@ export class MorningScene extends Phaser.Scene {
     const bg = this.add.graphics();
     bg.fillStyle(sel ? C.yellow : C.slot, 1).fillRoundedRect(-cw / 2, -ch / 2, cw, ch, 10);
     bg.lineStyle(sel ? 3 : 2, sel ? C.red : C.slotEdge, 1).strokeRoundedRect(-cw / 2, -ch / 2, cw, ch, 10);
-    const icon = productIcon(this, 0, -8, p, this.counterMode ? 32 : 36);
-    const label = txt(this, 0, ch / 2 - 11, `x${q}`, { size: 12, bold: true, origin: [0.5, 0.5] });
-    const parts: Phaser.GameObjects.GameObject[] = [bg, icon, label];
+    const iconSize = this.counterMode ? 26 : 30;
+    const icon = productIcon(this, 0, -ch / 2 + iconSize / 2 + 3, p, iconSize);
+    const label = txt(this, cw / 2 - 3, -ch / 2 + iconSize + 3, `x${q}`, { size: 10, bold: true, color: HEX.white, origin: [1, 1] })
+      .setBackgroundColor('#3b2618cc').setPadding(3, 0, 3, 0);
+    const name = productName(this, 0, ch / 2 - 1, p, cw - 4, { size: this.counterMode ? 8 : 9, origin: [0.5, 1] });
+    const parts: Phaser.GameObjects.GameObject[] = [bg, icon, name, label];
     if (exp !== undefined && isPerishable(p)) {
       const left = exp - G.state.day;
       const tag = txt(this, cw / 2 - 3, -ch / 2 + 3, left <= 0 ? 'hôm nay' : `${left}n`, {

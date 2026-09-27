@@ -3,7 +3,7 @@ import { product, type Category } from '../core/data';
 import { counterFixture, walkTiles } from '../core/layout';
 import { MAX_SHELVES, fixtureOfShelf, shelfKind, shelfUsable, shelfCount, type GameState } from '../core/state';
 import { canRefill, slotFreshness, zoneFill, zoneOf } from '../core/stock';
-import { productIcon } from './art';
+import { productIcon, productName } from './art';
 import { KineticScroll, clipInteractive, snap } from './scroll';
 import { C, HEX, txt } from './theme';
 
@@ -51,6 +51,7 @@ interface SlotView {
   root: Phaser.GameObjects.Container;
   bg: Phaser.GameObjects.Graphics;
   icon: Phaser.GameObjects.Container | null;
+  name: Phaser.GameObjects.Text | null;
   iconId: string | null;
   qty: Phaser.GameObjects.Text;
   out: Phaser.GameObjects.Text;
@@ -248,10 +249,11 @@ export class ShelfView extends Phaser.GameObjects.Container {
     const glow = s.add.graphics();
     glow.lineStyle(3, C.yellow, 1).strokeRoundedRect(-SLOT_W / 2 - 1, -SLOT_H / 2 - 1, SLOT_W + 2, SLOT_H + 2, 8);
     glow.setVisible(false);
-    const qty = txt(s, SLOT_W / 2 - 4, SLOT_H / 2 - 3, '', { size: 11, bold: true, color: HEX.ink, origin: [1, 1] });
-    const out = txt(s, 0, SLOT_H / 2 - 9, 'Hết', { size: 10, bold: true, color: HEX.white, origin: [0.5, 0.5] });
+    // Số lượng ở giữa mép trên (giữa nút × và nút +), tên món ở dưới icon.
+    const qty = txt(s, 0, -SLOT_H / 2 - 1, '', { size: 10, bold: true, color: HEX.ink, origin: [0.5, 0] });
+    const out = txt(s, 0, -6, 'Hết', { size: 10, bold: true, color: HEX.white, origin: [0.5, 0.5] });
     out.setBackgroundColor(HEX.red).setPadding(3, 1, 3, 1);
-    const fresh = txt(s, -SLOT_W / 2 + 2, SLOT_H / 2 - 2, '', { size: 8, bold: true, color: HEX.white, origin: [0, 1] });
+    const fresh = txt(s, -SLOT_W / 2 + 1, 4, '', { size: 8, bold: true, color: HEX.white, origin: [0, 1] });
     fresh.setPadding(2, 0, 2, 0);
     const progress = s.add.graphics();
 
@@ -282,7 +284,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
       if (p.getDistance() < 12 && !this.scrollTap && this.inView(p.worldY)) this.cb.onSlotTap(r, c);
     });
     this.content.add(root);
-    return { root, bg, icon: null, iconId: null, qty, out, fresh, refillBtn, removeBtn, progress, glow, bgKey: '', freshKey: '' };
+    return { root, bg, icon: null, name: null, iconId: null, qty, out, fresh, refillBtn, removeBtn, progress, glow, bgKey: '', freshKey: '' };
   }
 
   /** Ô kệ tại tọa độ (dùng khi thả hàng kéo từ kho). */
@@ -348,14 +350,20 @@ export class ShelfView extends Phaser.GameObjects.Container {
         }
         if (v.iconId !== slot.productId) {
           v.icon?.destroy();
+          v.name?.destroy();
           v.icon = null;
+          v.name = null;
           v.iconId = slot.productId;
           if (slot.productId) {
-            v.icon = productIcon(this.scene, 0, -4, product(slot.productId), 34);
+            const p = product(slot.productId);
+            v.icon = productIcon(this.scene, 0, -7, p, 24);
+            v.name = productName(this.scene, 0, SLOT_H / 2 + 1, p, SLOT_W - 4, { origin: [0.5, 1] });
+            v.root.addAt(v.name, 2);
             v.root.addAt(v.icon, 2);
           }
         }
         v.icon?.setAlpha(empty ? 0.3 : 1);
+        v.name?.setAlpha(empty ? 0.5 : 1);
         v.qty.setText(slot.productId ? `x${slot.qty}` : '');
         const whHas = slot.productId ? state.warehouse.some((lot) => lot.productId === slot.productId && lot.qty > 0) : false;
         v.out.setVisible(!locked && !!slot.productId && slot.qty === 0 && !whHas);
@@ -371,8 +379,8 @@ export class ShelfView extends Phaser.GameObjects.Container {
         const prog = o.refilling?.(r, c) ?? null;
         if (prog !== null || v.progress.commandBuffer.length) v.progress.clear();
         if (prog !== null) {
-          v.progress.fillStyle(0x000000, 0.35).fillRoundedRect(-SLOT_W / 2 + 4, SLOT_H / 2 - 9, SLOT_W - 8, 6, 3);
-          v.progress.fillStyle(C.green, 1).fillRoundedRect(-SLOT_W / 2 + 4, SLOT_H / 2 - 9, (SLOT_W - 8) * prog, 6, 3);
+          v.progress.fillStyle(0x000000, 0.35).fillRoundedRect(-SLOT_W / 2 + 4, 3, SLOT_W - 8, 5, 2);
+          v.progress.fillStyle(C.green, 1).fillRoundedRect(-SLOT_W / 2 + 4, 3, (SLOT_W - 8) * prog, 5, 2);
         }
         v.refillBtn.setVisible(!o.noRefill && !locked && prog === null && canRefill(state, r, c));
         v.removeBtn.setVisible(o.mode === 'arrange' && !locked && !!slot.productId);
