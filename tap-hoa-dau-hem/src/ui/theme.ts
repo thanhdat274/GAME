@@ -1,8 +1,30 @@
 import Phaser from 'phaser';
 
-/** Kích thước logic của game; canvas thật gấp ZOOM lần để chữ sắc nét. */
+/**
+ * Tự động tính chiều cao theo tỉ lệ màn hình thiết bị:
+ * Chuẩn base là 360x640 (16:9).
+ * Trên màn hình dọc điện thoại (iPhone/Android tỉ lệ 18:9 ~ 21:9),
+ * game tự mở rộng chiều cao (640 -> 840) để lấp đầy 100% màn hình,
+ * loại bỏ hoàn toàn dải đen trên/dưới.
+ */
+export function computeGameHeight(): number {
+  if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
+    return 640;
+  }
+  if (typeof window === 'undefined') return 640;
+  const gameEl = typeof document !== 'undefined' ? document.getElementById('game') : null;
+  const w = (gameEl?.clientWidth && gameEl.clientWidth > 0) ? gameEl.clientWidth : window.innerWidth;
+  const h = (gameEl?.clientHeight && gameEl.clientHeight > 0) ? gameEl.clientHeight : window.innerHeight;
+  if (!w || !h) return 640;
+  const ratio = h / w;
+  if (ratio >= 1.55) {
+    return Math.min(840, Math.max(640, Math.round(W * ratio)));
+  }
+  return 640;
+}
+
 export const W = 360;
-export const H = 640;
+export const H = computeGameHeight();
 export const ZOOM = 2;
 
 export const C = {
@@ -28,6 +50,11 @@ export const C = {
   grey: 0x9e9e9e,
   ink: 0x3b2a1f,
   white: 0xffffff,
+  cardBg: 0xfffcf7,
+  cardBorder: 0xe5d2b7,
+  stepperBg: 0xf3e8d5,
+  badgeRed: 0xdd3827,
+  accentGreen: 0x2e8b57,
 };
 
 export const HEX = {
@@ -39,6 +66,8 @@ export const HEX = {
   yellow: '#f2b632',
   grey: '#8a7a6a',
   muted: '#7a6552',
+  badgeRed: '#dd3827',
+  accentGreen: '#2e8b57',
 };
 
 export const FONT = '"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';

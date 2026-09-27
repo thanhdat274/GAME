@@ -10,10 +10,14 @@ export function pageFrame(scene: Phaser.Scene, title: string, onBack: () => void
   const g = scene.add.graphics();
   g.fillStyle(C.wall, 1).fillRect(0, 0, W, H);
   g.fillStyle(C.hud, 1).fillRect(0, 0, W, 50);
-  g.fillStyle(0x000000, 0.25).fillRect(0, 50, W, 3);
-  new Button(scene, 40, 25, { w: 64, h: 34, label: '‹ Về', color: C.wood, size: 14, onTap: onBack }).setDepth(10);
-  txt(scene, W / 2 + 20, subtitle ? 15 : 25, title, { size: 17, bold: true, color: HEX.cream, origin: [0.5, 0.5] });
-  if (subtitle) txt(scene, W / 2 + 20, 36, subtitle, { size: 11, color: HEX.cream, origin: [0.5, 0.5] });
+  // Nẹp gỗ trang trí viền tiêu đề đậm chất tạp hóa xưa
+  g.fillStyle(C.woodLight, 1).fillRect(0, 48, W, 2);
+  g.fillStyle(0x1a120b, 0.5).fillRect(0, 50, W, 2);
+
+  // Nút quay lại dạng phím cơ gỗ retro
+  new Button(scene, 42, 25, { w: 62, h: 32, radius: 5, label: '‹ Về', color: C.wood, size: 14, onTap: onBack }).setDepth(10);
+  txt(scene, W / 2 + 18, subtitle ? 16 : 25, title, { size: 17, bold: true, color: HEX.cream, origin: [0.5, 0.5] });
+  if (subtitle) txt(scene, W / 2 + 18, 36, subtitle, { size: 11, color: '#f7dcc0', origin: [0.5, 0.5] });
 }
 
 /** Vùng nội dung cuộn dọc có mặt nạ; kéo quá 8px mới tính là cuộn để không nhầm với chạm. */
@@ -75,10 +79,12 @@ export class ScrollArea {
   }
 }
 
-/** Thẻ nền bo góc trong danh sách. */
-export function card(scene: Phaser.Scene, x: number, y: number, w: number, h: number, color: number = C.panel): Phaser.GameObjects.Graphics {
+/** Thẻ nền phong cách nhãn hàng tiệm tạp hóa cổ điển, có gờ nổi nhẹ. */
+export function card(scene: Phaser.Scene, x: number, y: number, w: number, h: number, color: number = C.panel, radius = 6): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
-  g.fillStyle(color, 1).fillRoundedRect(x, y, w, h, 10);
-  g.lineStyle(1, C.panelEdge, 1).strokeRoundedRect(x, y, w, h, 10);
+  g.fillStyle(0x1a120b, 0.18).fillRoundedRect(x, y + 2, w, h, radius);
+  g.fillStyle(color, 1).fillRoundedRect(x, y, w, h, radius);
+  g.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(x + 1, y + 1, w - 2, h - 2, radius);
+  g.lineStyle(1.5, C.panelEdge, 0.95).strokeRoundedRect(x, y, w, h, radius);
   return g;
 }

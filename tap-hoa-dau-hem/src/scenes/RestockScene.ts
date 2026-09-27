@@ -9,20 +9,19 @@ import {
 import { G, persist } from '../game';
 import { dispatchLiveCommand } from '../services/liveShop';
 import { productIcon, productName } from '../ui/art';
-import { PAGE_TOP, ScrollArea, card, pageFrame } from '../ui/page';
-import { ShelfView, ZONE_NAMES, placeErrorText } from '../ui/shelves';
+import { PAGE_TOP, ScrollArea, pageFrame } from '../ui/page';
+import { ROW_PITCH, SHELF_VIEW_ROWS, ShelfView, ZONE_NAMES, placeErrorText } from '../ui/shelves';
 import { play } from '../ui/sound';
 import { Button, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
 type Tab = 'buy' | 'arrange';
 
-const ROW_H = 62;
-const FOOT_Y = H - 96;
+const ROW_H = 74;
+const FOOT_H = 104;
+const FOOT_Y = H - FOOT_H;
 const TAB_Y = PAGE_TOP + 18;
 const SHELF_TOP = PAGE_TOP + 46;
-const FLOOR_Y = SHELF_TOP + 198;
-const CHIP_TOP = FLOOR_Y + 48;
 const CHIP_COLS = 6;
 const CHIP_W = 54;
 const CHIP_H = 58;
@@ -53,6 +52,17 @@ export class RestockScene extends Phaser.Scene {
   private whLabel!: Phaser.GameObjects.Text;
   private hint!: Phaser.GameObjects.Text;
 
+  private get shelfRows(): number {
+    return SHELF_VIEW_ROWS;
+  }
+  private get floorY(): number {
+    return SHELF_TOP + this.shelfRows * ROW_PITCH + 10;
+  }
+  private get chipTop(): number {
+    // Dòng hướng dẫn có thể xuống 2 dòng: khung chip bắt đầu dưới nó để khỏi bị che.
+    return this.floorY + 60;
+  }
+
   constructor() {
     super('Restock');
   }
@@ -67,8 +77,8 @@ export class RestockScene extends Phaser.Scene {
     if (!supplierUnlocked(G.state, this.supplierId)) this.supplierId = 'co_tu';
     pageFrame(this, '📦 Nhập & bày hàng', () => this.close(), '⏸ Tiệm đang tạm dừng');
     this.tabBtns = {
-      buy: new Button(this, W / 4 + 4, TAB_Y, { w: W / 2 - 16, h: 34, label: '🛒 Nhập hàng', size: 14, onTap: () => this.setTab('buy') }),
-      arrange: new Button(this, (W * 3) / 4 - 4, TAB_Y, { w: W / 2 - 16, h: 34, label: '🧺 Bày kệ', size: 14, onTap: () => this.setTab('arrange') }),
+      buy: new Button(this, 92, TAB_Y, { w: 154, h: 36, radius: 5, label: '🛒 Nhập hàng', size: 13.5, onTap: () => this.setTab('buy') }),
+      arrange: new Button(this, 268, TAB_Y, { w: 154, h: 36, radius: 5, label: '🧺 Bày kệ', size: 13.5, onTap: () => this.setTab('arrange') }),
     };
     this.buildBuy();
     this.buildArrange();
@@ -99,11 +109,11 @@ export class RestockScene extends Phaser.Scene {
 
   private buildBuy(): void {
     this.buyLayer = this.add.container(0, 0);
-    const top = TAB_Y + 26;
+    const top = TAB_Y + 28;
     const suppliers = DATA.suppliers.filter((sp) => supplierUnlocked(G.state, sp.id));
     if (suppliers.length > 1) {
       suppliers.forEach((sp, i) => {
-        const b = new Button(this, 64 + i * 118, top + 10, { w: 112, h: 22, size: 11, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => {
+        const b = new Button(this, 68 + i * 124, top + 10, { w: 112, h: 28, size: 11.5, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => {
           this.supplierId = sp.id;
           this.cart = {};
           this.renderBuy();
@@ -111,18 +121,23 @@ export class RestockScene extends Phaser.Scene {
         this.supplierBtns[sp.id] = b;
         this.buyLayer.add(b);
       });
-      this.supplierNote = txt(this, 14, top + 23, '', { size: 10, color: HEX.muted });
+      this.supplierNote = txt(this, 14, top + 26, '', { size: 10, color: HEX.muted });
       this.buyLayer.add(this.supplierNote);
     } else {
-      this.buyLayer.add(txt(this, 14, top + 3, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay vào kho', { size: 12, color: HEX.muted }));
+      this.buyLayer.add(txt(this, 14, top + 6, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay vào kho', { size: 12, color: HEX.muted }));
     }
-    this.list = new ScrollArea(this, top + (this.supplierNote ? 38 : 24), FOOT_Y - 4);
+    this.list = new ScrollArea(this, top + (this.supplierNote ? 42 : 28), FOOT_Y - 4);
 
     const foot = this.add.graphics();
-    foot.fillStyle(C.hud, 1).fillRect(0, FOOT_Y, W, H - FOOT_Y);
-    this.cartText = txt(this, 12, FOOT_Y + 8, '', { size: 12, bold: true, color: HEX.cream });
-    this.cartWarn = txt(this, 12, FOOT_Y + 26, '', { size: 11, color: '#ffb4a8', wrap: W - 24 });
-    const suggest = new Button(this, 60, H - 24, { w: 100, h: 36, label: '🪄 Gợi ý', color: C.blue, size: 13, onTap: () => {
+    foot.fillStyle(C.hud, 1).fillRoundedRect(0, FOOT_Y, W, FOOT_H, { tl: 8, tr: 8, bl: 0, br: 0 });
+    // Nẹp gỗ retro trên đỉnh gờ quầy
+    foot.fillStyle(C.woodLight, 1).fillRect(0, FOOT_Y, W, 4);
+    foot.fillStyle(0x1a120b, 0.4).fillRect(0, FOOT_Y + 4, W, 2);
+    foot.lineStyle(1.5, 0x24150b, 1).strokeRoundedRect(0, FOOT_Y, W, FOOT_H, { tl: 8, tr: 8, bl: 0, br: 0 });
+
+    this.cartText = txt(this, 12, FOOT_Y + 9, '', { size: 12.5, bold: true, color: HEX.cream });
+    this.cartWarn = txt(this, 12, FOOT_Y + 28, '', { size: 10.5, color: '#ffb4a8', wrap: W - 24 });
+    const suggest = new Button(this, 49, H - 24, { w: 78, h: 38, radius: 5, label: '🪄 Gợi ý', color: C.blue, size: 12.5, onTap: () => {
       const sug = suggestRestockCart(G.state, this.supplierId);
       this.cart = sug.cart;
       this.suggested = new Set(Object.keys(sug.cart));
@@ -136,8 +151,8 @@ export class RestockScene extends Phaser.Scene {
       }
       this.renderBuy();
     } });
-    const clear = new Button(this, 150, H - 24, { w: 68, h: 36, label: 'Xóa giỏ', color: C.grey, size: 12, onTap: () => { this.cart = {}; this.renderBuy(); } });
-    this.buyBtn = new Button(this, W - 74, H - 24, { w: 128, h: 40, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => void this.buy() });
+    const clear = new Button(this, 126, H - 24, { w: 64, h: 38, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11.5, onTap: () => { this.cart = {}; this.renderBuy(); } });
+    this.buyBtn = new Button(this, 256, H - 24, { w: 172, h: 40, radius: 5, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => void this.buy() });
     this.buyLayer.add([foot, this.cartText, this.cartWarn, suggest, clear, this.buyBtn]);
   }
 
@@ -159,29 +174,53 @@ export class RestockScene extends Phaser.Scene {
       const inWh = warehouseQty(s, p.id);
       const q = this.cart[p.id] ?? 0;
       const cy = y + ROW_H / 2 - 1;
-      this.list.add([
-        card(this, 8, y + 2, W - 16, ROW_H - 6, missed > 0 ? 0xfcf1ed : C.panel),
-        productIcon(this, 32, cy, p, 36),
-        txt(this, 56, y + 8, p.name, { size: 13, bold: true }),
-        txt(this, 56, y + 25, `Nhập ${formatMoney(unitCost(s, p.id, this.supplierId))} · bán ${formatMoney(priceOf(p.id, s))}`, { size: 10, color: HEX.muted }),
-        txt(this, 56, y + 40, `${p.behindCounter ? 'Quầy' : 'Kệ'} ${onShelf} · Kho ${inWh}${missed ? ` · thiếu ${missed}` : ''}`, { size: 10, bold: missed > 0, color: missed > 0 || onShelf + inWh === 0 ? HEX.red : HEX.green }),
-        new Button(this, 222, cy, { w: 32, h: 36, label: '−', color: C.woodLight, size: 17, onTap: this.list.guard(() => this.changeQty(p.id, -1)) }).setEnabled(q > 0),
-        txt(this, 254, cy, String(q), { size: 15, bold: true, origin: [0.5, 0.5] }),
-        new Button(this, 286, cy, { w: 32, h: 36, label: '+', color: C.green, size: 17, onTap: this.list.guard(() => this.changeQty(p.id, 1)) }),
-        new Button(this, 326, cy, { w: 40, h: 36, label: '+10', color: C.greenDark, size: 12, onTap: this.list.guard(() => this.changeQty(p.id, 10)) }),
-      ]);
+
+      // Nền thẻ sản phẩm phong cách giấy nhãn tiệm tạp hóa xưa
+      const cardBg = this.add.graphics();
+      const isSelected = q > 0;
+      cardBg.fillStyle(0x1a120b, 0.15).fillRoundedRect(8, y + 3.5, W - 16, ROW_H - 6, 6);
+      cardBg.fillStyle(missed > 0 ? 0xfcf4f0 : isSelected ? 0xfbfbf2 : C.panel, 1).fillRoundedRect(8, y + 2, W - 16, ROW_H - 6, 6);
+      cardBg.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(9, y + 3, W - 18, ROW_H - 8, 5);
+      cardBg.lineStyle(1.5, missed > 0 ? 0xd0604b : isSelected ? C.greenDark : C.panelEdge, 0.95).strokeRoundedRect(8, y + 2, W - 16, ROW_H - 6, 6);
+
+      // Cụm phím máy tính tiền vintage 90s: khung màn LCD ô liu ở giữa, phím cơ vuông 2 bên
+      const stepperG = this.add.graphics();
+      stepperG.fillStyle(0xd5ddcc, 1).fillRoundedRect(248, cy - 13, 32, 26, 3);
+      stepperG.lineStyle(1, 0x828f78, 1).strokeRoundedRect(248, cy - 13, 32, 26, 3);
+
+      const nameTxt = txt(this, 58, y + 10, p.name, { size: 13.5, bold: true });
+      const itemsToAdd: Phaser.GameObjects.GameObject[] = [
+        cardBg,
+        productIcon(this, 33, cy, p, 38),
+        nameTxt,
+        txt(this, 58, y + 29, `Nhập ${formatMoney(unitCost(s, p.id, this.supplierId))} · bán ${formatMoney(priceOf(p.id, s))}`, { size: 10.5, color: HEX.muted }),
+        txt(this, 58, y + 47, `${p.behindCounter ? 'Quầy' : 'Kệ'} ${onShelf} · Kho ${inWh}`, { size: 10, bold: false, color: onShelf + inWh === 0 ? HEX.red : HEX.green }),
+        stepperG,
+        new Button(this, 232, cy, { w: 26, h: 26, radius: 4, label: '−', color: q > 0 ? C.red : C.woodLight, size: 15, onTap: this.list.guard(() => this.changeQty(p.id, -1)) }).setEnabled(q > 0),
+        txt(this, 264, cy, String(q), { size: 14, bold: true, color: q > 0 ? '#1b4d24' : '#5a6652', origin: [0.5, 0.5] }),
+        new Button(this, 296, cy, { w: 26, h: 26, radius: 4, label: '+', color: C.green, size: 15, onTap: this.list.guard(() => this.changeQty(p.id, 1)) }),
+        new Button(this, 332, cy, { w: 32, h: 28, radius: 4, label: '+10', color: C.greenDark, size: 11, onTap: this.list.guard(() => this.changeQty(p.id, 10)) }),
+      ];
+
+      if (missed > 0) {
+        const lackTag = txt(this, 58 + nameTxt.width + 8, y + 11, `thiếu ${missed}`, { size: 9.5, bold: true, color: HEX.white });
+        lackTag.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1);
+        itemsToAdd.push(lackTag);
+      }
+
+      this.list.add(itemsToAdd);
     });
     this.list.setHeight(items.length * ROW_H + 8);
 
     const check = checkCart(s, this.cart, this.supplierId);
     const sp = supplier(this.supplierId);
-    this.cartText.setText(`Giỏ: ${formatMoney(check.total)} · Tiền: ${formatMoney(s.money)} · Kho ${check.cells}/${warehouseCapacity(s)} ô`);
+    this.cartText.setText(`Giỏ: ${formatMoney(check.total)} · Tiền: ${formatMoney(s.money)} · Kho: ${check.cells}/${warehouseCapacity(s)} ô`);
     this.cartWarn.setText(
-      !check.ok && check.reason === 'money' ? `Thiếu ${formatMoney(check.missing)}`
-        : !check.ok && check.reason === 'space' ? 'Kho đầy'
-          : !check.ok && check.reason === 'min-order' ? `Đơn tối thiểu ${formatMoney(sp.minOrder)} (thiếu ${formatMoney(check.missing)})`
-            : sp.delayDays > 0 && Object.keys(this.cart).length ? `Giao 15:00 ngày ${s.day + sp.delayDays}`
-              : '',
+      !check.ok && check.reason === 'money' ? `⚠️ Thiếu ${formatMoney(check.missing)}`
+        : !check.ok && check.reason === 'space' ? '⚠️ Kho đầy, không đủ chỗ chứa'
+          : !check.ok && check.reason === 'min-order' ? `⚠️ Đơn tối thiểu ${formatMoney(sp.minOrder)} (thiếu ${formatMoney(check.missing)})`
+            : sp.delayDays > 0 && Object.keys(this.cart).length ? `🚚 Giao 15:00 ngày ${s.day + sp.delayDays}`
+              : Object.keys(this.cart).length ? '✓ Hàng giao ngay vào kho' : '',
     );
     this.buyBtn.setText(sp.delayDays > 0 ? 'Đặt hàng' : 'Nhập hàng');
     this.buyBtn.setEnabled(!this.busy);
@@ -250,13 +289,13 @@ export class RestockScene extends Phaser.Scene {
         if ((G.state.shelves[r]?.[c]?.qty ?? 0) > 0) { toast(this, 'Ô còn hàng, đang bán thì chưa dọn được.', H * 0.62); return; }
         this.shelfAction({ type: 'clearShelf', shelf: r, slot: c }, () => clearSlot(G.state, r, c));
       },
-    }, G.state);
+    }, G.state, this.shelfRows);
     const g = this.add.graphics();
-    g.fillStyle(C.floorB, 1).fillRect(0, FLOOR_Y, W, FOOT_Y - FLOOR_Y);
-    g.fillStyle(C.woodDark, 1).fillRect(0, FLOOR_Y, W, 4);
-    this.whLabel = txt(this, 12, FLOOR_Y + 9, '', { size: 14, bold: true, color: HEX.white });
-    this.hint = txt(this, 12, FLOOR_Y + 30, '', { size: 11, color: HEX.cream, wrap: W - 24 });
-    this.chips = new ScrollArea(this, CHIP_TOP, FOOT_Y - 4);
+    g.fillStyle(C.floorB, 1).fillRect(0, this.floorY, W, FOOT_Y - this.floorY);
+    g.fillStyle(C.woodDark, 1).fillRect(0, this.floorY, W, 4);
+    this.whLabel = txt(this, 12, this.floorY + 9, '', { size: 14, bold: true, color: HEX.white });
+    this.hint = txt(this, 12, this.floorY + 30, '', { size: 11, color: HEX.cream, wrap: W - 24 });
+    this.chips = new ScrollArea(this, this.chipTop, FOOT_Y - 4);
 
     const foot = this.add.graphics();
     foot.fillStyle(C.hud, 1).fillRect(0, FOOT_Y, W, H - FOOT_Y);

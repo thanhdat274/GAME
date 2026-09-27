@@ -14,7 +14,7 @@ import { Button, dialog, toast } from '../ui/widgets';
 import { KineticScroll } from '../ui/scroll';
 import { C, H, HEX, W, emoji, setupCamera, txt } from '../ui/theme';
 
-const CELL = 46;
+const CELL = 43;
 const GX = (W - DATA.land.cols * CELL) / 2;
 const GY = 60;
 const PANEL_Y = GY + DATA.land.rows * CELL + 6;
@@ -151,15 +151,19 @@ export class BuildScene extends Phaser.Scene {
 
     this.fixtureLayer.removeAll(true);
     this.fixtureLayer.add(emoji(this, GX + door.x * CELL + CELL / 2, GY + door.y * CELL + CELL / 2, '🚪', 20));
-    // Đất khóa: nhãn giá / level ở giữa mảnh.
+    // Đất khóa: nhãn giá / level ở giữa mảnh (ngắt dòng tên dài và ghim trong màn hình để không bị che khuất).
     for (const p of DATA.land.plots) {
       if (s.land.includes(p.id)) continue;
       const cells = plotCells(p);
-      const cx = GX + (cells.reduce((a, c) => a + c.x, 0) / cells.length) * CELL + CELL / 2;
+      const rawCx = GX + (cells.reduce((a, c) => a + c.x, 0) / cells.length) * CELL + CELL / 2;
       const cy = GY + (cells.reduce((a, c) => a + c.y, 0) / cells.length) * CELL + CELL / 2;
       const status = plotStatus(s, p.id);
-      const label = status === 'level' ? `🔒 ${p.name}\nCần level ${p.level}` : `🔒 ${p.name}\n${formatMoney(p.cost)}`;
-      const t = txt(this, cx, cy, label, { size: 11, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center' });
+      const shortName = p.name.includes('·') ? p.name.replace(/\s*·\s*/, '\n') : p.name;
+      const costOrLevel = status === 'level' ? `Cần level ${p.level}` : formatMoney(p.cost);
+      const label = `🔒 ${shortName}\n${costOrLevel}`;
+      const cx = Phaser.Math.Clamp(rawCx, 65, W - 65);
+      const t = txt(this, cx, cy, label, { size: 10, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center' });
+      t.setLineSpacing(-2);
       t.setBackgroundColor(status === 'available' ? '#2a7a43cc' : '#00000088').setPadding(4, 2, 4, 2);
       this.fixtureLayer.add(t);
     }

@@ -53,13 +53,14 @@ export class WarehouseScene extends Phaser.Scene {
     FILTERS.forEach((f, i) => {
       const x = 44 + (i % 5) * 68;
       const y = PAGE_TOP + 46 + Math.floor(i / 5) * 32;
-      const b = new Button(this, x, y, { w: 64, h: 28, label: f.label, size: 10, color: C.wood, onTap: () => { this.filter = f.id; this.render(); } });
+      const b = new Button(this, x, y, { w: 64, h: 28, radius: 14, label: f.label, size: 10.5, color: C.wood, onTap: () => { this.filter = f.id; this.render(); } });
       this.chips.push(b);
     });
     this.list = new ScrollArea(this, PAGE_TOP + 112, H - 70);
     const foot = this.add.graphics();
-    foot.fillStyle(C.hud, 1).fillRect(0, H - 66, W, 66);
-    txt(this, 14, H - 54, 'Lô hết hạn tự bị loại cuối ngày.\nBỏ lô để lấy chỗ: giá vốn ghi là tổn thất.', { size: 11, color: HEX.cream });
+    foot.fillStyle(C.hud, 1).fillRoundedRect(0, H - 66, W, 66, { tl: 14, tr: 14, bl: 0, br: 0 });
+    foot.lineStyle(1.5, C.woodLight, 0.7).strokeRoundedRect(0, H - 66, W, 66, { tl: 14, tr: 14, bl: 0, br: 0 });
+    txt(this, 16, H - 52, 'Lô hết hạn tự bị loại cuối ngày.\nBỏ lô để lấy chỗ: giá vốn ghi là tổn thất.', { size: 11, color: HEX.cream });
     this.render();
   }
 

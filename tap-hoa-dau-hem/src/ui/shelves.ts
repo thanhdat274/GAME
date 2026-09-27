@@ -5,13 +5,15 @@ import { MAX_SHELVES, fixtureOfShelf, shelfKind, shelfUsable, shelfCount, type G
 import { canRefill, slotFreshness, zoneFill, zoneOf } from '../core/stock';
 import { productIcon, productName } from './art';
 import { KineticScroll, clipInteractive, snap } from './scroll';
-import { C, HEX, txt } from './theme';
+import { C, H, HEX, txt } from './theme';
 
 export const SLOT_W = 52;
 export const SLOT_H = 54;
 const GAP = 4;
 const X0 = 14;
 export const ROW_PITCH = 64;
+/** Số hàng kệ hiện cùng lúc (bán hàng, buổi sáng, nhập hàng): màn hình đủ cao (≥ 640 + 1 hàng) thì thêm 1 hàng. */
+export const SHELF_VIEW_ROWS = H >= 640 + ROW_PITCH ? MAX_SHELVES + 1 : MAX_SHELVES;
 /** Số ô trên một tầng hiển thị; kệ nhiều ô hơn xuống tầng dưới. */
 const SLOTS_PER_LINE = 6;
 
