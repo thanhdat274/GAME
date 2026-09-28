@@ -194,6 +194,8 @@ export function dialog(
 ): Phaser.GameObjects.Container {
   const w = o.width ?? 300;
   const layer = scene.add.container(0, 0).setDepth(2000);
+  scene.events.emit('thdh-hud-overlay', true);
+  layer.once(Phaser.GameObjects.Events.DESTROY, () => scene.events.emit('thdh-hud-overlay', false));
   const shade = scene.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55).setInteractive();
   layer.add(shade);
   const items: Phaser.GameObjects.GameObject[] = [];

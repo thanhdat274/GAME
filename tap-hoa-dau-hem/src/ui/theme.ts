@@ -77,6 +77,16 @@ export const HEX = {
 export const FONT = '"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 export const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
+// Phaser text textures need enough pixels for their actual on-screen size, not the device DPR alone.
+// On high-DPI phones, cap at 2x to reduce GPU texture memory and sampling cost across hundreds of labels.
+const textResolutionOverride = (() => {
+  if (typeof window === 'undefined') return null;
+  const raw = new URLSearchParams(window.location.search).get('text-res');
+  if (!raw) return null;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 1 && value <= 4 ? value : null;
+})();
+
 /** Đặt camera để hệ tọa độ luôn là 360x640 dù canvas thật lớn gấp đôi. */
 export function setupCamera(scene: Phaser.Scene): void {
   scene.cameras.main.setZoom(ZOOM).centerOn(W / 2, H / 2).setBackgroundColor(C.bg);
@@ -107,8 +117,14 @@ export interface TextOpts {
   emoji?: boolean;
 }
 
-/** Tạo chữ với độ phân giải khớp camera zoom để không bị mờ. */
+/** Tạo chữ ở độ phân giải gần với kích thước hiển thị thực tế để tránh texture quá khổ. */
 export function txt(scene: Phaser.Scene, x: number, y: number, text: string, o: TextOpts = {}): Phaser.GameObjects.Text {
+  const canvas = scene.sys.game.canvas;
+  const cssScale = canvas.clientWidth > 0 && canvas.width > 0 ? canvas.clientWidth / canvas.width : 1;
+  const pixelRatio = window.devicePixelRatio || 1;
+  const mobileViewport = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 600;
+  const maxResolution = mobileViewport && pixelRatio >= 2 ? 2 : 4;
+  const resolution = textResolutionOverride ?? Phaser.Math.Clamp(Math.round(ZOOM * cssScale * pixelRatio), 1, maxResolution);
   const t = scene.add.text(x, y, text, {
     fontFamily: o.emoji ? EMOJI_FONT : FONT,
     fontSize: `${o.size ?? 14}px`,
@@ -118,7 +134,7 @@ export function txt(scene: Phaser.Scene, x: number, y: number, text: string, o: 
     wordWrap: o.wrap ? { width: o.wrap, useAdvancedWrap: true } : undefined,
     stroke: o.stroke,
     strokeThickness: o.stroke ? 3 : 0,
-    resolution: ZOOM * Math.min(2, window.devicePixelRatio || 1),
+    resolution,
     padding: { top: 2, bottom: 2 },
   });
   const [ox, oy] = o.origin ?? [0, 0];

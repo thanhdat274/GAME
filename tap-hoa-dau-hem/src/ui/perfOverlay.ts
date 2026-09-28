@@ -28,7 +28,7 @@ export function installPerfOverlay(game: Phaser.Game): void {
   perfEnabled = true;
 
   const samples: FrameSample[] = [];
-  let previous = 0;
+  let previousGameFrame = 0;
   let lastPaint = 0;
   let phaseStart = 0;
   let raf = 0;
@@ -59,7 +59,7 @@ export function installPerfOverlay(game: Phaser.Game): void {
   const restore = makeButton('FPS', 'Mở bảng đo hiệu năng', () => { root.style.display = 'block'; restore.style.display = 'none'; });
   restore.style.cssText += 'position:fixed;z-index:9999;top:50%;left:calc(env(safe-area-inset-left,0px) + 8px);transform:translateY(-50%);pointer-events:auto;touch-action:none;';
   const hide = makeButton('Ẩn', 'Thu gọn bảng đo', () => { root.style.display = 'none'; restore.style.display = 'block'; });
-  const reset = makeButton('Đặt lại', 'Xóa số liệu đang ghi', () => { samples.length = 0; previous = 0; });
+  const reset = makeButton('Đặt lại', 'Xóa số liệu đang ghi', () => { samples.length = 0; previousGameFrame = 0; });
   const copy = makeButton('Sao chép', 'Sao chép số liệu để gửi', () => {
     const value = body.textContent ?? '';
     void navigator.clipboard?.writeText(value).then(() => { copy.textContent = 'Đã chép'; setTimeout(() => { copy.textContent = 'Sao chép'; }, 1200); }).catch(() => { copy.textContent = 'Không chép được'; });
@@ -85,15 +85,18 @@ export function installPerfOverlay(game: Phaser.Game): void {
     const now = performance.now();
     if (phaseStart) recordPerfSection('phaserRender', now - phaseStart);
     phaseStart = 0;
+    if (previousGameFrame > 0 && document.visibilityState === 'visible') {
+      samples.push({ at: now, duration: now - previousGameFrame });
+    }
+    previousGameFrame = now;
+  });
+
+  // Rebase after tab switches so background throttling is not counted as a game hitch.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') previousGameFrame = 0;
   });
 
   const frame = (now: number) => {
-    if (previous > 0 && document.visibilityState === 'visible') {
-      const duration = now - previous;
-      // Ignore large gaps caused by switching tabs; count them separately as stalls.
-      samples.push({ at: now, duration });
-    }
-    previous = now;
     while (samples.length && now - samples[0].at > WINDOW_MS) samples.shift();
     if (now - lastPaint >= 500) {
       lastPaint = now;
@@ -103,6 +106,28 @@ export function installPerfOverlay(game: Phaser.Game): void {
       const over33 = intervals.filter((n) => n > 33.3).length;
       const over50 = intervals.filter((n) => n > 50).length;
       const scene = game.scene.getScenes(true).map((item) => item.scene.key).join(', ') || '—';
+      const shop = game.scene.getScene('Shop');
+      let shopObjects = 0;
+      let shopVisible = 0;
+      const shopTypes = new Map<string, { total: number; visible: number }>();
+      const countObject = (object: Phaser.GameObjects.GameObject, parentVisible = true): void => {
+        shopObjects++;
+        const state = object as Phaser.GameObjects.GameObject & { visible?: boolean; alpha?: number; list?: Phaser.GameObjects.GameObject[] };
+        const visible = parentVisible && state.visible !== false && (state.alpha === undefined || state.alpha > 0);
+        if (visible) shopVisible++;
+        const type = (state as typeof state & { type?: string }).type ?? object.constructor.name;
+        const typeCount = shopTypes.get(type) ?? { total: 0, visible: 0 };
+        typeCount.total++;
+        if (visible) typeCount.visible++;
+        shopTypes.set(type, typeCount);
+        if (state.list) state.list.forEach((child) => countObject(child, visible));
+      };
+      if (shop?.sys?.isActive()) shop.children.list.forEach((object) => countObject(object));
+      const objectTypes = [...shopTypes.entries()]
+        .sort((a, b) => b[1].visible - a[1].visible)
+        .slice(0, 4)
+        .map(([type, count]) => `${type} ${count.visible}`)
+        .join(' · ') || '—';
       // Phaser renderer constants: CANVAS = 1, WEBGL = 2.
       const renderer = game.renderer.type === 2 ? 'WebGL' : 'Canvas';
       const parts = ['sim', 'map', 'ui', 'actors'].map((key) => {
@@ -114,7 +139,7 @@ export function installPerfOverlay(game: Phaser.Game): void {
         return value?.count ? (value.total / value.count).toFixed(1) : '—';
       });
       sectionTimes.clear();
-      body.textContent = `FPS TB: ${mean ? (1000 / mean).toFixed(1) : 'đang đo…'}   ·   p1: ${p99 ? (1000 / p99).toFixed(1) : '—'}\nKhung hình >33 ms: ${over33}   ·   >50 ms: ${over50}\nSố mẫu: ${intervals.length} / 5 giây\nCảnh: ${scene}\nShop ms/lần: ${parts}\nPhaser ms/frame: trước ${phaserParts[0]} · cảnh ${phaserParts[1]} · vẽ ${phaserParts[2]}\n${renderer} · DPR ${window.devicePixelRatio || 1} · ${screen.width}×${screen.height}`;
+      body.textContent = `FPS Phaser TB: ${mean ? (1000 / mean).toFixed(1) : 'đang đo…'}   ·   p1: ${p99 ? (1000 / p99).toFixed(1) : '—'}\nKhung Phaser >33 ms: ${over33}   ·   >50 ms: ${over50}\nSố mẫu: ${intervals.length} / 5 giây\nCảnh: ${scene}\nShop objects: ${shopVisible}/${shopObjects} hiển thị/tổng\nShop loại nhiều nhất: ${objectTypes}\nShop ms/lần: ${parts}\nPhaser ms/frame: trước ${phaserParts[0]} · cảnh ${phaserParts[1]} · vẽ ${phaserParts[2]}\n${renderer} · DPR ${window.devicePixelRatio || 1} · ${screen.width}×${screen.height}`;
     }
     raf = window.requestAnimationFrame(frame);
   };

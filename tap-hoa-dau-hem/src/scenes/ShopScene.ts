@@ -44,7 +44,6 @@ const lookOf = (c: Customer): CustomerType => customerLook(c);
 
 interface CustomerView {
   sprite: Phaser.GameObjects.Image;
-  bar: Bar;
 }
 
 interface Walker {
@@ -57,6 +56,8 @@ export class ShopScene extends Phaser.Scene {
   private hud!: Hud;
   private shelves!: ShelfView;
   private views = new Map<number, CustomerView>();
+  /** Gộp thanh kiên nhẫn của khách vào một Graphics để giảm draw call khi đông khách. */
+  private customerBars!: Phaser.GameObjects.Graphics;
   /** Nhân vật đang đi (để đổi khung hình bước chân). */
   private walkers = new Set<Walker>();
   private walkFrame: 0 | 1 = 0;
@@ -124,6 +125,7 @@ export class ShopScene extends Phaser.Scene {
     this.session = G.liveSnapshot?.dayRuntime
       ? DaySession.restore(s, G.liveSnapshot.dayRuntime)
       : new DaySession(s);
+    this.customerBars = this.add.graphics().setDepth(150).setName('customer-patience-bars');
     if (G.liveSnapshot) startLivePulses();
     // Chỉ bản dev: cho phép kiểm thử trên trình duyệt truy cập phiên bán (không có trong bản build).
     if (import.meta.env.DEV) (window as unknown as { __thdhShop?: ShopScene }).__thdhShop = this;
@@ -153,6 +155,8 @@ export class ShopScene extends Phaser.Scene {
     this.addZoneRefillButtons();
     this.hud = new Hud(this, s, {
       onPause: () => this.pause(),
+      // Controlled comparison path: HTML/CSS text stays outside WebGL; default remains Phaser.
+      htmlText: new URLSearchParams(window.location.search).get('shop-dom') === '1',
       // Xem lộ trình level giữa giờ bán thì dừng giờ (trừ khi đang ở menu tạm dừng hoặc chơi chung).
       onOverlay: (open) => { if (!G.liveSnapshot && !this.pauseLayer && !this.ending) this.session.paused = open; },
     });
@@ -351,7 +355,6 @@ export class ShopScene extends Phaser.Scene {
     for (const view of this.views.values()) {
       this.tweens.killTweensOf(view.sprite);
       view.sprite.destroy();
-      view.bar.destroy();
     }
     this.views.clear();
     this.walkers.clear();
@@ -721,7 +724,7 @@ export class ShopScene extends Phaser.Scene {
       { label: 'Bỏ qua', color: C.blue, onTap: () => {
         this.session.events.clear();
         runDayHeadless(this.session);
-        for (const v of this.views.values()) { this.tweens.killTweensOf(v.sprite); v.sprite.destroy(); v.bar.destroy(); }
+        for (const v of this.views.values()) { this.tweens.killTweensOf(v.sprite); v.sprite.destroy(); }
         this.views.clear();
         this.finishDay();
       } },
@@ -738,9 +741,7 @@ export class ShopScene extends Phaser.Scene {
     play('door');
     const sprite = customerSprite(this, DOOR_X, FEET_Y, lookOf(c)).setScale(CUSTOMER_SCALE / 2).setDepth(100);
     if (c.name) this.sideFloat(W - 60, FEET_Y - 80, `👋 ${c.name} ghé tiệm`, '#6b4220', 12);
-    const bar = new Bar(this, 0, 0, 36, 5, C.green, 0x000000);
-    bar.setDepth(150);
-    this.views.set(c.id, { sprite, bar });
+    this.views.set(c.id, { sprite });
     this.layoutQueue();
   }
 
@@ -776,14 +777,12 @@ export class ShopScene extends Phaser.Scene {
     this.views.delete(c.id);
     if (v && (reason === 'thief' || reason === 'closed')) {
       if (reason === 'closed') this.sideFloat(v.sprite.x, v.sprite.y - 72, '🙂 Mai ghé lại nhé!', HEX.muted, 13);
-      v.bar.destroy();
       this.tweens.killTweensOf(v.sprite);
       this.tweens.add({ targets: v.sprite, x: DOOR_X + 20, alpha: 0, duration: 400, onComplete: () => v.sprite.destroy() });
       this.layoutQueue();
       return;
     }
     if (v) {
-      v.bar.destroy();
       const face = reason === 'served' ? (stars >= 4 ? '😊' : stars >= 3 ? '🙂' : '😐') : reason === 'patience' ? '😠' : '😞';
       const says = reason === 'patience' ? 'Lâu quá!' : reason === 'nothing' ? 'Không có hàng à?' : '';
       const fx = reason === 'served' ? v.sprite.x - 40 : v.sprite.x;
@@ -1249,18 +1248,37 @@ export class ShopScene extends Phaser.Scene {
       const v = this.views.get(c.id);
       if (!v) return;
       v.sprite.setVisible(side);
-      v.bar.setVisible(side);
-      if (!side) return;
-      const r = c.patience / c.patienceMax;
-      v.bar.setPosition(v.sprite.x - 18, v.sprite.y - 70);
-      v.bar.set(r, r > 0.5 ? C.green : r > 0.25 ? C.yellow : C.red);
     });
+    this.renderCustomerBars(side);
     const requestLeft = this.session.front?.counterRequestLeft;
     if (this.counterTimerText?.active && requestLeft != null) {
       this.counterTimerText.setText(`⏱ ${Math.ceil(requestLeft)}s`);
       this.counterRequestBar?.set(requestLeft / Math.max(1, this.session.front?.counterRequestSeconds ?? 1), requestLeft <= 2 ? C.red : C.green);
     }
     if (perfEnabled) recordPerfSection('actors', performance.now() - measureAt);
+  }
+
+  /** Vẽ thanh kiên nhẫn theo nhóm thay vì một GameObject Graphics cho mỗi khách. */
+  private renderCustomerBars(visible: boolean): void {
+    const g = this.customerBars;
+    g.clear();
+    if (!visible) return;
+    const bars: { x: number; y: number; width: number; color: number }[] = [];
+    for (const c of this.session.customers) {
+      const sprite = this.views.get(c.id)?.sprite;
+      if (!sprite?.active || !sprite.visible) continue;
+      const ratio = Phaser.Math.Clamp(c.patience / c.patienceMax, 0, 1);
+      const width = ratio > 0 ? Math.round(Math.max(5, 36 * ratio)) : 0;
+      const color = ratio > 0.5 ? C.green : ratio > 0.25 ? C.yellow : C.red;
+      bars.push({ x: sprite.x - 18, y: sprite.y - 70, width, color });
+    }
+    if (!bars.length) return;
+    g.fillStyle(0x000000, 0.35);
+    for (const bar of bars) g.fillRoundedRect(bar.x, bar.y, 36, 5, 2.5);
+    for (const color of [C.green, C.yellow, C.red]) {
+      g.fillStyle(color, 1);
+      for (const bar of bars) if (bar.color === color && bar.width > 0) g.fillRoundedRect(bar.x, bar.y, bar.width, 5, 2.5);
+    }
   }
 
   // ---------- Chơi hộ khi rảnh tay ----------
@@ -1403,7 +1421,8 @@ export class ShopScene extends Phaser.Scene {
     // Phần nhìn ngang nằm dưới sơ đồ: ẩn đi cho đỡ tốn công vẽ.
     this.shelves.setVisible(!top);
     this.staffLayer.setVisible(!top);
-    for (const v of this.views.values()) { v.sprite.setVisible(!top); v.bar.setVisible(!top); }
+    for (const v of this.views.values()) v.sprite.setVisible(!top);
+    this.customerBars.setVisible(!top);
   }
 
   private buildAwayCover(): Phaser.GameObjects.Container {
@@ -1446,6 +1465,8 @@ export class ShopScene extends Phaser.Scene {
     setPlayClockRunning(false);
     if (!G.liveSnapshot) persist();
     const L = this.add.container(0, 0).setDepth(3000);
+    this.events.emit('thdh-hud-overlay', true);
+    L.once(Phaser.GameObjects.Events.DESTROY, () => this.events.emit('thdh-hud-overlay', false));
     L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
     const hasDining = !G.liveSnapshot && ensureDiningTables(G.state).length > 0;
     const hasCloud = cloudSaveEnabled();

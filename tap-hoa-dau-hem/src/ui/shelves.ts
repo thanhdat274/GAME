@@ -17,6 +17,28 @@ export const SHELF_VIEW_ROWS = H >= 640 + ROW_PITCH ? MAX_SHELVES + 1 : MAX_SHEL
 /** Số ô trên một tầng hiển thị; kệ nhiều ô hơn xuống tầng dưới. */
 const SLOTS_PER_LINE = 6;
 
+function ensureShelfButtonTextures(scene: Phaser.Scene): void {
+  for (const [key, color, symbol] of [
+    ['shelf_refill_button', C.green, '+'],
+    ['shelf_remove_button', C.red, 'x'],
+  ] as const) {
+    if (scene.textures.exists(key)) continue;
+    const g = scene.make.graphics({}, false);
+    g.fillStyle(color, 1).fillCircle(9, 9, 9);
+    g.lineStyle(2, C.white, 1).strokeCircle(9, 9, 8);
+    g.lineStyle(2, C.white, 1);
+    if (symbol === '+') {
+      g.lineBetween(5, 9, 13, 9);
+      g.lineBetween(9, 5, 9, 13);
+    } else {
+      g.lineBetween(6, 6, 12, 12);
+      g.lineBetween(12, 6, 6, 12);
+    }
+    g.generateTexture(key, 18, 18);
+    g.destroy();
+  }
+}
+
 function lineCount(slots: number): number {
   return Math.max(1, Math.ceil(slots / SLOTS_PER_LINE));
 }
@@ -51,17 +73,14 @@ export interface ShelfRenderOpts {
 
 interface SlotView {
   root: Phaser.GameObjects.Container;
-  bg: Phaser.GameObjects.Graphics;
   icon: Phaser.GameObjects.Container | null;
   name: Phaser.GameObjects.Text | null;
   iconId: string | null;
-  qty: Phaser.GameObjects.Text;
-  out: Phaser.GameObjects.Text;
-  fresh: Phaser.GameObjects.Text;
+  qty: Phaser.GameObjects.Text | null;
+  out: Phaser.GameObjects.Text | null;
+  fresh: Phaser.GameObjects.Text | null;
   refillBtn: Phaser.GameObjects.Container;
   removeBtn: Phaser.GameObjects.Container;
-  progress: Phaser.GameObjects.Graphics;
-  glow: Phaser.GameObjects.Graphics;
   /** Khóa trạng thái nền / nhãn hạn đã vẽ, để render() chỉ vẽ lại khi thay đổi. */
   bgKey: string;
   freshKey: string;
@@ -71,9 +90,13 @@ interface RowView {
   shelf: number;
   /** Tọa độ y (trong nội dung cuộn) của tầng đầu tiên. */
   top: number;
+  height: number;
   slots: SlotView[];
   lock: Phaser.GameObjects.Container;
   label: Phaser.GameObjects.Text;
+  viewportVisible: boolean;
+  locked: boolean;
+  labelVisible: boolean;
   tween: Phaser.Tweens.Tween | null;
   /** Nội dung nhãn khu đang hiển thị (tránh vẽ lại chữ khi không đổi). */
   labelKey: string;
@@ -108,6 +131,12 @@ export class ShelfView extends Phaser.GameObjects.Container {
   private rows: RowView[] = [];
   private byShelf = new Map<number, RowView>();
   private glowTween: Phaser.Tweens.Tween | null = null;
+  private slotBgLayer: Phaser.GameObjects.Graphics;
+  private glowLayer: Phaser.GameObjects.Graphics;
+  private progressLayer: Phaser.GameObjects.Graphics;
+  private glowKey = '';
+  private progressKey = '';
+  private bgDirty = true;
   private content: Phaser.GameObjects.Container;
   private scrollY = 0;
   private maxScroll = 0;
@@ -119,11 +148,16 @@ export class ShelfView extends Phaser.GameObjects.Container {
 
   constructor(scene: Phaser.Scene, readonly top: number, private cb: ShelfCallbacks, state: GameState, viewRows = MAX_SHELVES) {
     super(scene, 0, 0);
+    ensureShelfButtonTextures(scene);
     this.viewH = viewRows * ROW_PITCH;
     this.content = scene.add.container(0, 0);
     this.add(this.content);
     const planks = scene.add.graphics();
     this.content.add(planks);
+    this.slotBgLayer = scene.add.graphics();
+    this.content.add(this.slotBgLayer);
+    this.glowLayer = scene.add.graphics();
+    this.content.add(this.glowLayer);
     let y = top;
     displayShelves(state).forEach((shelf) => {
       const kind = shelfKind(state, shelf);
@@ -153,12 +187,19 @@ export class ShelfView extends Phaser.GameObjects.Container {
       const label = txt(scene, 12, y - 8, '', { size: 9, bold: true, color: HEX.ink });
       label.setBackgroundColor(kind === 'shelf' ? '#f3dfbd' : '#d9eefb').setPadding(3, 1, 3, 1);
       this.content.add(label);
-      const row: RowView = { shelf, top: rowTop, slots, lock, label, tween: null, labelKey: '' };
+      const row: RowView = {
+        shelf, top: rowTop, height: bodyH, slots, lock, label,
+        viewportVisible: true, locked: false, labelVisible: false,
+        tween: null, labelKey: '',
+      };
       this.rows.push(row);
       this.byShelf.set(shelf, row);
       y += lines * ROW_PITCH;
     });
     this.maxScroll = Math.max(0, y - top - this.viewH);
+    // Các hiệu ứng ít xuất hiện dùng chung một Graphics thay vì tạo nhiều Graphics cho từng ô.
+    this.progressLayer = scene.add.graphics();
+    this.content.add(this.progressLayer);
     if (this.maxScroll > 0) {
       this.enableScroll();
       // Chỉ báo còn kệ phía trên / dưới khung nhìn.
@@ -208,9 +249,27 @@ export class ShelfView extends Phaser.GameObjects.Container {
   setScroll(y: number): void {
     this.scrollY = Phaser.Math.Clamp(y, 0, this.maxScroll);
     this.content.y = snap(-this.scrollY);
+    this.updateViewportVisibility();
     this.moreUp?.setVisible(this.scrollY > 4);
     this.moreDown?.setVisible(this.scrollY < this.maxScroll - 4);
     this.cb.onScroll?.(this.atCounter);
+  }
+
+  /** Ẩn nội dung kệ nằm hoàn toàn ngoài khung cuộn để Phaser bỏ qua khi vẽ. */
+  private updateViewportVisibility(): void {
+    const contentY = this.content.y;
+    const viewTop = this.top - 14;
+    const viewBottom = this.top + this.viewH + 4;
+    for (const row of this.rows) {
+      const rowTop = row.top + contentY;
+      row.viewportVisible = rowTop + row.height >= viewTop && rowTop <= viewBottom;
+      row.lock.setVisible(row.locked && row.viewportVisible);
+      row.label.setVisible(row.labelVisible && row.viewportVisible);
+      for (const slot of row.slots) {
+        const slotY = slot.root.y + contentY;
+        slot.root.setVisible(row.viewportVisible && slotY + SLOT_H / 2 >= viewTop && slotY - SLOT_H / 2 <= viewBottom);
+      }
+    }
   }
 
   /** Đang nhìn các kệ sát quầy (vị trí mặc định). */
@@ -247,22 +306,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
   private makeSlot(r: number, rowTop: number, c: number): SlotView {
     const s = this.scene;
     const { x, y } = this.slotPos(rowTop, c);
-    const bg = s.add.graphics();
-    const glow = s.add.graphics();
-    glow.lineStyle(3, C.yellow, 1).strokeRoundedRect(-SLOT_W / 2 - 1, -SLOT_H / 2 - 1, SLOT_W + 2, SLOT_H + 2, 8);
-    glow.setVisible(false);
-    // Số lượng ở giữa mép trên (giữa nút × và nút +), tên món ở dưới icon.
-    const qty = txt(s, 0, -SLOT_H / 2 - 1, '', { size: 10, bold: true, color: HEX.ink, origin: [0.5, 0] });
-    const out = txt(s, 0, -6, 'Hết', { size: 10, bold: true, color: HEX.white, origin: [0.5, 0.5] });
-    out.setBackgroundColor(HEX.red).setPadding(3, 1, 3, 1);
-    const fresh = txt(s, -SLOT_W / 2 + 1, 4, '', { size: 8, bold: true, color: HEX.white, origin: [0, 1] });
-    fresh.setPadding(2, 0, 2, 0);
-    const progress = s.add.graphics();
-
-    const refillBtn = s.add.container(SLOT_W / 2 - 8, -SLOT_H / 2 + 8, [
-      s.add.circle(0, 0, 9, C.green).setStrokeStyle(2, 0xffffff),
-      txt(s, 0, 0, '+', { size: 13, bold: true, color: HEX.white, origin: [0.5, 0.5] }),
-    ]);
+    const refillBtn = s.add.container(SLOT_W / 2 - 8, -SLOT_H / 2 + 8, [s.add.image(0, 0, 'shelf_refill_button')]);
     // Vùng chạm lớn hơn hình để dễ bấm trên điện thoại.
     this.clipInput(refillBtn.setSize(26, 26));
     refillBtn.on('pointerup', (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
@@ -270,23 +314,20 @@ export class ShelfView extends Phaser.GameObjects.Container {
       if (p.getDistance() < 10 && !this.scrollTap && this.inView(p.worldY)) this.cb.onRefill?.(r, c);
     });
 
-    const removeBtn = s.add.container(-SLOT_W / 2 + 8, -SLOT_H / 2 + 8, [
-      s.add.circle(0, 0, 8, C.red).setStrokeStyle(2, 0xffffff),
-      txt(s, 0, 0, '×', { size: 12, bold: true, color: HEX.white, origin: [0.5, 0.5] }),
-    ]);
+    const removeBtn = s.add.container(-SLOT_W / 2 + 8, -SLOT_H / 2 + 8, [s.add.image(0, 0, 'shelf_remove_button')]);
     this.clipInput(removeBtn.setSize(24, 24));
     removeBtn.on('pointerup', (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
       ev.stopPropagation();
       if (p.getDistance() < 10 && !this.scrollTap && this.inView(p.worldY)) this.cb.onRemove?.(r, c);
     });
 
-    const root = s.add.container(x, y, [bg, glow, qty, out, fresh, progress, refillBtn, removeBtn]);
+    const root = s.add.container(x, y, [refillBtn, removeBtn]);
     this.clipInput(root.setSize(SLOT_W, SLOT_H));
     root.on('pointerup', (p: Phaser.Input.Pointer) => {
       if (p.getDistance() < 12 && !this.scrollTap && this.inView(p.worldY)) this.cb.onSlotTap(r, c);
     });
     this.content.add(root);
-    return { root, bg, icon: null, name: null, iconId: null, qty, out, fresh, refillBtn, removeBtn, progress, glow, bgKey: '', freshKey: '' };
+    return { root, icon: null, name: null, iconId: null, qty: null, out: null, fresh: null, refillBtn, removeBtn, bgKey: '', freshKey: '' };
   }
 
   /** Ô kệ tại tọa độ (dùng khi thả hàng kéo từ kho). */
@@ -303,16 +344,19 @@ export class ShelfView extends Phaser.GameObjects.Container {
 
   render(state: GameState, o: ShelfRenderOpts): void {
     const baseRows = shelfCount(state.level);
-    let anyGlow = false;
+    const glowRects: { x: number; y: number }[] = [];
+    const progressRects: { x: number; y: number; ratio: number }[] = [];
     for (const row of this.rows) {
       const r = row.shelf;
       const locked = r < MAX_SHELVES && r >= baseRows;
-      row.lock.setVisible(locked);
+      row.locked = locked;
+      row.lock.setVisible(locked && row.viewportVisible);
       const zone = zoneOf(state, r);
       const kind = shelfKind(state, r);
       const zoneLabel = row.label;
       const prefix = kind === 'fridge' ? '🧊 TỦ LẠNH' : kind === 'freezer' ? '❄️ TỦ ĐÔNG' : '';
-      zoneLabel.setVisible(!locked && (!!zone || !!prefix));
+      row.labelVisible = !locked && (!!zone || !!prefix);
+      zoneLabel.setVisible(row.labelVisible && row.viewportVisible);
       if (!locked && zone) {
         const fill = zoneFill(state, zone);
         const text = `${prefix ? `${prefix} · ` : ''}${ZONE_NAMES[zone]} · ${Math.round(fill.fill * 100)}%`;
@@ -344,11 +388,27 @@ export class ShelfView extends Phaser.GameObjects.Container {
         const slot = state.shelves[r][c];
         const empty = !slot.productId || slot.qty === 0;
         const bgKey = `${kind}|${locked}`;
-        if (v.bgKey !== bgKey) {
-          v.bgKey = bgKey;
-          v.bg.clear();
-          v.bg.fillStyle(kind === 'shelf' ? C.slot : 0xeef7fd, locked ? 0.4 : 1).fillRoundedRect(-SLOT_W / 2, -SLOT_H / 2, SLOT_W, SLOT_H, 7);
-          v.bg.lineStyle(2, kind === 'shelf' ? C.slotEdge : 0x9cc3de, 1).strokeRoundedRect(-SLOT_W / 2, -SLOT_H / 2, SLOT_W, SLOT_H, 7);
+        if (v.bgKey !== bgKey) { v.bgKey = bgKey; this.bgDirty = true; }
+        // Empty cells do not need three Canvas Text objects in the display list.
+        if (slot.productId) {
+          if (!v.qty) {
+            v.qty = txt(this.scene, 0, -SLOT_H / 2 - 1, '', { size: 10, bold: true, color: HEX.ink, origin: [0.5, 0] });
+            v.root.addAt(v.qty, 0);
+          }
+          v.qty.setText(`x${slot.qty}`);
+        } else if (v.qty) {
+          v.qty.destroy();
+          v.qty = null;
+        }
+        const whHas = slot.productId ? state.warehouse.some((lot) => lot.productId === slot.productId && lot.qty > 0) : false;
+        const showOut = !locked && !!slot.productId && slot.qty === 0 && !whHas;
+        if (showOut && !v.out) {
+          v.out = txt(this.scene, 0, -6, 'Hết', { size: 10, bold: true, color: HEX.white, origin: [0.5, 0.5] });
+          v.out.setBackgroundColor(HEX.red).setPadding(3, 1, 3, 1);
+          v.root.addAt(v.out, Math.min(1, v.root.list.length));
+        } else if (!showOut && v.out) {
+          v.out.destroy();
+          v.out = null;
         }
         if (v.iconId !== slot.productId) {
           v.icon?.destroy();
@@ -360,45 +420,79 @@ export class ShelfView extends Phaser.GameObjects.Container {
             const p = product(slot.productId);
             v.icon = productIcon(this.scene, 0, -7, p, 24);
             v.name = productName(this.scene, 0, SLOT_H / 2 + 1, p, SLOT_W - 4, { origin: [0.5, 1] });
-            v.root.addAt(v.name, 2);
-            v.root.addAt(v.icon, 2);
+            const buttonIndex = v.root.list.indexOf(v.refillBtn);
+            const itemIndex = buttonIndex < 0 ? v.root.list.length : buttonIndex;
+            v.root.addAt(v.name, itemIndex);
+            v.root.addAt(v.icon, itemIndex);
           }
         }
         v.icon?.setAlpha(empty ? 0.3 : 1);
         v.name?.setAlpha(empty ? 0.5 : 1);
-        v.qty.setText(slot.productId ? `x${slot.qty}` : '');
-        const whHas = slot.productId ? state.warehouse.some((lot) => lot.productId === slot.productId && lot.qty > 0) : false;
-        v.out.setVisible(!locked && !!slot.productId && slot.qty === 0 && !whHas);
         // Nhãn hạn dùng: đỏ = hết hạn hôm nay, vàng = hết hạn ngày mai; bán xả hiện phần trăm giảm.
         const freshness = !empty ? slotFreshness(slot, state.day) : null;
         const freshKey = slot.clearance && !empty ? `c${slot.clearance}` : freshness ?? '';
         if (v.freshKey !== freshKey) {
           v.freshKey = freshKey;
-          if (slot.clearance && !empty) v.fresh.setText(`-${slot.clearance}%`).setBackgroundColor(HEX.red).setVisible(true);
-          else if (freshness) v.fresh.setText(freshness === 'today' ? 'HẠN' : 'MAI').setBackgroundColor(freshness === 'today' ? HEX.red : '#d49a00').setVisible(true);
-          else v.fresh.setVisible(false);
+          if (slot.clearance && !empty || freshness) {
+            if (!v.fresh) {
+              v.fresh = txt(this.scene, -SLOT_W / 2 + 1, 4, '', { size: 8, bold: true, color: HEX.white, origin: [0, 1] });
+              v.fresh.setPadding(2, 0, 2, 0);
+              const buttonIndex = v.root.list.indexOf(v.refillBtn);
+              v.root.addAt(v.fresh, buttonIndex < 0 ? v.root.list.length : buttonIndex);
+            }
+            if (slot.clearance && !empty) v.fresh.setText(`-${slot.clearance}%`).setBackgroundColor(HEX.red);
+            else if (freshness) v.fresh.setText(freshness === 'today' ? 'HẠN' : 'MAI').setBackgroundColor(freshness === 'today' ? HEX.red : '#d49a00');
+          } else if (v.fresh) {
+            v.fresh.destroy();
+            v.fresh = null;
+          }
         }
         const prog = o.refilling?.(r, c) ?? null;
-        if (prog !== null || v.progress.commandBuffer.length) v.progress.clear();
-        if (prog !== null) {
-          v.progress.fillStyle(0x000000, 0.35).fillRoundedRect(-SLOT_W / 2 + 4, 3, SLOT_W - 8, 5, 2);
-          v.progress.fillStyle(C.green, 1).fillRoundedRect(-SLOT_W / 2 + 4, 3, (SLOT_W - 8) * prog, 5, 2);
-        }
+        if (prog !== null) progressRects.push({ x: v.root.x, y: v.root.y, ratio: prog });
         v.refillBtn.setVisible(!o.noRefill && !locked && prog === null && canRefill(state, r, c));
         v.removeBtn.setVisible(o.mode === 'arrange' && !locked && !!slot.productId);
         const glow = !locked && !empty && !!slot.productId && !!o.highlight?.has(slot.productId);
-        v.glow.setVisible(glow);
-        anyGlow ||= glow;
+        if (glow) glowRects.push({ x: v.root.x, y: v.root.y });
         v.root.setAlpha(locked ? 0.5 : 1);
       });
     }
-    if (anyGlow && !this.glowTween) {
-      const glows = this.rows.flatMap((row) => row.slots.map((v) => v.glow));
-      this.glowTween = this.scene.tweens.add({ targets: glows, alpha: 0.25, yoyo: true, repeat: -1, duration: 420 });
-    } else if (!anyGlow && this.glowTween) {
+    if (this.bgDirty) {
+      this.bgDirty = false;
+      this.slotBgLayer.clear();
+      for (const row of this.rows) {
+        const kind = shelfKind(state, row.shelf);
+        const locked = row.shelf < MAX_SHELVES && row.shelf >= baseRows;
+        for (const v of row.slots) {
+          const { x, y } = v.root;
+          this.slotBgLayer.fillStyle(kind === 'shelf' ? C.slot : 0xeef7fd, locked ? 0.2 : 1).fillRoundedRect(x - SLOT_W / 2, y - SLOT_H / 2, SLOT_W, SLOT_H, 7);
+          this.slotBgLayer.lineStyle(2, kind === 'shelf' ? C.slotEdge : 0x9cc3de, locked ? 0.5 : 1).strokeRoundedRect(x - SLOT_W / 2, y - SLOT_H / 2, SLOT_W, SLOT_H, 7);
+        }
+      }
+    }
+    const nextGlowKey = glowRects.map(({ x, y }) => `${x},${y}`).join(';');
+    if (nextGlowKey !== this.glowKey) {
+      this.glowKey = nextGlowKey;
+      this.glowLayer.clear();
+      for (const { x, y } of glowRects) {
+        this.glowLayer.lineStyle(3, C.yellow, 1).strokeRoundedRect(x - SLOT_W / 2 - 1, y - SLOT_H / 2 - 1, SLOT_W + 2, SLOT_H + 2, 8);
+      }
+    }
+    if (glowRects.length && !this.glowTween) {
+      this.glowLayer.setAlpha(1);
+      this.glowTween = this.scene.tweens.add({ targets: this.glowLayer, alpha: 0.25, yoyo: true, repeat: -1, duration: 420 });
+    } else if (!glowRects.length && this.glowTween) {
       this.glowTween.remove();
       this.glowTween = null;
-      this.rows.forEach((row) => row.slots.forEach((v) => v.glow.setAlpha(1)));
+      this.glowLayer.setAlpha(1);
+    }
+    const nextProgressKey = progressRects.map(({ x, y, ratio }) => `${x},${y},${Math.round(ratio * 100)}`).join(';');
+    if (nextProgressKey !== this.progressKey) {
+      this.progressKey = nextProgressKey;
+      this.progressLayer.clear();
+      for (const { x, y, ratio } of progressRects) {
+        this.progressLayer.fillStyle(0x000000, 0.35).fillRoundedRect(x - SLOT_W / 2 + 4, y + 3, SLOT_W - 8, 5, 2);
+        this.progressLayer.fillStyle(C.green, 1).fillRoundedRect(x - SLOT_W / 2 + 4, y + 3, (SLOT_W - 8) * ratio, 5, 2);
+      }
     }
   }
 

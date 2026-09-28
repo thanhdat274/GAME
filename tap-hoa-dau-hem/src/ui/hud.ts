@@ -19,9 +19,22 @@ export class Hud extends Phaser.GameObjects.Container {
   private bar: Bar;
   private shownMoney = -1;
   private cloudIcon?: Phaser.GameObjects.Text;
+  private htmlHud?: Phaser.GameObjects.DOMElement;
+  private htmlMoney?: HTMLSpanElement;
+  private htmlDay?: HTMLSpanElement;
+  private htmlStars?: HTMLSpanElement;
+  private htmlLevel?: HTMLSpanElement;
+  private overlayDepth = 0;
+
+  private onHudOverlay = (open: boolean): void => {
+    this.overlayDepth = Math.max(0, this.overlayDepth + (open ? 1 : -1));
+    this.htmlHud?.setVisible(this.overlayDepth === 0);
+  };
+  private onScenePause = (): void => this.onHudOverlay(true);
+  private onSceneResume = (): void => this.onHudOverlay(false);
 
   /** `onOverlay(true/false)`: bảng lộ trình level mở / đóng (màn bán dừng giờ trong lúc xem). */
-  constructor(scene: Phaser.Scene, private gs: GameState, private opts: { onPause?: () => void; subtitle?: string; onOverlay?: (open: boolean) => void } = {}) {
+  constructor(scene: Phaser.Scene, private gs: GameState, private opts: { onPause?: () => void; subtitle?: string; onOverlay?: (open: boolean) => void; htmlText?: boolean } = {}) {
     super(scene, 0, 0);
     const bg = scene.add.graphics();
     bg.fillStyle(C.hud, 1).fillRect(0, 0, W, HUD_H);
@@ -32,6 +45,35 @@ export class Hud extends Phaser.GameObjects.Container {
     this.lv = txt(scene, 10, 29, '', { size: 12, bold: true, color: HEX.cream });
     this.bar = new Bar(scene, 50, 33, cloudSaveEnabled() ? W - 95 : W - 60, 9, C.yellow, 0xffffff);
     this.add([bg, this.money, this.day, this.stars, this.lv, this.bar]);
+
+    if (opts.htmlText) {
+      const root = document.createElement('div');
+      root.style.cssText = 'position:relative;width:360px;height:50px;pointer-events:none;overflow:hidden;font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;text-shadow:0 1px 1px #25170f;';
+      const makeLabel = (css: string): HTMLSpanElement => {
+        const label = document.createElement('span');
+        label.style.cssText = `position:absolute;white-space:nowrap;line-height:1.15;${css}`;
+        root.append(label);
+        return label;
+      };
+      this.htmlMoney = makeLabel('left:10px;top:6px;font-size:16px;font-weight:700;color:#f2b632;');
+      this.htmlDay = makeLabel('top:7px;font-size:9.5px;font-weight:700;color:#f6e3c4;transform:translateX(-50%);');
+      this.htmlStars = makeLabel('right:10px;top:7px;font-size:14px;font-weight:700;color:#f6e3c4;');
+      this.htmlLevel = makeLabel('left:10px;top:29px;font-size:12px;font-weight:700;color:#f6e3c4;');
+      this.htmlHud = scene.add.dom(0, 0, root).setOrigin(0, 0).setDepth(501);
+      this.add(this.htmlHud);
+      this.money.setVisible(false);
+      this.day.setVisible(false);
+      this.stars.setVisible(false);
+      this.lv.setVisible(false);
+      scene.events.on('thdh-hud-overlay', this.onHudOverlay);
+      scene.events.on(Phaser.Scenes.Events.PAUSE, this.onScenePause);
+      scene.events.on(Phaser.Scenes.Events.RESUME, this.onSceneResume);
+      this.once(Phaser.GameObjects.Events.DESTROY, () => {
+        scene.events.off('thdh-hud-overlay', this.onHudOverlay);
+        scene.events.off(Phaser.Scenes.Events.PAUSE, this.onScenePause);
+        scene.events.off(Phaser.Scenes.Events.RESUME, this.onSceneResume);
+      });
+    }
 
     if (cloudSaveEnabled()) {
       this.cloudIcon = txt(scene, W - 22, 33, '', { size: 14, color: HEX.cream, origin: [0.5, 0.5] });
@@ -75,11 +117,15 @@ export class Hud extends Phaser.GameObjects.Container {
     const s = this.gs;
     if (this.shownMoney !== s.money) {
       this.shownMoney = s.money;
-      this.money.setText(`💰 ${formatMoney(s.money)}`);
+      const money = `💰 ${formatMoney(s.money)}`;
+      this.money.setText(money);
+      if (this.htmlMoney) this.htmlMoney.textContent = money;
     }
     const date = calendarDate(s.day, { month: s.calendarStartMonth, year: s.calendarStartYear });
     const when = s.phase === 'open' ? ` · ${formatClock(s.clock)}` : '';
-    this.stars.setText(s.ratings.length ? `⭐ ${averageRating(s).toFixed(1)}` : '⭐ –');
+    const stars = s.ratings.length ? `⭐ ${averageRating(s).toFixed(1)}` : '⭐ –';
+    this.stars.setText(stars);
+    if (this.htmlStars) this.htmlStars.textContent = stars;
     // Chữ ngày nằm giữa tiền và sao; tiền lớn thì rút gọn để không đè lên nhau.
     const left = this.money.x + this.money.width + 6;
     const right = this.stars.x - this.stars.width - 6;
@@ -96,7 +142,14 @@ export class Hud extends Phaser.GameObjects.Container {
     }
     if (this.day.width > avail) this.day.setScale(avail / this.day.width);
     this.day.setX(left + avail / 2);
-    this.lv.setText(`Lv ${s.level}`);
+    if (this.htmlDay) {
+      this.htmlDay.textContent = this.day.text;
+      this.htmlDay.style.left = `${left + avail / 2}px`;
+      this.htmlDay.style.transform = `translateX(-50%) scale(${this.day.scaleX})`;
+    }
+    const level = `Lv ${s.level}`;
+    this.lv.setText(level);
+    if (this.htmlLevel) this.htmlLevel.textContent = level;
     this.bar.set(levelProgress(s.exp, s.level));
   }
 

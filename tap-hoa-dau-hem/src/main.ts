@@ -37,19 +37,26 @@ import { applyPendingCloud, configureCloudApplyGuard, enableOnlineRetry } from '
 installRoundedRectFix();
 if (!isMaxLevelSimulation) enableOnlineRetry();
 
+// Mặc định giữ nhịp 60 FPS cho chuyển động mượt trên màn hình cảm ứng.
+// Có thể so sánh mức tiết kiệm pin bằng ?fps=30 (kết hợp ?perf=1 để đo).
+const fpsOverride = new URLSearchParams(window.location.search).get('fps');
+const fpsLimit = fpsOverride === '30' ? 30 : 60;
+const shopDomTest = new URLSearchParams(window.location.search).get('shop-dom') === '1';
+
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: W * ZOOM,
   height: H * ZOOM,
   backgroundColor: '#2b1d14',
-  // ShopScene moves and redraws several layers every frame. On touch devices,
-  // cap the loop at 30 FPS to leave the GPU idle between frames and reduce heat.
-  fps: { limit: window.matchMedia('(pointer: coarse)').matches ? 30 : 60 },
+  // Cho phép chuyển động 60 FPS trên điện thoại; dùng ?fps=30 để so sánh nhiệt/pin.
+  fps: { limit: fpsLimit },
   // Căn giữa bằng flex của #game (index.html); để Phaser căn nữa thì canvas bị đẩy lệch hai lần.
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.NO_CENTER },
   // Game dùng pixel art; tắt MSAA để giảm chi phí render trên thiết bị yếu.
   render: { antialias: false, roundPixels: false },
+  // Chỉ tạo DOM layer trong lượt thử HUD HTML/CSS; mặc định không thêm DOM container.
+  dom: shopDomTest ? { createContainer: true } : undefined,
   input: { activePointers: 2 },
   scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, StoreMapScene, PricesScene, LedgerScene, TaxScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene, RestockScene, InternalScene, ReviewsScene],
 });

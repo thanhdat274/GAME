@@ -15,7 +15,7 @@ import { cellAt, drawFixture, drawFloor, type FloorGeom } from './floorPlan';
 import { ZONE_NAMES } from './shelves';
 import { play } from './sound';
 import { Button, panel } from './widgets';
-import { C, H, HEX, W, txt } from './theme';
+import { C, H, HEX, W, ZOOM, txt } from './theme';
 
 /** Tốc độ đi trên sơ đồ (ô/giây, theo thời gian game). */
 const SPEED = { customer: 3.2, staff: 3.6, player: DATA.balance.topDown.playerTilesPerSecond, flee: 6 } as const;
@@ -243,6 +243,7 @@ export class LiveMap {
   open(): void {
     this.selected = null;
     this.root.setVisible(true);
+    if (this.mode === 'watch') this.scene.events.emit('thdh-hud-overlay', true);
     this.redrawFixtures();
     // Đặt ngay mọi người vào chỗ hiện tại của họ thay vì cho đi từ cửa.
     this.sync(0, true);
@@ -250,7 +251,9 @@ export class LiveMap {
   }
 
   close(): void {
+    const wasVisible = this.root.visible;
     this.root.setVisible(false);
+    if (wasVisible && this.mode === 'watch') this.scene.events.emit('thdh-hud-overlay', false);
     for (const a of [...this.agents.values()]) this.removeAgent(a);
     this.fx.removeAll(true);
     this.closeSheet();
@@ -578,13 +581,32 @@ export class LiveMap {
   private redrawFixtures(): void {
     this.fixtureLayer.removeAll(true);
     const state = this.session.state;
-    this.fixtureLayer.add(drawFloor(this.scene, this.geom, state.land));
+    // The floor and fixtures are static between map edits. Bake them together so
+    // WebGL draws one texture instead of a Graphics + image + label per fixture
+    // on every frame (which becomes costly in expanded stores).
+    const layers: Phaser.GameObjects.GameObject[] = [];
+    const floor = drawFloor(this.scene, this.geom, state.land).setScale(ZOOM);
+    layers.push(floor);
     const view = storeView(state)!;
     for (const f of state.fixtures) {
       const sel = this.selected?.kind === 'fixture' && this.selected.uid === f.uid;
       const stock = sellsGoods(furniture(f.type).kind) ? fixtureStockLevel(fixtureInfo(view, f)) : null;
-      this.fixtureLayer.add(drawFixture(this.scene, this.geom, f, { selected: sel, stock }));
+      const fixture = drawFixture(this.scene, this.geom, f, { selected: sel, stock });
+      // Keep world coordinates in the doubled-resolution bake texture.
+      fixture.setPosition(fixture.x * ZOOM, fixture.y * ZOOM).setScale(ZOOM);
+      layers.push(fixture);
     }
+    const textureW = DATA.land.cols * this.geom.cell * ZOOM;
+    const textureH = DATA.land.rows * this.geom.cell * ZOOM;
+    const baked = this.scene.add.renderTexture(this.geom.gx, this.geom.gy, textureW, textureH)
+      .setOrigin(0, 0)
+      .setScale(1 / ZOOM);
+    // Keep the texture to the map bounds; a screen-sized transparent texture
+    // would trade draw calls for unnecessary full-screen overdraw.
+    const content = this.scene.add.container(-this.geom.gx * ZOOM, -this.geom.gy * ZOOM, layers);
+    baked.draw(content);
+    content.destroy(true);
+    this.fixtureLayer.add(baked);
   }
 
   private agentNear(worldX: number, worldY: number): Agent | null {

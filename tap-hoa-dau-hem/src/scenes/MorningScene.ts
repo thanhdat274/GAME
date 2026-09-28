@@ -110,7 +110,7 @@ interface Row {
 }
 
 type ProductFilter = Category | 'all';
-interface FilterRow { category: Category; height: number; root: Phaser.GameObjects.Container }
+interface FilterRow { p: Product; category: Category; height: number; y: number; locked: boolean }
 
 export class MorningScene extends Phaser.Scene {
   private hud!: Hud;
@@ -118,6 +118,8 @@ export class MorningScene extends Phaser.Scene {
   private cart: Cart = {};
   private rows: Row[] = [];
   private filterRows: FilterRow[] = [];
+  private visibleFilterRows: FilterRow[] = [];
+  private visibleWindowKey = '';
   private categoryFilter: ProductFilter = 'all';
   private categoryBtns: { filter: ProductFilter; button: Button }[] = [];
   private buyLayer!: Phaser.GameObjects.Container;
@@ -201,6 +203,8 @@ export class MorningScene extends Phaser.Scene {
     this.cart = {};
     this.categoryFilter = 'all';
     this.filterRows = [];
+    this.visibleFilterRows = [];
+    this.visibleWindowKey = '';
     this.categoryBtns = [];
     this.selected = null;
     this.pauseLayer = null;
@@ -468,68 +472,19 @@ export class MorningScene extends Phaser.Scene {
     this.buyLayer.add([supplierLabel, this.list]);
 
     const unlocked = unlockedProducts(G.state.level, G.state);
-    const locked = DATA.products.filter((p) => !unlocked.includes(p));
+    const unlockedIds = new Set(unlocked.map((p) => p.id));
     this.rows = [];
     this.filterRows = [];
+    this.visibleFilterRows = [];
+    this.visibleWindowKey = '';
     let y = 0;
-    for (const p of [...unlocked, ...locked]) {
-      const isLocked = locked.includes(p);
-      const rowH = isLocked ? LOCKED_ROW_H : ROW_H;
-      const centerY = rowH / 2 - 1;
-      const root = this.add.container(0, y + centerY).setSize(W, rowH);
-      const rowObjects: Phaser.GameObjects.GameObject[] = [];
-
-      // Nền thẻ sản phẩm phong cách nhãn hàng tiệm tạp hóa xưa
-      const bg = this.add.graphics();
-      bg.fillStyle(0x1a120b, 0.15).fillRoundedRect(8, 3.5 - centerY, W - 16, rowH - 6, 6);
-      bg.fillStyle(isLocked ? 0xeadbc3 : C.panel, 1).fillRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
-      bg.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(9, 3 - centerY, W - 18, rowH - 8, 5);
-      bg.lineStyle(1.5, C.panelEdge, 0.95).strokeRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
-
-      const icon = productIcon(this, 33, 0, p, isLocked ? 38 : 40);
-      const name = txt(this, 58, 10 - centerY, p.name, { size: 13.5, bold: true });
-      const price = txt(this, 58, 29 - centerY, `Nhập ${formatMoney(p.cost)} · bán ${formatMoney(priceOf(p.id, G.state))}`, { size: 10.5, color: HEX.muted });
-      const info = txt(this, 58, 47 - centerY, '', { size: 10, color: HEX.green, wrap: W - 160 });
-      rowObjects.push(bg, icon, name, price, info);
-      root.add(rowObjects);
-      this.list.add(root);
-      this.filterRows.push({ category: p.category, height: rowH, root });
-
-      if (isLocked) {
-        icon.setAlpha(0.4);
-        name.setAlpha(0.5);
-        const eventNames: Record<string, string> = { tet: 'Tết', mid_autumn: 'Trung thu', back_to_school: 'Khai giảng' };
-        const eventActive = p.eventOnly && G.state.activeEvents.some((event) => event.id === p.eventOnly);
-        const eventStocked = p.eventOnly && G.state.warehouse.some((lot) => lot.productId === p.id && lot.qty > 0)
-          || p.eventOnly && G.state.shelves.some((row) => row.some((slot) => slot.productId === p.id && slot.qty > 0));
-        const reason = p.unlockLevel > G.state.level
-          ? `🔒 Mở ở level ${p.unlockLevel}`
-          : p.eventOnly && !eventActive && !eventStocked
-            ? `🔒 Chỉ bán dịp ${eventNames[p.eventOnly] ?? 'sự kiện'}`
-            : `🔒 Không bán ở chi nhánh này`;
-        info.setText(reason).setColor(HEX.grey);
-        y += rowH;
-        continue;
-      }
-
-      // Cụm phím máy tính tiền vintage 90s: khung màn LCD ô liu ở giữa, phím cơ vuông 2 bên
-      const stepperG = this.add.graphics();
-      stepperG.fillStyle(0xd5ddcc, 1).fillRoundedRect(248, -13, 32, 26, 3);
-      stepperG.lineStyle(1, 0x828f78, 1).strokeRoundedRect(248, -13, 32, 26, 3);
-
-      const minus = new Button(this, 232, 0, { w: 26, h: 26, radius: 4, label: '−', color: C.woodLight, size: 15, onTap: () => this.changeQty(p.id, -1) });
-      const qty = txt(this, 264, 0, '0', { size: 14, bold: true, color: '#5a6652', origin: [0.5, 0.5] });
-      const plus = new Button(this, 296, 0, { w: 26, h: 26, radius: 4, label: '+', color: C.green, size: 15, onTap: () => this.changeQty(p.id, 1) });
-      const plus10 = new Button(this, 332, 0, { w: 32, h: 28, radius: 4, label: '+10', color: C.greenDark, size: 11, onTap: () => this.changeQty(p.id, 10) });
-
-      const lack = txt(this, 58 + name.width + 8, 11 - centerY, '', { size: 9.5, bold: true, color: HEX.white });
-      lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1);
-      rowObjects.push(stepperG, minus, qty, plus, plus10, lack);
-      root.add(rowObjects.slice(5));
-
-      this.rows.push({ p, qty, info, lack, minus, plus, plus10, price, bg });
-      y += rowH;
+    for (const p of [...unlocked, ...DATA.products.filter((item) => !unlockedIds.has(item.id))]) {
+      const locked = !unlockedIds.has(p.id);
+      const height = locked ? LOCKED_ROW_H : ROW_H;
+      this.filterRows.push({ p, category: p.category, height, y, locked });
+      y += height;
     }
+    this.visibleFilterRows = this.filterRows;
     this.listH = y + 10;
     this.enableListScroll();
 
@@ -565,9 +520,10 @@ export class MorningScene extends Phaser.Scene {
     const culler = new Culler(this.cameras.main);
     const setList = (offset: number) => {
       this.list.y = snap(top - offset);
+      this.renderVisibleProductRows(false, offset);
       culler.cull(this.list, viewTop, LIST_BOTTOM);
     };
-    this.resetListCuller = () => { culler.reset(); setList(0); };
+    this.resetListCuller = () => { culler.reset(); this.visibleWindowKey = ''; setList(0); };
     this.listScroll = new KineticScroll(this, {
       inView: (y) => y > this.listTop && y < LIST_BOTTOM,
       enabled: () => this.tab === 'buy',
@@ -578,17 +534,83 @@ export class MorningScene extends Phaser.Scene {
     setList(0);
   }
 
+  private renderVisibleProductRows(force: boolean, offset = this.listTop + 16 - this.list.y): void {
+    const viewport = LIST_BOTTOM - (this.listTop + 16);
+    const startY = Math.max(0, offset - ROW_H * 2);
+    const endY = offset + viewport + ROW_H * 2;
+    let start = 0;
+    while (start < this.visibleFilterRows.length && this.visibleFilterRows[start].y + this.visibleFilterRows[start].height < startY) start++;
+    let end = start;
+    while (end < this.visibleFilterRows.length && this.visibleFilterRows[end].y <= endY) end++;
+    const key = `${start}:${end}`;
+    if (!force && key === this.visibleWindowKey) return;
+    this.visibleWindowKey = key;
+    this.list.removeAll(true);
+    this.rows = [];
+    if (!this.visibleFilterRows.length) {
+      this.filterEmptyText = txt(this, W / 2, 30, 'Không có mặt hàng trong nhóm này.', { size: 12, color: HEX.muted, origin: [0.5, 0.5] });
+      this.list.add(this.filterEmptyText);
+      return;
+    }
+    this.filterEmptyText = null;
+    for (let i = start; i < end; i++) this.renderProductRow(this.visibleFilterRows[i]);
+  }
+
+  private renderProductRow(model: FilterRow): void {
+    const { p, y, height: rowH, locked: isLocked } = model;
+    const centerY = rowH / 2 - 1;
+    const root = this.add.container(0, y + centerY).setSize(W, rowH);
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a120b, 0.15).fillRoundedRect(8, 3.5 - centerY, W - 16, rowH - 6, 6);
+    bg.fillStyle(isLocked ? 0xeadbc3 : C.panel, 1).fillRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
+    bg.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(9, 3 - centerY, W - 18, rowH - 8, 5);
+    bg.lineStyle(1.5, C.panelEdge, 0.95).strokeRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
+    const icon = productIcon(this, 33, 0, p, isLocked ? 38 : 40);
+    const name = txt(this, 58, 10 - centerY, p.name, { size: 13.5, bold: true });
+    const price = txt(this, 58, 29 - centerY, `Nhập ${formatMoney(p.cost)} · bán ${formatMoney(priceOf(p.id, G.state))}`, { size: 10.5, color: HEX.muted });
+    const info = txt(this, 58, 47 - centerY, '', { size: 10, color: HEX.green, wrap: W - 160 });
+    root.add([bg, icon, name, price, info]);
+    this.list.add(root);
+
+    if (isLocked) {
+      icon.setAlpha(0.4);
+      name.setAlpha(0.5);
+      const eventNames: Record<string, string> = { tet: 'Tết', mid_autumn: 'Trung thu', back_to_school: 'Khai giảng' };
+      const eventActive = p.eventOnly && G.state.activeEvents.some((event) => event.id === p.eventOnly);
+      const eventStocked = p.eventOnly && G.state.warehouse.some((lot) => lot.productId === p.id && lot.qty > 0)
+        || p.eventOnly && G.state.shelves.some((row) => row.some((slot) => slot.productId === p.id && slot.qty > 0));
+      const reason = p.unlockLevel > G.state.level
+        ? `🔒 Mở ở level ${p.unlockLevel}`
+        : p.eventOnly && !eventActive && !eventStocked
+          ? `🔒 Chỉ bán dịp ${eventNames[p.eventOnly] ?? 'sự kiện'}`
+          : `🔒 Không bán ở chi nhánh này`;
+      info.setText(reason).setColor(HEX.grey);
+      return;
+    }
+
+    const stepperG = this.add.graphics();
+    stepperG.fillStyle(0xd5ddcc, 1).fillRoundedRect(248, -13, 32, 26, 3);
+    stepperG.lineStyle(1, 0x828f78, 1).strokeRoundedRect(248, -13, 32, 26, 3);
+    const minus = new Button(this, 232, 0, { w: 26, h: 26, radius: 4, label: '−', color: C.woodLight, size: 15, onTap: () => this.changeQty(p.id, -1) });
+    const qty = txt(this, 264, 0, '0', { size: 14, bold: true, color: '#5a6652', origin: [0.5, 0.5] });
+    const plus = new Button(this, 296, 0, { w: 26, h: 26, radius: 4, label: '+', color: C.green, size: 15, onTap: () => this.changeQty(p.id, 1) });
+    const plus10 = new Button(this, 332, 0, { w: 32, h: 28, radius: 4, label: '+10', color: C.greenDark, size: 11, onTap: () => this.changeQty(p.id, 10) });
+    const lack = txt(this, 58 + name.width + 8, 11 - centerY, '', { size: 9.5, bold: true, color: HEX.white });
+    lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1);
+    root.add([stepperG, minus, qty, plus, plus10, lack]);
+    this.rows.push({ p, qty, info, lack, minus, plus, plus10, price, bg });
+  }
+
   private setProductFilter(filter: ProductFilter): void {
     this.categoryFilter = filter;
     let y = 0;
+    this.visibleFilterRows = [];
     for (const row of this.filterRows) {
-      const visible = filter === 'all' || row.category === filter;
-      row.root.setVisible(visible);
-      if (!visible) continue;
-      row.root.y = y + row.height / 2 - 1;
+      if (filter !== 'all' && row.category !== filter) continue;
+      row.y = y;
+      this.visibleFilterRows.push(row);
       y += row.height;
     }
-    this.filterEmptyText?.setVisible(y === 0);
     this.listH = y + 10;
     for (const { filter: id, button } of this.categoryBtns) button.setColor(id === filter ? C.red : C.wood);
     this.listScroll?.stop();

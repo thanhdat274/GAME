@@ -64,6 +64,8 @@ export class RestockScene extends Phaser.Scene {
   private chipsEmpty!: Phaser.GameObjects.Text;
   private renderingBuy = false;
   private buyRenderedStart = -1;
+  private buyBuilt = false;
+  private arrangeBuilt = false;
 
   private get shelfRows(): number {
     return SHELF_VIEW_ROWS;
@@ -88,6 +90,8 @@ export class RestockScene extends Phaser.Scene {
     this.supplierBtns = {};
     this.categoryBtns = [];
     this.categoryFilter = 'all';
+    this.buyBuilt = false;
+    this.arrangeBuilt = false;
     this.supplierNote = null;
     if (!supplierUnlocked(G.state, this.supplierId)) this.supplierId = 'co_tu';
     // Tiệm chỉ bán ở quầy (tiệm xôi) không có kệ: màn này chỉ còn phần nhập nguyên liệu.
@@ -100,8 +104,10 @@ export class RestockScene extends Phaser.Scene {
     if (this.counterShop) {
       this.tabBtns.arrange.setVisible(false);
     }
-    this.buildBuy();
-    this.buildArrange();
+    // Chỉ dựng tab người chơi sắp mở. Màn bày kệ có nhiều đối tượng Phaser;
+    // trì hoãn nó sẽ giảm công việc đồng bộ khi vừa vào màn nhập hàng.
+    this.buyLayer = this.add.container(0, 0);
+    this.arrangeLayer = this.add.container(0, 0);
     const onLiveUpdated = () => { if (G.liveSnapshot) this.refresh(); };
     window.addEventListener('thdh-live-updated', onLiveUpdated);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.removeEventListener('thdh-live-updated', onLiveUpdated));
@@ -111,13 +117,24 @@ export class RestockScene extends Phaser.Scene {
   private setTab(tab: Tab): void {
     this.tab = tab;
     this.selected = null;
+    this.ensureTabBuilt(tab);
     this.tabBtns.buy.setColor(tab === 'buy' ? C.red : C.wood);
     this.tabBtns.arrange.setColor(tab === 'arrange' ? C.red : C.wood);
-    this.buyLayer.setVisible(tab === 'buy');
-    this.list.content.setVisible(tab === 'buy');
-    this.arrangeLayer.setVisible(tab === 'arrange');
-    this.chips.content.setVisible(tab === 'arrange');
+    this.buyLayer.setVisible(this.buyBuilt && tab === 'buy');
+    if (this.buyBuilt) this.list.content.setVisible(tab === 'buy');
+    this.arrangeLayer.setVisible(this.arrangeBuilt && tab === 'arrange');
+    if (this.arrangeBuilt) this.chips.content.setVisible(tab === 'arrange');
     this.refresh();
+  }
+
+  private ensureTabBuilt(tab: Tab): void {
+    if (tab === 'buy' && !this.buyBuilt) {
+      this.buyBuilt = true;
+      this.buildBuy();
+    } else if (tab === 'arrange' && !this.arrangeBuilt) {
+      this.arrangeBuilt = true;
+      this.buildArrange();
+    }
   }
 
   private refresh(): void {
@@ -128,7 +145,6 @@ export class RestockScene extends Phaser.Scene {
   // ---------- Nhập hàng ----------
 
   private buildBuy(): void {
-    this.buyLayer = this.add.container(0, 0);
     const top = TAB_Y + 28;
     const suppliers = DATA.suppliers.filter((sp) => supplierUnlocked(G.state, sp.id));
     if (suppliers.length > 1) {
@@ -363,7 +379,6 @@ export class RestockScene extends Phaser.Scene {
   // ---------- Bày kệ ----------
 
   private buildArrange(): void {
-    this.arrangeLayer = this.add.container(0, 0);
     this.shelves = new ShelfView(this, SHELF_TOP, {
       onSlotTap: (r, c) => this.onSlotTap(r, c),
       onRefill: (r, c) => this.shelfAction({ type: 'refillShelf', shelf: r, slot: c }, () => refillSlot(G.state, r, c)),
