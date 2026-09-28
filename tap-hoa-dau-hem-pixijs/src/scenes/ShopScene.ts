@@ -590,6 +590,13 @@ export class ShopScene extends Engine.Scene {
       const who = by === 'player' ? 'Bạn' : this.session.staffOf(by)?.name ?? 'Thu ngân';
       this.sideFloat(W / 2, 240 + DY, `🗯️ ${who}: "Chen gì mà chen, ra sau xếp hàng!"`, HEX.red, 12);
     });
+    e.on('counterfeit', ({ by, bill, action }) => {
+      const who = by === 'player' ? 'Bạn' : this.session.staffOf(by)?.name ?? 'Thu ngân';
+      play(action === 'police' ? 'error' : 'wrong');
+      toast(this, action === 'police'
+        ? `🚓 ${who} phát hiện tờ ${formatMoney(bill)} giả!\nĐã báo công an, người dùng tiền giả bị đưa đi.`
+        : `💸 ${who} phát hiện tờ ${formatMoney(bill)} giả, trả lại cho khách${action === 'left' ? ' — khách bỏ đi' : ' đổi tờ khác'}.`, 240, action === 'police' ? C.blue : C.red);
+    });
     e.on('rowdy', ({ by, guard }) => {
       if (this.topDown || this.liveMap.visible) return;
       const who = by === 'player' ? 'Bạn' : this.session.staffOf(by)?.name ?? 'Nhân viên';

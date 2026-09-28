@@ -40,7 +40,8 @@ import {
   findSlotWith, takeLots, takeOneFromSlot, zoneOf, type DeliveryResult,
   spoilFrozenStock,
 } from './stock';
-import { maintenancePatienceRate, maintenanceTrafficMul, nightBurglary, wearOvernight } from './maintenance';
+import { maintenancePatienceRate, maintenanceTrafficMul, wearOvernight } from './maintenance';
+import { callsPolice, nightBurglary, resolvePoliceCases } from './security';
 import { PLAYER, ROLE_TASKS, TaskQueue, type Task } from './tasks';
 import { endDayTax, recordTaxableRevenue, taxKindOfProduct, taxReminders, updateTax } from './tax';
 
@@ -69,7 +70,7 @@ export interface Worker {
   idle: number;
 }
 
-export type IncidentKind = 'thief' | 'complaint' | 'outOfStock' | 'noCashier';
+export type IncidentKind = 'thief' | 'complaint' | 'outOfStock' | 'noCashier' | 'counterfeit';
 
 /** Sự cố chạm được (hiện dạng thông báo trong chế độ quản lý). */
 export interface Incident {
@@ -137,6 +138,11 @@ export interface DayEvents {
   queueScold: { customer: Customer; lane: number; by: string };
   /** Khách phá phách trong tiệm; `by` = người nhắc nhở (id nhân viên / 'player'), `guard` = bảo vệ xử lý kịp. */
   rowdy: { customer: Customer; by: string; guard: boolean };
+  /**
+   * Khách trả bằng tiền giả và người đứng quầy (`by`) phát hiện: 'police' = báo công an, người dùng tiền giả bị đưa đi;
+   * 'repaid' = trả lại tờ giả, khách đổi tờ thật; 'left' = trả lại tờ giả, khách bỏ đi.
+   */
+  counterfeit: { customer: Customer; by: string; bill: number; action: 'police' | 'repaid' | 'left' };
   phoneRing: PhoneOrder;
   phoneOrderUpdate: PhoneOrder;
   incident: Incident;
@@ -806,6 +812,49 @@ export class DaySession {
     }
   }
 
+  /**
+   * Khách trả tiền mặt bằng tờ giả. Người đứng quầy (chủ tiệm / thu ngân, theo độ chính xác) có thể phát hiện:
+   * - tiệm báo công an: người dùng tiền giả bị công an đưa đi, không bán được đơn nhưng được phường khen (EXP);
+   * - không báo: trả lại tờ giả, khách đổi tờ thật (hoặc bỏ đi).
+   * Không phát hiện thì bán như thường nhưng mất mệnh giá tờ giả khi kiểm két. Trả về true nếu khách không mua nữa.
+   */
+  private counterfeit(c: Customer, total: number, staff: Staff | null): boolean {
+    const cfg = DATA.balance.security;
+    if (c.fakeBill !== undefined || !hasFeature(this.state.level, 'thief') || this.social.next() >= cfg.counterfeitChance) return false;
+    const bills = [...cfg.counterfeitBills].sort((a, b) => a - b);
+    const bill = bills.find((v) => v >= total) ?? bills[bills.length - 1];
+    const detect = staff ? cfg.staffDetectBase + staff.stats.accuracy * cfg.staffDetectPerAccuracy : cfg.playerDetect;
+    if (this.social.next() >= detect) {
+      c.fakeBill = bill;
+      return false;
+    }
+    const by = staff?.id ?? PLAYER;
+    const who = staff?.name ?? 'Chủ tiệm';
+    if (staff) this.jobDone(staff);
+    if (callsPolice(this.state)) {
+      for (const line of c.order) this.returnLine(line);
+      const t = this.state.today;
+      t.counterfeitReports = (t.counterfeitReports ?? 0) + 1;
+      addPlayerExperience(this.state, cfg.counterfeitReportExp);
+      t.expGained += cfg.counterfeitReportExp;
+      this.log(`${who} phát hiện tờ ${formatMoney(bill)} giả, báo công an`);
+      this.events.emit('counterfeit', { customer: c, by, bill, action: 'police' });
+      this.addIncident('counterfeit', `🚓 ${who} phát hiện tờ ${formatMoney(bill)} giả — đã báo công an, người dùng tiền giả bị đưa đi`, { customerId: c.id });
+      this.drop(c);
+      return true;
+    }
+    if (this.social.next() < cfg.counterfeitRepay) {
+      this.log(`${who} trả lại tờ ${formatMoney(bill)} giả, khách đổi tờ khác`);
+      this.events.emit('counterfeit', { customer: c, by, bill, action: 'repaid' });
+      c.fakeBill = 0;
+      return false;
+    }
+    this.log(`${who} trả lại tờ ${formatMoney(bill)} giả, khách bỏ đi`);
+    this.events.emit('counterfeit', { customer: c, by, bill, action: 'left' });
+    this.leave(c, 'nothing');
+    return true;
+  }
+
   /** Bảo vệ đang trong ca (null nếu không có). */
   presentGuard(): Staff | null {
     return this.state.staff.find((s) => s.role === 'guard' && this.workerOf(s.id)?.present) ?? null;
@@ -1087,6 +1136,7 @@ export class DaySession {
     c.total = total;
     c.paymentMethod = this.pickPaymentMethod();
     c.bill = c.paymentMethod === 'cash' ? customerPayment(total, this.rng) : total;
+    if (c.paymentMethod === 'cash' && this.counterfeit(c, total, null)) return;
     c.changeDue = c.bill - total;
     c.status = 'paying';
     c.changeStartedAt = this.elapsed;
@@ -1283,6 +1333,13 @@ export class DaySession {
       this.state.money += c.total + tip - lost;
       t.revenue += c.total;
       this.recordSaleTax(c);
+    }
+    if (c.fakeBill) {
+      // Nhận phải tờ giả mà không biết: mất cả mệnh giá (tiền thối khách đưa bằng tiền thật).
+      this.state.money -= c.fakeBill;
+      t.counterfeitLoss = (t.counterfeitLoss ?? 0) + c.fakeBill;
+      t.journal.push({ m: Math.floor(this.state.clock), t: `Nhận phải tờ ${formatMoney(c.fakeBill)} giả` });
+      delete c.fakeBill;
     }
     t.tips += tip;
     t.overpaid += lost;
@@ -1861,6 +1918,7 @@ export class DaySession {
       this.completeSale(c, 0, 0, false, s);
       return;
     }
+    if (this.counterfeit(c, c.total, s)) return;
     let lost = 0;
     if (this.rng.next() < errorChance(s, this.state.day)) {
       const amount = this.rng.pick(cfg.wrongChangeValues);
@@ -2243,11 +2301,12 @@ export function endDay(state: GameState): DaySummary {
   state.morningNotes = updateMoods(state).map((n) => n.text);
   if (soakNote) state.morningNotes.push(soakNote);
   if (pay.debt > 0) state.morningNotes.push(`Còn nợ lương nhân viên ${formatMoney(pay.debt)}`);
+  if (t.counterfeitLoss) state.morningNotes.push(`💸 Kiểm két cuối ngày phát hiện ${formatMoney(t.counterfeitLoss)} tiền giả lọt qua quầy. Thu ngân càng chính xác càng dễ phát hiện.`);
   markBadDebts(state);
   const avg = t.ratingCount ? t.ratingSum / t.ratingCount : 0;
   state.lifetime.loveStreak = t.ratingCount && avg >= DATA.balance.loveStreakRating ? state.lifetime.loveStreak + 1 : 0;
   const preTaxProfit = t.revenue - t.cogs + t.tips - t.overpaid + t.debtCollectedAmount - t.spoiledCost - t.electricity + t.questMoney
-    - t.wages - t.bonuses - t.theftCost + t.fines + t.deliveryFees;
+    - t.wages - t.bonuses - t.theftCost + t.fines + t.deliveryFees - (t.counterfeitLoss ?? 0) + (t.policeRecovered ?? 0);
   const dayTax = endDayTax(state, preTaxProfit);
   const achievements = checkAchievements(state).map((a) => a.id);
   const levelUps = [...t.levelUps, ...applyLevelUps(state).map((l) => l.level)];
@@ -2282,6 +2341,8 @@ export function endDay(state: GameState): DaySummary {
     wageDebt: state.wageDebt,
     bonuses: t.bonuses,
     theftCost: t.theftCost,
+    counterfeitLoss: t.counterfeitLoss,
+    policeRecovered: t.policeRecovered,
     fines: t.fines,
     deliveryFees: t.deliveryFees,
     internalCost: t.internalCost,
@@ -2359,6 +2420,7 @@ function nextCapExp(): number {
 export function startNextDay(state: GameState): number {
   claimAllDone(state);
   state.day++;
+  const yesterdayRevenue = state.today.revenue;
   const branchIncome = simulateBranches(state, state.day - 1);
   // Reset trước các chuyến giao để giá vốn nhận hàng được ghi vào ngày mới.
   state.phase = 'morning';
@@ -2366,8 +2428,8 @@ export function startNextDay(state: GameState): number {
   state.today = emptyStats();
   state.lastSummary = null;
   // Qua đêm (tiệm đóng cửa): trộm đột nhập, đồ đạc hao mòn / hỏng.
-  const burglary = nightBurglary(state);
-  if (burglary) state.morningNotes.push(burglary);
+  state.morningNotes.push(...resolvePoliceCases(state));
+  state.morningNotes.push(...nightBurglary(state, yesterdayRevenue));
   state.morningNotes.push(...wearOvernight(state));
   const arrivals = deliverBranchShipments(state, state.day, DATA.balance.openMinute);
   if (arrivals) state.morningNotes.push(`🚚 ${arrivals} chuyến xe hàng đã đến chi nhánh.`);

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Customer } from '../src/core/customers';
 import { DaySession, insertByTicket, startNextDay } from '../src/core/day';
 import { DATA } from '../src/core/data';
-import { maintenanceItems, nightBurglary, repairItem, replaceItem, wearOvernight } from '../src/core/maintenance';
+import { maintenanceItems, repairItem, replaceItem, wearOvernight } from '../src/core/maintenance';
+import { nightBurglary, resolvePoliceCases } from '../src/core/security';
 import { ensureBoard, hire } from '../src/core/staff';
 import { createNewGame, lotsFrom, shelfUsable, type GameState } from '../src/core/state';
 import { assignSlot } from '../src/core/stock';
@@ -97,7 +98,7 @@ describe('bảo vệ & trộm ban đêm', () => {
     DATA.balance.security.nightChance = 1;
     const s = busyShop(0);
     const before = s.shelves[0].reduce((n, slot) => n + slot.qty, 0);
-    const note = nightBurglary(s);
+    const note = nightBurglary(s).join('\n');
     expect(note).toContain('trộm đột nhập');
     expect(s.shelves[0].reduce((n, slot) => n + slot.qty, 0)).toBeLessThan(before);
     expect(s.today.theftCost).toBeGreaterThan(0);
@@ -109,14 +110,15 @@ describe('bảo vệ & trộm ban đêm', () => {
     const c = ensureBoard(s)[0];
     expect(hire(s, c.id, 'guard')).toBe('ok');
     const before = s.shelves[0].reduce((n, slot) => n + slot.qty, 0);
-    expect(nightBurglary(s)).toContain('bảo vệ');
+    expect(nightBurglary(s, 5_000_000).join('\n')).toContain('bảo vệ');
+    expect(s.money).toBe(50_000_000);
     expect(s.shelves[0].reduce((n, slot) => n + slot.qty, 0)).toBe(before);
   });
 
   it('chưa tới cấp có trộm thì đêm luôn yên ổn', () => {
     DATA.balance.security.nightChance = 1;
     const s = busyShop(0, 10);
-    expect(nightBurglary(s)).toBeNull();
+    expect(nightBurglary(s)).toEqual([]);
   });
 
   it('startNextDay đưa tin trộm đêm vào thông báo buổi sáng', () => {
@@ -167,5 +169,87 @@ describe('hao mòn & sửa chữa', () => {
     const s = worn();
     const fan = maintenanceItems(s).find((i) => i.key.endsWith(':fan'))!;
     expect(repairItem(s, fan.key)).toBe('fine');
+  });
+});
+
+describe('công an & tiền giả', () => {
+  it('trộm đêm lấy tiền trong két; báo công an, bắt được thì trả lại', () => {
+    DATA.balance.security.nightChance = 1;
+    DATA.balance.security.nightCashChance = 1;
+    DATA.balance.security.policeCatch = 1;
+    const s = busyShop(0);
+    const money = s.money;
+    const notes = nightBurglary(s, 2_000_000).join('\n');
+    expect(notes).toContain('tiền trong két');
+    expect(notes).toContain('báo công an');
+    const stolen = money - s.money;
+    expect(stolen).toBeGreaterThan(0);
+    expect(stolen).toBeLessThanOrEqual(2_000_000);
+    const caseDay = s.policeCases![0].resolveDay;
+    s.day = caseDay;
+    const result = resolvePoliceCases(s).join('\n');
+    expect(result).toContain('bắt được');
+    expect(s.money).toBe(money);
+    expect(s.policeCases).toEqual([]);
+  });
+
+  it('tiệm không báo công an thì không mở hồ sơ', () => {
+    DATA.balance.security.nightChance = 1;
+    const s = busyShop(0);
+    s.settings.callPolice = false;
+    const notes = nightBurglary(s, 2_000_000).join('\n');
+    expect(notes).not.toContain('công an');
+    expect(s.policeCases ?? []).toEqual([]);
+  });
+
+  function runWithFakes(callPolice: boolean) {
+    DATA.balance.security.counterfeitChance = 1;
+    DATA.balance.security.playerDetect = 1;
+    DATA.balance.cashlessChance = 0;
+    const s = busyShop(0);
+    s.settings.callPolice = callPolice;
+    const session = new DaySession(s, 4);
+    session.autoPlayer = true;
+    const seen: string[] = [];
+    session.events.on('counterfeit', ({ action }) => seen.push(action));
+    const step = DATA.balance.tickMs / 1000;
+    for (let i = 0; i < 8000 && seen.length < 3; i++) session.tick(step);
+    return { s, seen };
+  }
+
+  it('phát hiện tiền giả: báo công an thì người dùng tiền giả bị đưa đi', () => {
+    const cashless = DATA.balance.cashlessChance;
+    try {
+      const { s, seen } = runWithFakes(true);
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.every((a) => a === 'police')).toBe(true);
+      expect(s.today.counterfeitReports).toBe(seen.length);
+    } finally { DATA.balance.cashlessChance = cashless; }
+  });
+
+  it('không báo công an: trả lại tờ giả, khách đổi tờ khác hoặc bỏ đi', () => {
+    const cashless = DATA.balance.cashlessChance;
+    try {
+      const { s, seen } = runWithFakes(false);
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.every((a) => a === 'repaid' || a === 'left')).toBe(true);
+      expect(s.today.counterfeitLoss ?? 0).toBe(0);
+    } finally { DATA.balance.cashlessChance = cashless; }
+  });
+
+  it('không phát hiện thì mất mệnh giá tờ giả khi kiểm két', () => {
+    const cashless = DATA.balance.cashlessChance;
+    try {
+      DATA.balance.security.counterfeitChance = 1;
+      DATA.balance.security.playerDetect = 0;
+      DATA.balance.cashlessChance = 0;
+      const s = busyShop(0);
+      const session = new DaySession(s, 4);
+      session.autoPlayer = true;
+      const step = DATA.balance.tickMs / 1000;
+      for (let i = 0; i < 8000 && !s.today.served; i++) session.tick(step);
+      expect(s.today.served).toBeGreaterThan(0);
+      expect(s.today.counterfeitLoss).toBeGreaterThan(0);
+    } finally { DATA.balance.cashlessChance = cashless; }
   });
 });

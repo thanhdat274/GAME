@@ -285,7 +285,21 @@
     "nightCameraMul": 0.5,
     "nightStealMin": 0.08,
     "nightStealMax": 0.2,
-    "nightMaxItems": 40
+    "nightMaxItems": 40,
+    "nightCashChance": 0.5,
+    "nightCashMin": 0.2,
+    "nightCashMax": 0.5,
+    "policeCatch": 0.45,
+    "policeCameraBonus": 0.3,
+    "policeDaysMin": 1,
+    "policeDaysMax": 3,
+    "counterfeitChance": 0.03,
+    "counterfeitBills": [100000, 200000, 500000],
+    "playerDetect": 0.8,
+    "staffDetectBase": 0.4,
+    "staffDetectPerAccuracy": 0.05,
+    "counterfeitRepay": 0.6,
+    "counterfeitReportExp": 30
   },
   "queue": {
     "cutChance": 0.05,

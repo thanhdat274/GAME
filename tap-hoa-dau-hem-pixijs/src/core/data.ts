@@ -166,6 +166,14 @@ export interface Balance {
     guardDetect: number;
     /** Trộm đột nhập ban đêm: xác suất mỗi đêm, hệ số khi có camera, phần hàng trên kệ bị lấy, số món tối đa. */
     nightChance: number; nightCameraMul: number; nightStealMin: number; nightStealMax: number; nightMaxItems: number;
+    /** Trộm đêm lấy tiền trong két (thay vì hàng): xác suất, phần doanh thu hôm trước bị lấy. */
+    nightCashChance: number; nightCashMin: number; nightCashMax: number;
+    /** Công an điều tra vụ trộm: xác suất bắt được (cộng thêm nếu có camera), số ngày có kết quả. */
+    policeCatch: number; policeCameraBonus: number; policeDaysMin: number; policeDaysMax: number;
+    /** Tiền giả: xác suất khách trả tiền mặt bằng tờ giả, mệnh giá, khả năng phát hiện (chủ tiệm / thu ngân theo độ chính xác),
+     * phần khách chịu đổi tờ thật khi bị trả lại, EXP khi báo công an. */
+    counterfeitChance: number; counterfeitBills: number[]; playerDetect: number; staffDetectBase: number; staffDetectPerAccuracy: number;
+    counterfeitRepay: number; counterfeitReportExp: number;
   };
   /** Hàng chờ tính tiền: khách chen hàng, khách phá phách. */
   queue: { cutChance: number; cutNoticeSeconds: number; cutSkipPatience: number; rowdyChance: number; rowdyAnnoySeconds: number };

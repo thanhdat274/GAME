@@ -236,6 +236,10 @@ export class LiveMap {
         this.bubble(by === 'player' ? 'player' : `s${by}`, SCOLD_LINES[customer.id % SCOLD_LINES.length]);
         this.popText(`c${customer.id}`, '😅');
       }),
+      ev.on('counterfeit', ({ customer, by, action }) => {
+        this.bubble(by === 'player' ? 'player' : `s${by}`, action === 'police' ? 'Tiền giả! Gọi công an!' : 'Tờ này giả rồi, đổi tờ khác nha!');
+        this.popText(`c${customer.id}`, action === 'police' ? '🚓' : action === 'left' ? '😒' : '😅');
+      }),
       ev.on('rowdy', ({ customer, by }) => {
         this.popText(`c${customer.id}`, '🤪');
         this.bubble(by === 'player' ? 'player' : `s${by}`, CALM_LINES[customer.id % CALM_LINES.length]);

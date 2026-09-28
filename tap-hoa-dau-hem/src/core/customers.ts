@@ -97,6 +97,8 @@ export interface Customer {
   scolded?: boolean;
   /** Khách phá phách (nghịch hàng, làm ồn) lúc lựa hàng. */
   rowdy?: boolean;
+  /** Tờ tiền giả khách trả mà người đứng quầy không phát hiện (mệnh giá; mất khi kiểm két). */
+  fakeBill?: number;
 }
 
 /** Món khách không lấy được trên kệ vì hết (không phải chê giá / chê không lạnh) và chưa hỏi ở quầy. */

@@ -62,6 +62,7 @@ export class StaffScene extends Phaser.Scene {
       if (!s.staff.length) this.list.add(txt(this, W / 2, 60, 'Chưa có nhân viên.\nSang tab Tuyển dụng để thuê người phụ.', { size: 14, color: HEX.muted, origin: [0.5, 0.5], align: 'center' }));
       for (const st of s.staff) y = this.staffCard(st, y);
       if (hasFeature(s.level, 'camera')) y = this.cameraCard(y);
+      if (hasFeature(s.level, 'thief')) y = this.policeCard(y);
     } else {
       const board = ensureBoard(s);
       const refresh = DATA.balance.staff.refreshDays - (s.day - (s.staffBoard?.day ?? s.day));
@@ -215,6 +216,28 @@ export class StaffScene extends Phaser.Scene {
         { label: 'Thôi', color: C.grey },
       ],
     });
+  }
+
+  /** Cài đặt của tiệm: có báo công an khi bị trộm đột nhập / phát hiện tiền giả không. */
+  private policeCard(y: number): number {
+    const s = G.state;
+    const on = s.settings.callPolice !== false;
+    this.list.add(card(this, 8, y, W - 16, 86, 0xe8f1fb));
+    this.list.add(txt(this, 18, y + 10, '🚓 Báo công an', { size: 14, bold: true }));
+    this.list.add(txt(this, 18, y + 30, on
+      ? 'Bị trộm đột nhập: công an điều tra, bắt được thì trả lại tiền. Phát hiện tiền giả: người dùng tiền giả bị đưa đi (mất đơn, được phường khen).'
+      : 'Tự xử: bị trộm thì chịu mất. Phát hiện tiền giả thì trả lại, khách đổi tờ thật hoặc bỏ đi.', { size: 10, color: HEX.muted, wrap: W - 150 }));
+    this.list.add(new Button(this, W - 70, y + 42, {
+      w: 110, h: 34, size: 12, color: on ? C.green : C.grey,
+      label: on ? '✓ Có báo' : 'Không báo',
+      onTap: this.list.guard(() => {
+        s.settings.callPolice = !on;
+        play('coin');
+        persist();
+        this.render();
+      }),
+    }));
+    return y + 92;
   }
 
   private cameraCard(y: number): number {

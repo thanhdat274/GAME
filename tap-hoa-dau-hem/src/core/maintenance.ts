@@ -1,7 +1,6 @@
-import { DATA, furniture, hasFeature, product } from './data';
+import { DATA, furniture, hasFeature } from './data';
 import { Rng, daySeed } from './rng';
-import { formatMoney, usableShelves, type Fixture, type GameState } from './state';
-import { takeOneFromSlot } from './stock';
+import { formatMoney, type Fixture, type GameState } from './state';
 
 /**
  * Hao mòn & sửa chữa: kệ, tủ lạnh, tủ đông cùng bóng đèn, quạt của tiệm mòn dần theo ngày.
@@ -135,41 +134,4 @@ export function wearOvernight(state: GameState): string[] {
     if (key.startsWith(`${state.activeStoreId}:f`) && !live.has(key)) delete state.maintenance![key];
   }
   return notes;
-}
-
-/**
- * Trộm đột nhập ban đêm khi tiệm đã đóng cửa. Bảo vệ (không xin nghỉ) trực đêm thì đuổi được;
- * camera làm kẻ trộm ngại hơn; đèn hỏng thì tiệm tối, dễ bị nhắm hơn.
- * Trả về thông báo buổi sáng (null nếu đêm yên ổn).
- */
-export function nightBurglary(state: GameState): string | null {
-  if (!hasFeature(state.level, 'thief')) return null;
-  const sec = DATA.balance.security;
-  const rng = new Rng(daySeed(state.day, 0x6e1647));
-  let chance = sec.nightChance;
-  if (state.camera && hasFeature(state.level, 'camera')) chance *= sec.nightCameraMul;
-  if (equipmentBroken(state, 'light')) chance *= 1.5;
-  if (rng.next() >= chance) return null;
-  const guard = state.staff.find((s) => s.role === 'guard' && !s.quitting);
-  if (guard) return `💂 Đêm qua có kẻ lạ cạy cửa tiệm, bảo vệ ${guard.name} trực đêm đã đuổi đi. Không mất gì!`;
-  const slots: { productId: string; slot: GameState['shelves'][number][number] }[] = [];
-  for (const r of usableShelves(state)) {
-    for (const slot of state.shelves[r]) if (slot.productId && slot.qty > 0) slots.push({ productId: slot.productId, slot });
-  }
-  const total = slots.reduce((n, s) => n + s.slot.qty, 0);
-  if (!total) return '🌙 Đêm qua có trộm cạy cửa nhưng kệ trống trơn, không lấy được gì.';
-  const want = Math.min(sec.nightMaxItems, Math.max(1, Math.round(total * (sec.nightStealMin + rng.next() * (sec.nightStealMax - sec.nightStealMin)))));
-  let taken = 0;
-  let cost = 0;
-  for (let guardLoop = 0; taken < want && guardLoop < want * 4; guardLoop++) {
-    const pick = slots[rng.int(0, slots.length - 1)];
-    if (pick.slot.qty <= 0) continue;
-    if (takeOneFromSlot(pick.slot) === undefined) continue;
-    taken++;
-    cost += product(pick.productId).cost;
-  }
-  state.today.theftCost += cost;
-  state.today.thefts++;
-  state.today.journal.push({ m: DATA.balance.openMinute, t: `Đêm qua bị trộm đột nhập: mất ${taken} món trên kệ` });
-  return `🌙 Đêm qua tiệm bị trộm đột nhập, mất ${taken} món trên kệ (giá vốn ${formatMoney(cost)}). Thuê 💂 bảo vệ trực đêm hoặc lắp camera để phòng.`;
 }
