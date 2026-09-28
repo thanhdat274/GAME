@@ -24,6 +24,10 @@ const PLAYER_LOOK = { shirt: '#d84a3a', pants: '#3b2a1f', hair: '#2b1b12', skin:
 const CATCH_TILES = 3;
 /** Vị trí dàn ra (theo ô) cho nhiều người đứng chung một ô. */
 const SPREAD = [{ x: -0.22, y: 0.05 }, { x: 0.22, y: 0.05 }, { x: 0, y: -0.18 }, { x: -0.22, y: -0.2 }, { x: 0.22, y: -0.2 }, { x: 0, y: 0.2 }];
+/** Câu người đứng quầy quát khách chen hàng. */
+const SCOLD_LINES = ['Ê! Xếp hàng ra sau đi!', 'Chen gì mà chen, ra sau!', 'Ai tới trước tính trước nha!', 'Đứng cuối hàng giùm cái!'];
+/** Câu nhân viên / bảo vệ nhắc khách phá phách. */
+const CALM_LINES = ['Giữ trật tự giùm nha!', 'Đừng bày bừa hàng nha!', 'Nhỏ tiếng chút nha anh/chị!'];
 /** Chất lượng khi "Nấu nhanh" (không chơi mini-game): giá bán thấp hơn một chút. */
 const QUICK_COOK_QUALITY = 0.85;
 
@@ -227,6 +231,19 @@ export class LiveMap {
       ev.on('staffRefill', ({ staff }) => this.popText(`s${staff.id}`, '📦')),
       ev.on('refillDone', () => this.popText('player', '📦')),
       ev.on('customerLeft', ({ customer, reason }) => { if (reason === 'patience') this.popText(`c${customer.id}`, '😤'); }),
+      ev.on('queueCut', ({ customer }) => this.popText(`c${customer.id}`, '😏')),
+      ev.on('queueScold', ({ customer, by }) => {
+        this.bubble(by === 'player' ? 'player' : `s${by}`, SCOLD_LINES[customer.id % SCOLD_LINES.length]);
+        this.popText(`c${customer.id}`, '😅');
+      }),
+      ev.on('counterfeit', ({ customer, by, action }) => {
+        this.bubble(by === 'player' ? 'player' : `s${by}`, action === 'police' ? 'Tiền giả! Gọi công an!' : 'Tờ này giả rồi, đổi tờ khác nha!');
+        this.popText(`c${customer.id}`, action === 'police' ? '🚓' : action === 'left' ? '😒' : '😅');
+      }),
+      ev.on('rowdy', ({ customer, by }) => {
+        this.popText(`c${customer.id}`, '🤪');
+        this.bubble(by === 'player' ? 'player' : `s${by}`, CALM_LINES[customer.id % CALM_LINES.length]);
+      }),
     );
     s.events.once('shutdown', () => this.destroy());
   }
@@ -344,7 +361,7 @@ export class LiveMap {
       const fetchedCustomer = task?.startsWith('fetch:')
         ? [...this.session.queue, ...this.session.lanes.flatMap((entry) => entry.queue)].find((c) => c.id === Number(task.slice(6)))
         : undefined;
-      this.setGoal(a, fetchedCustomer ? customerGoal(this.session, fetchedCustomer) : staffGoal(state, task, lane >= 0 ? lane + 1 : null), snap);
+      this.setGoal(a, fetchedCustomer ? customerGoal(this.session, fetchedCustomer) : staffGoal(state, task, lane >= 0 ? lane + 1 : null, st.role), snap);
     }
     // Người chơi.
     const playerId = 'player';
@@ -568,6 +585,28 @@ export class LiveMap {
   private popText(id: string, text: string, color: string = HEX.ink): void {
     if (!this.root.visible) return;
     this.popAt(id, txt(this.scene, 0, 0, text, { size: 11, bold: true, color, origin: [0.5, 1], emoji: /\p{Extended_Pictographic}/u.test(text) }));
+  }
+
+  /** Bong bóng thoại vàng trên đầu một người (nhắc khách chen hàng, phá phách…). */
+  private bubble(id: string, text: string): void {
+    const a = this.agents.get(id);
+    if (!this.root.visible || !a || a.hidden) return;
+    const label = txt(this.scene, 0, 0, text, { size: 9, bold: true, color: '#0b3066', origin: [0.5, 0.5], align: 'center', wrap: 110 });
+    const w = label.width + 12;
+    const h = label.height + 8;
+    const g = this.scene.add.graphics();
+    g.fillStyle(0xf9c440, 1);
+    g.fillRoundedRect(-w / 2, -h / 2, w, h, 8);
+    g.fillTriangle(-8, h / 2 - 1, 2, h / 2 - 1, -10, h / 2 + 7);
+    g.lineStyle(2, 0x0b3066, 1);
+    g.strokeRoundedRect(-w / 2, -h / 2, w, h, 8);
+    const { x: cx, y: cy, w: cw } = this.content;
+    const x = Math.max(cx + w / 2, Math.min(cx + cw - w / 2, a.sprite.x));
+    // Người đứng sát mép trên (quầy ở hàng đầu): hạ bong bóng xuống để không bị cắt khỏi sơ đồ.
+    const y = Math.max(cy + h / 2 + 2, a.sprite.y - this.personH - h / 2 - 8);
+    const box = this.scene.add.container(x, y, [g, label]);
+    this.fx.add(box);
+    this.scene.tweens.add({ targets: box, alpha: 0, delay: 2200, duration: 400, onComplete: () => box.destroy() });
   }
 
   private say(text: string): void {

@@ -87,6 +87,18 @@ export interface Customer {
   cart?: boolean;
   /** Bị nhân viên thối thiếu (để khách nhắc trong đánh giá). */
   shortChanged?: boolean;
+  /** Số thứ tự lúc ra quầy: ai tới trước được tính tiền trước. */
+  ticket?: number;
+  /** Đã đổi sang quầy vắng hơn một lần (không nhảy qua lại nữa). */
+  switched?: boolean;
+  /** Đang chen hàng: giây còn lại trước khi người đứng quầy phát hiện và nhắc ra sau. */
+  cutLeft?: number;
+  /** Đã bị nhắc chen hàng (không chen lần nữa). */
+  scolded?: boolean;
+  /** Khách phá phách (nghịch hàng, làm ồn) lúc lựa hàng. */
+  rowdy?: boolean;
+  /** Tờ tiền giả khách trả mà người đứng quầy không phát hiện (mệnh giá; mất khi kiểm két). */
+  fakeBill?: number;
 }
 
 /** Món khách không lấy được trên kệ vì hết (không phải chê giá / chê không lạnh) và chưa hỏi ở quầy. */

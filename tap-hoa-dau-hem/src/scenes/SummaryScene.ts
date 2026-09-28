@@ -57,6 +57,8 @@ export class SummaryScene extends Phaser.Scene {
     if (sum.bonuses) rows.push(['Thưởng nhân viên', `-${formatMoney(sum.bonuses)}`, HEX.red]);
     if (sum.theftCost) rows.push(['Mất trộm', `-${formatMoney(sum.theftCost)}`, HEX.red]);
     if (sum.fines) rows.push(['Kẻ trộm bồi thường', `+${formatMoney(sum.fines)}`, HEX.green]);
+    if (sum.counterfeitLoss) rows.push(['Nhận phải tiền giả', `-${formatMoney(sum.counterfeitLoss)}`, HEX.red]);
+    if (sum.policeRecovered) rows.push(['🚓 Công an trả lại', `+${formatMoney(sum.policeRecovered)}`, HEX.green]);
     if (sum.deliveryFees) rows.push(['Phí giao hàng', `+${formatMoney(sum.deliveryFees)}`, HEX.green]);
     if (sum.debtGiven) rows.push(['Cho ghi sổ', formatMoney(sum.debtGiven), '#1f5fa0']);
     if (sum.debtCollectedAmount) rows.push(['Thu nợ', `+${formatMoney(sum.debtCollectedAmount)}`, HEX.green]);
@@ -64,7 +66,7 @@ export class SummaryScene extends Phaser.Scene {
     if (sum.tax) rows.push(['Thuế tạm tính (nộp cuối tháng)', sum.tax > 0 ? `-${formatMoney(sum.tax)}` : `+${formatMoney(-sum.tax)}`, sum.tax > 0 ? HEX.red : HEX.green]);
     if (sum.staffPit) rows.push(['TNCN giữ lại từ lương (nộp thay)', formatMoney(sum.staffPit), '#1f5fa0']);
     if (sum.taxReserved) rows.push(['Để vào quỹ thuế', formatMoney(sum.taxReserved), '#1f5fa0']);
-    if (sum.netProfit !== undefined && (sum.spoiledCost || sum.electricity || sum.debtCollectedAmount || sum.wages || sum.theftCost || sum.tax)) {
+    if (sum.netProfit !== undefined && (sum.spoiledCost || sum.electricity || sum.debtCollectedAmount || sum.wages || sum.theftCost || sum.counterfeitLoss || sum.tax)) {
       rows.push(['Lãi ròng', formatMoney(sum.netProfit), sum.netProfit >= 0 ? HEX.green : HEX.red]);
     }
     if (sum.closedEarlyAt !== undefined) {

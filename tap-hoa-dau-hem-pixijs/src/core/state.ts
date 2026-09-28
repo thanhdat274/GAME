@@ -209,8 +209,14 @@ export interface DayStats {
   questMoney: number;
   wages: number;
   bonuses: number;
-  /** Giá vốn hàng bị trộm mất. */
+  /** Giá vốn hàng bị trộm mất (cả tiền trong két bị trộm đêm). */
   theftCost: number;
+  /** Tiền mất do nhận phải tiền giả. */
+  counterfeitLoss?: number;
+  /** Tiền công an thu hồi trả lại từ vụ trộm. */
+  policeRecovered?: number;
+  /** Số lần phát hiện tiền giả và báo công an. */
+  counterfeitReports?: number;
   thefts: number;
   thievesCaught: number;
   /** Tiền bồi thường từ kẻ trộm bị bắt. */
@@ -267,6 +273,8 @@ export interface DaySummary {
   wageDebt?: number;
   bonuses?: number;
   theftCost?: number;
+  counterfeitLoss?: number;
+  policeRecovered?: number;
   fines?: number;
   deliveryFees?: number;
   /** Giá vốn hàng nhận qua đơn nội bộ, hiển thị riêng trong báo cáo chuỗi. */
@@ -305,6 +313,8 @@ export interface Settings {
   viewMode?: 'side' | 'topdown';
   /** Thợ nấu xôi làm đơn nội bộ trước hàng bán lẻ (mặc định bật). */
   xoiOrderPriority?: boolean;
+  /** Báo công an khi bị trộm đột nhập / phát hiện tiền giả (mặc định bật). Tắt: tự xử, trả lại tờ giả. */
+  callPolice?: boolean;
 }
 
 export interface SaveSync {
@@ -602,6 +612,10 @@ export interface GameState {
   /** Lương còn nợ nhân viên. */
   wageDebt: number;
   camera: boolean;
+  /** Vụ trộm đã báo công an, đang chờ kết quả điều tra. */
+  policeCases?: { day: number; value: number; resolveDay: number; caught: boolean }[];
+  /** Hao mòn / hỏng của nội thất và thiết bị, theo khóa `idTiệm:fUid` hoặc `idTiệm:light` (xem maintenance.ts). */
+  maintenance?: Record<string, { wear: number; broken?: 'minor' | 'major' }>;
   /** Thông báo buổi sáng (tự nhập hàng, nhân viên xin nghỉ...). */
   morningNotes: string[];
   /** Thời điểm lưu gần nhất (ms, giờ thực). */
@@ -898,7 +912,10 @@ export function shelfKind(state: GameState, shelf: number): 'shelf' | 'fridge' |
 
 /** Kệ dùng được: có nội thất đang đặt, và 3 kệ gốc vẫn mở theo level. */
 export function shelfUsable(state: GameState, shelf: number): boolean {
-  if (!state.shelves[shelf] || !fixtureOfShelf(state, shelf)) return false;
+  const f = fixtureOfShelf(state, shelf);
+  if (!state.shelves[shelf] || !f) return false;
+  // Kệ / tủ đang hỏng (xem maintenance.ts): không bày, không bán được cho tới khi sửa.
+  if (state.maintenance?.[`${state.activeStoreId}:f${f.uid}`]?.broken) return false;
   return shelf >= MAX_SHELVES || shelf < shelfCount(state.level);
 }
 

@@ -40,6 +40,8 @@ import {
   findSlotWith, takeLots, takeOneFromSlot, zoneOf, type DeliveryResult,
   spoilFrozenStock,
 } from './stock';
+import { maintenancePatienceRate, maintenanceTrafficMul, wearOvernight } from './maintenance';
+import { callsPolice, nightBurglary, resolvePoliceCases } from './security';
 import { PLAYER, ROLE_TASKS, TaskQueue, type Task } from './tasks';
 import { endDayTax, recordTaxableRevenue, taxKindOfProduct, taxReminders, updateTax } from './tax';
 
@@ -68,7 +70,7 @@ export interface Worker {
   idle: number;
 }
 
-export type IncidentKind = 'thief' | 'complaint' | 'outOfStock' | 'noCashier';
+export type IncidentKind = 'thief' | 'complaint' | 'outOfStock' | 'noCashier' | 'counterfeit';
 
 /** Sự cố chạm được (hiện dạng thông báo trong chế độ quản lý). */
 export interface Incident {
@@ -130,6 +132,17 @@ export interface DayEvents {
   thiefFleeing: Customer;
   thiefCaught: { customer: Customer; by: 'player' | 'camera' | 'staff'; fine: number };
   thiefEscaped: { customer: Customer; cost: number };
+  /** Khách chen lên hàng quầy `lane` (0 = quầy người chơi). */
+  queueCut: { customer: Customer; lane: number };
+  /** Người đứng quầy (`by` = id nhân viên hoặc 'player') nhắc khách chen hàng ra sau xếp hàng. */
+  queueScold: { customer: Customer; lane: number; by: string };
+  /** Khách phá phách trong tiệm; `by` = người nhắc nhở (id nhân viên / 'player'), `guard` = bảo vệ xử lý kịp. */
+  rowdy: { customer: Customer; by: string; guard: boolean };
+  /**
+   * Khách trả bằng tiền giả và người đứng quầy (`by`) phát hiện: 'police' = báo công an, người dùng tiền giả bị đưa đi;
+   * 'repaid' = trả lại tờ giả, khách đổi tờ thật; 'left' = trả lại tờ giả, khách bỏ đi.
+   */
+  counterfeit: { customer: Customer; by: string; bill: number; action: 'police' | 'repaid' | 'left' };
   phoneRing: PhoneOrder;
   phoneOrderUpdate: PhoneOrder;
   incident: Incident;
@@ -167,7 +180,9 @@ export interface DaySessionSnapshot {
   fleeing?: Customer[];
   playerAway?: number;
   playerAtCounter?: boolean;
-  counters?: { nextOrderId: number; nextIncidentId: number; nextLaneId: number; taskAcc: number; missedAlerted: string[] };
+  counters?: { nextOrderId: number; nextIncidentId: number; nextLaneId: number; taskAcc: number; missedAlerted: string[]; nextTicket?: number };
+  /** RNG riêng cho hành vi khách (chen hàng, phá phách) để không làm lệch mô phỏng chính. */
+  socialRngState?: number;
 }
 
 /** Core phiên bán: khách tự duyệt hàng, người chơi quét giỏ, thối tiền và phục vụ hàng sau quầy. */
@@ -217,9 +232,13 @@ export class DaySession {
   private nextLaneId = 1;
   private taskAcc = 0;
   private missedAlerted = new Set<string>();
+  /** Số thứ tự phát cho khách khi ra quầy (ai tới trước tính tiền trước). */
+  private nextTicket = 1;
+  private social: Rng;
 
   constructor(readonly state: GameState, seed?: number) {
     this.rng = new Rng(seed ?? daySeed(state.day, Math.floor(state.clock)));
+    this.social = new Rng(((seed ?? daySeed(state.day, Math.floor(state.clock))) ^ 0x5ce1a) >>> 0);
     this.closed = state.clock >= DATA.balance.closeMinute || state.today.closedEarlyAt !== undefined;
   }
 
@@ -256,7 +275,9 @@ export class DaySession {
       session.nextLaneId = snapshot.counters.nextLaneId;
       session.taskAcc = snapshot.counters.taskAcc;
       session.missedAlerted = new Set(snapshot.counters.missedAlerted);
+      session.nextTicket = snapshot.counters.nextTicket ?? 1;
     }
+    if (snapshot.socialRngState !== undefined) session.social = Rng.restore(snapshot.socialRngState);
     return session;
   }
 
@@ -289,8 +310,9 @@ export class DaySession {
       playerAtCounter: this.playerAtCounter,
       counters: {
         nextOrderId: this.nextOrderId, nextIncidentId: this.nextIncidentId, nextLaneId: this.nextLaneId,
-        taskAcc: this.taskAcc, missedAlerted: [...this.missedAlerted],
+        taskAcc: this.taskAcc, missedAlerted: [...this.missedAlerted], nextTicket: this.nextTicket,
       },
+      socialRngState: this.social.snapshot(),
     };
   }
 
@@ -337,7 +359,7 @@ export class DaySession {
         if (inStore < maxShoppersFor(this.state) + this.maxQueue() * (1 + this.lanes.length)) {
           this.spawn();
           const mul = ratingSpawnMultiplier(averageRating(this.state)) * attractionMultiplier(this.state) * cheapSpawnMultiplier(this.state)
-            * trafficMultiplier(this.state.level);
+            * trafficMultiplier(this.state.level) * maintenanceTrafficMul(this.state);
           const effects = EffectStack.forDay(this.state.day, this.state.calendarStartMonth, this.state.calendarStartYear, this.state.activeEvents);
           const mean = meanSpawnSeconds(this.state.clock, mul, this.state.day, effects.multiply('trafficMul'), shopDensityAt(this.state, this.state.clock));
           this.nextSpawnIn = Math.max(1, this.rng.exponential(mean));
@@ -367,6 +389,7 @@ export class DaySession {
     const inLanes = this.lanes.flatMap((l) => l.queue);
     const waiting = [...this.queue, ...this.ready, ...inLanes].filter((c) => c.status === 'waiting' || c.status === 'scanning' || c.status === 'paying' || c.status === 'bargain' || c.status === 'credit');
     const cat = hasCat(this.state);
+    const heat = maintenancePatienceRate(this.state);
     for (const c of waiting) {
       // Sau khi đóng cửa, khách nhân viên đang tính tiền được phục vụ nốt, không bị đuổi giữa giao dịch.
       // Khách chờ người chơi thì vẫn hết kiên nhẫn, để ngày kết thúc được khi không ai đứng quầy.
@@ -374,6 +397,7 @@ export class DaySession {
       let rate = c === this.front || this.lanes.some((l) => l.queue[0] === c) ? 1 : b.queuePatienceRate;
       // Khách thấy chủ tiệm đang bận nạp kệ thì chờ thong thả hơn.
       if (!this.playerAtCounter && !this.autoPlayer && c.lane === 0) rate *= b.topDown.awayPatienceRate;
+      rate *= heat;
       c.patience -= dt * rate;
       c.waited = (c.waited ?? 0) + dt;
       if (cat && !c.catChecked && c.waited >= b.cat.waitSeconds) {
@@ -388,6 +412,7 @@ export class DaySession {
         this.leave(c, 'patience');
       }
     }
+    this.tickQueueCutters(dt);
     const c = this.front;
     if (c?.status === 'scanning') this.tickCounterRequest(c, dt);
     if (c?.status === 'waiting' && c.askLeft && c.askLeft > 0 && (this.playerAtCounter || this.autoPlayer)) c.askLeft = Math.max(0, c.askLeft - dt);
@@ -419,6 +444,8 @@ export class DaySession {
       c.counterRequestResolved = true;
       delete c.wantsCredit;
       delete c.bargainPct;
+    } else if (hasFeature(this.state.level, 'thief') && this.social.next() < DATA.balance.queue.rowdyChance) {
+      c.rowdy = true;
     }
     const hour = Math.max(0, Math.min(this.state.today.hourly.length - 1, Math.floor((this.state.clock - DATA.balance.openMinute) / 60)));
     this.state.today.hourly[hour] = (this.state.today.hourly[hour] ?? 0) + 1;
@@ -490,6 +517,7 @@ export class DaySession {
       return;
     }
     this.takeFromShelf(c, line);
+    if (c.rowdy) this.disturb(c);
     c.browsePicking = false;
     if (line.picked + line.missing < line.qty) {
       c.browseTimer = DATA.balance.zoneWalkSeconds;
@@ -499,6 +527,23 @@ export class DaySession {
     const next = lines[c.browseIndex];
     if (next) c.browseTimer = this.walkTo(c, next);
     else this.finishBrowsing(c);
+  }
+
+  /**
+   * Khách phá phách (bày bừa, la lối): bảo vệ trong ca nhắc ngay, không ai bị làm phiền.
+   * Không có bảo vệ thì nhân viên / chủ tiệm nhắc, nhưng khách khác trong tiệm đã bực mình (mất kiên nhẫn).
+   */
+  private disturb(c: Customer): void {
+    c.rowdy = false;
+    const guard = this.presentGuard();
+    const helper = guard ?? this.state.staff.find((s) => (s.role === 'refill' || s.role === 'stocker') && this.workerOf(s.id)?.present);
+    const by = helper?.id ?? PLAYER;
+    if (!guard) {
+      const loss = DATA.balance.queue.rowdyAnnoySeconds;
+      for (const other of this.customers) if (other !== c && !other.thief) other.patience = Math.max(0.5, other.patience - loss);
+    } else this.jobDone(guard);
+    this.log(`${helper?.name ?? 'Chủ tiệm'} nhắc ${c.name ?? 'khách'} giữ trật tự`);
+    this.events.emit('rowdy', { customer: c, by, guard: !!guard });
   }
 
   /** Kệ khách sẽ tới để lấy món: kệ đúng khu đang có món (ưu tiên tủ lạnh cho đồ uống lạnh). */
@@ -620,7 +665,8 @@ export class DaySession {
     this.removeFrom(this.shoppers, c);
     c.at = counterFixture(this.state)?.uid ?? null;
     c.status = 'waiting';
-    this.joinLane(c, lane);
+    c.ticket ??= this.nextTicket++;
+    this.joinLane(c, lane, true);
   }
 
   private admitReady(): void {
@@ -629,7 +675,7 @@ export class DaySession {
       if (lane === null) break;
       const c = this.ready.shift()!;
       if (c.status === 'done') continue;
-      this.joinLane(c, lane);
+      this.joinLane(c, lane, true);
     }
   }
 
@@ -696,12 +742,122 @@ export class DaySession {
     return true;
   }
 
-  /** Vào quầy: 0 = quầy người chơi, số khác = id quầy nhân viên. */
-  private joinLane(c: Customer, laneId: number): void {
+  /** Hàng chờ của một quầy: 0 = quầy người chơi, số khác = id quầy nhân viên. */
+  private laneQueue(laneId: number): Customer[] | null {
+    return laneId === 0 ? this.queue : this.lanes.find((l) => l.id === laneId)?.queue ?? null;
+  }
+
+  /**
+   * Vào quầy: 0 = quầy người chơi, số khác = id quầy nhân viên. Khách đứng theo số thứ tự tới quầy
+   * (không chen lên trước người đang được tính tiền). `fresh` = vừa lấy hàng xong, có thể là khách chen hàng.
+   */
+  private joinLane(c: Customer, laneId: number, fresh = false): void {
     c.lane = laneId;
-    if (laneId === 0) this.queue.push(c);
-    else this.lanes.find((l) => l.id === laneId)!.queue.push(c);
+    const queue = this.laneQueue(laneId)!;
+    if (fresh && this.tryCutIn(c, laneId, queue)) return;
+    insertByTicket(queue, c, 1);
     this.events.emit('basketReady', c);
+  }
+
+  /** Khách ý thức kém chen lên ngay sau người đang tính tiền (hàng có từ 2 người trở lên). */
+  private tryCutIn(c: Customer, laneId: number, queue: Customer[]): boolean {
+    if (c.scolded || c.thief || queue.length < 2 || !hasFeature(this.state.level, 'thief')) return false;
+    if (this.social.next() >= DATA.balance.queue.cutChance) return false;
+    queue.splice(1, 0, c);
+    c.cutLeft = DATA.balance.queue.cutNoticeSeconds;
+    this.events.emit('basketReady', c);
+    this.events.emit('queueCut', { customer: c, lane: laneId });
+    return true;
+  }
+
+  /** Người đứng quầy của hàng (id nhân viên / 'player'); null nếu quầy người chơi đang bỏ trống. */
+  private laneKeeper(laneId: number): string | null {
+    if (laneId !== 0) return this.lanes.find((l) => l.id === laneId)?.staffId ?? null;
+    return this.playerAtCounter || this.autoPlayer ? PLAYER : null;
+  }
+
+  /**
+   * Khách chen hàng: người đứng quầy (hoặc bảo vệ) thấy thì nhắc ra cuối hàng xếp lại.
+   * Chen được tới đầu hàng mà không ai nhắc thì những người phía sau bực mình (mất kiên nhẫn).
+   */
+  private tickQueueCutters(dt: number): void {
+    const cfg = DATA.balance.queue;
+    const guard = this.presentGuard();
+    for (const laneId of [0, ...this.lanes.map((l) => l.id)]) {
+      const queue = this.laneQueue(laneId)!;
+      for (const c of [...queue]) {
+        if (c.cutLeft === undefined) continue;
+        const index = queue.indexOf(c);
+        if (index === 0) {
+          // Không ai kịp nhắc: người xếp sau bực mình.
+          delete c.cutLeft;
+          c.scolded = true;
+          for (const other of queue.slice(1)) other.patience = Math.max(0.5, other.patience - cfg.cutSkipPatience);
+          continue;
+        }
+        const keeper = this.laneKeeper(laneId) ?? guard?.id ?? null;
+        if (!keeper) continue;
+        c.cutLeft -= dt;
+        if (c.cutLeft > 0) continue;
+        delete c.cutLeft;
+        c.scolded = true;
+        queue.splice(index, 1);
+        c.ticket = this.nextTicket++;
+        queue.push(c);
+        const who = keeper === PLAYER ? 'Chủ tiệm' : this.staffOf(keeper)?.name ?? 'Nhân viên';
+        this.log(`${who} nhắc ${c.name ?? 'khách'} chen hàng ra sau xếp hàng`);
+        this.events.emit('queueScold', { customer: c, lane: laneId, by: keeper });
+        this.events.emit('lanesChanged', undefined);
+      }
+    }
+  }
+
+  /**
+   * Khách trả tiền mặt bằng tờ giả. Người đứng quầy (chủ tiệm / thu ngân, theo độ chính xác) có thể phát hiện:
+   * - tiệm báo công an: người dùng tiền giả bị công an đưa đi, không bán được đơn nhưng được phường khen (EXP);
+   * - không báo: trả lại tờ giả, khách đổi tờ thật (hoặc bỏ đi).
+   * Không phát hiện thì bán như thường nhưng mất mệnh giá tờ giả khi kiểm két. Trả về true nếu khách không mua nữa.
+   */
+  private counterfeit(c: Customer, total: number, staff: Staff | null): boolean {
+    const cfg = DATA.balance.security;
+    if (c.fakeBill !== undefined || !hasFeature(this.state.level, 'thief') || this.social.next() >= cfg.counterfeitChance) return false;
+    const bills = [...cfg.counterfeitBills].sort((a, b) => a - b);
+    const bill = bills.find((v) => v >= total) ?? bills[bills.length - 1];
+    const detect = staff ? cfg.staffDetectBase + staff.stats.accuracy * cfg.staffDetectPerAccuracy : cfg.playerDetect;
+    if (this.social.next() >= detect) {
+      c.fakeBill = bill;
+      return false;
+    }
+    const by = staff?.id ?? PLAYER;
+    const who = staff?.name ?? 'Chủ tiệm';
+    if (staff) this.jobDone(staff);
+    if (callsPolice(this.state)) {
+      for (const line of c.order) this.returnLine(line);
+      const t = this.state.today;
+      t.counterfeitReports = (t.counterfeitReports ?? 0) + 1;
+      addPlayerExperience(this.state, cfg.counterfeitReportExp);
+      t.expGained += cfg.counterfeitReportExp;
+      this.log(`${who} phát hiện tờ ${formatMoney(bill)} giả, báo công an`);
+      this.events.emit('counterfeit', { customer: c, by, bill, action: 'police' });
+      this.addIncident('counterfeit', `🚓 ${who} phát hiện tờ ${formatMoney(bill)} giả — đã báo công an, người dùng tiền giả bị đưa đi`, { customerId: c.id });
+      this.drop(c);
+      return true;
+    }
+    if (this.social.next() < cfg.counterfeitRepay) {
+      this.log(`${who} trả lại tờ ${formatMoney(bill)} giả, khách đổi tờ khác`);
+      this.events.emit('counterfeit', { customer: c, by, bill, action: 'repaid' });
+      c.fakeBill = 0;
+      return false;
+    }
+    this.log(`${who} trả lại tờ ${formatMoney(bill)} giả, khách bỏ đi`);
+    this.events.emit('counterfeit', { customer: c, by, bill, action: 'left' });
+    this.leave(c, 'nothing');
+    return true;
+  }
+
+  /** Bảo vệ đang trong ca (null nếu không có). */
+  presentGuard(): Staff | null {
+    return this.state.staff.find((s) => s.role === 'guard' && this.workerOf(s.id)?.present) ?? null;
   }
 
   /** Quầy người chơi nhận khách mới không (chế độ quản lý có thu ngân thì không; đang đi giao thì không). */
@@ -728,31 +884,47 @@ export class DaySession {
     return best?.id ?? null;
   }
 
-  /** Chuyển khách còn đang chờ sang quầy vắng hơn; không ngắt giao dịch đang xử lý. */
+  /**
+   * Mời khách sang quầy vắng hơn, giữ đúng thứ tự tới trước tính trước:
+   * - chỉ người tới sớm nhất trong số đang chờ được mời trước, và chỉ khi sang quầy kia được tính tiền sớm hơn;
+   * - mỗi khách đổi quầy tối đa một lần (không nhảy qua lại giữa các quầy);
+   * - không đụng tới khách đang được tính tiền hay đang chen hàng.
+   */
   private balanceCheckoutQueues(): void {
-    const queues = [
-      ...(this.playerLaneOpen() ? [{ id: 0, queue: this.queue, busy: false }] : []),
-      ...this.lanes.filter((lane) => !lane.closing).map((lane) => ({ id: lane.id, queue: lane.queue, busy: lane.job !== null })),
+    const max = this.maxQueue();
+    const playerOpen = this.playerLaneOpen();
+    const open = [
+      ...(playerOpen ? [{ id: 0, queue: this.queue }] : []),
+      ...this.lanes.filter((lane) => !lane.closing).map((lane) => ({ id: lane.id, queue: lane.queue })),
     ];
-    if (queues.length < 2) return;
-
+    if (!open.length) return;
+    const sources = [
+      { id: 0, queue: this.queue, open: playerOpen },
+      ...this.lanes.map((lane) => ({ id: lane.id, queue: lane.queue, open: !lane.closing })),
+    ];
     let changed = false;
-    // Chuyển từng khách đang chờ từ hàng dài sang hàng ngắn cho đến khi cân bằng.
-    while (true) {
-      const source = [...queues].sort((a, b) => b.queue.length - a.queue.length)[0];
-      const target = [...queues].sort((a, b) => a.queue.length - b.queue.length)[0];
-      if (!source || !target || source === target || source.queue.length - target.queue.length <= 1) break;
-
-      const activeId = source.busy ? (source.queue[0]?.id ?? null) : null;
-      let index = -1;
-      for (let i = source.queue.length - 1; i >= 0; i--) {
-        const c = source.queue[i];
-        if (c.id !== activeId && c.status === 'waiting') { index = i; break; }
+    for (let moves = 0; moves < 20; moves++) {
+      const target = open.reduce((a, b) => (b.queue.length < a.queue.length ? b : a));
+      if (target.queue.length >= max) break;
+      let pick: { from: Customer[]; index: number; c: Customer } | null = null;
+      for (const src of sources) {
+        if (src.id === target.id) continue;
+        src.queue.forEach((c, index) => {
+          // Đầu hàng quầy đang mở sắp/đang được tính tiền: giữ nguyên.
+          if (src.open && index === 0) return;
+          if (c.status !== 'waiting' || c.switched || c.cutLeft !== undefined || c.askLeft !== undefined) return;
+          // Quầy bỏ trống: cả người đầu hàng cũng đang phải chờ.
+          const position = src.open ? index : index + 1;
+          if (position <= target.queue.length) return;
+          if (!pick || (c.ticket ?? 0) < (pick.c.ticket ?? 0)) pick = { from: src.queue, index, c };
+        });
       }
-      if (index < 0) break;
-      const [customer] = source.queue.splice(index, 1);
-      customer.lane = target.id;
-      target.queue.push(customer);
+      if (!pick) break;
+      const { from, index, c } = pick as { from: Customer[]; index: number; c: Customer };
+      from.splice(index, 1);
+      c.lane = target.id;
+      c.switched = true;
+      insertByTicket(target.queue, c, 1);
       changed = true;
     }
     if (changed) this.events.emit('lanesChanged', undefined);
@@ -964,6 +1136,7 @@ export class DaySession {
     c.total = total;
     c.paymentMethod = this.pickPaymentMethod();
     c.bill = c.paymentMethod === 'cash' ? customerPayment(total, this.rng) : total;
+    if (c.paymentMethod === 'cash' && this.counterfeit(c, total, null)) return;
     c.changeDue = c.bill - total;
     c.status = 'paying';
     c.changeStartedAt = this.elapsed;
@@ -1160,6 +1333,13 @@ export class DaySession {
       this.state.money += c.total + tip - lost;
       t.revenue += c.total;
       this.recordSaleTax(c);
+    }
+    if (c.fakeBill) {
+      // Nhận phải tờ giả mà không biết: mất cả mệnh giá (tiền thối khách đưa bằng tiền thật).
+      this.state.money -= c.fakeBill;
+      t.counterfeitLoss = (t.counterfeitLoss ?? 0) + c.fakeBill;
+      t.journal.push({ m: Math.floor(this.state.clock), t: `Nhận phải tờ ${formatMoney(c.fakeBill)} giả` });
+      delete c.fakeBill;
     }
     t.tips += tip;
     t.overpaid += lost;
@@ -1406,7 +1586,7 @@ export class DaySession {
         this.lanes.splice(this.lanes.indexOf(lane), 1);
         for (const c of lane.queue) {
           c.status = 'waiting';
-          this.ready.unshift(c);
+          insertByTicket(this.ready, c, 0);
         }
       }
       changed = true;
@@ -1418,13 +1598,14 @@ export class DaySession {
       changed = true;
     }
     // Chế độ quản lý có thu ngân: khách đang chờ ở quầy người chơi chuyển sang quầy nhân viên.
-    if (!this.autoPlayer && !this.playerLaneOpen()) {
+    // (Người chơi chỉ tạm rời quầy thì khách vẫn đứng nguyên hàng; ai tới sớm được mời sang quầy trống.)
+    if (!this.autoPlayer && this.state.today.managerDay && !this.playerLaneOpen()) {
       for (const c of [...this.queue]) {
         const untouched = c.status === 'waiting' || (c.status === 'scanning' && c.order.every((l) => l.scanned === 0));
         if (!untouched) continue;
         this.removeFrom(this.queue, c);
         c.status = 'waiting';
-        this.ready.push(c);
+        insertByTicket(this.ready, c, 0);
         changed = true;
       }
     }
@@ -1737,6 +1918,7 @@ export class DaySession {
       this.completeSale(c, 0, 0, false, s);
       return;
     }
+    if (this.counterfeit(c, c.total, s)) return;
     let lost = 0;
     if (this.rng.next() < errorChance(s, this.state.day)) {
       const amount = this.rng.pick(cfg.wrongChangeValues);
@@ -1774,6 +1956,11 @@ export class DaySession {
     const watcher = this.state.staff.find((s) => s.role === 'refill' && this.workerOf(s.id)?.present);
     if (camera && this.rng.next() < sec.cameraDetect) {
       this.caught(c, 'camera');
+      return;
+    }
+    const guard = this.presentGuard();
+    if (guard && this.social.next() < sec.guardDetect) {
+      this.caught(c, 'staff', guard);
       return;
     }
     if (watcher && this.rng.next() < sec.refillDetect) {
@@ -2069,6 +2256,17 @@ export class DaySession {
 }
 
 /** "Bỏ qua ngày": chạy hết ngày bằng tick không render (quầy người chơi tự phục vụ). */
+/**
+ * Xếp khách vào hàng theo số thứ tự tới quầy (số nhỏ đứng trước), nhưng không chen lên trước vị trí `minIndex`
+ * (vd 1 = người đầu hàng đang được tính tiền). Khách chưa có số đứng cuối.
+ */
+export function insertByTicket(queue: Customer[], c: Customer, minIndex: number): void {
+  const t = c.ticket ?? Number.POSITIVE_INFINITY;
+  let i = queue.length;
+  while (i > minIndex && (queue[i - 1].ticket ?? Number.POSITIVE_INFINITY) > t && queue[i - 1].cutLeft === undefined) i--;
+  queue.splice(i, 0, c);
+}
+
 export function runDayHeadless(session: DaySession, maxTicks = DATA.balance.manager.skipMaxTicks): void {
   session.autoPlayer = true;
   session.paused = false;
@@ -2103,11 +2301,12 @@ export function endDay(state: GameState): DaySummary {
   state.morningNotes = updateMoods(state).map((n) => n.text);
   if (soakNote) state.morningNotes.push(soakNote);
   if (pay.debt > 0) state.morningNotes.push(`Còn nợ lương nhân viên ${formatMoney(pay.debt)}`);
+  if (t.counterfeitLoss) state.morningNotes.push(`💸 Kiểm két cuối ngày phát hiện ${formatMoney(t.counterfeitLoss)} tiền giả lọt qua quầy. Thu ngân càng chính xác càng dễ phát hiện.`);
   markBadDebts(state);
   const avg = t.ratingCount ? t.ratingSum / t.ratingCount : 0;
   state.lifetime.loveStreak = t.ratingCount && avg >= DATA.balance.loveStreakRating ? state.lifetime.loveStreak + 1 : 0;
   const preTaxProfit = t.revenue - t.cogs + t.tips - t.overpaid + t.debtCollectedAmount - t.spoiledCost - t.electricity + t.questMoney
-    - t.wages - t.bonuses - t.theftCost + t.fines + t.deliveryFees;
+    - t.wages - t.bonuses - t.theftCost + t.fines + t.deliveryFees - (t.counterfeitLoss ?? 0) + (t.policeRecovered ?? 0);
   const dayTax = endDayTax(state, preTaxProfit);
   const achievements = checkAchievements(state).map((a) => a.id);
   const levelUps = [...t.levelUps, ...applyLevelUps(state).map((l) => l.level)];
@@ -2142,6 +2341,8 @@ export function endDay(state: GameState): DaySummary {
     wageDebt: state.wageDebt,
     bonuses: t.bonuses,
     theftCost: t.theftCost,
+    counterfeitLoss: t.counterfeitLoss,
+    policeRecovered: t.policeRecovered,
     fines: t.fines,
     deliveryFees: t.deliveryFees,
     internalCost: t.internalCost,
@@ -2219,12 +2420,17 @@ function nextCapExp(): number {
 export function startNextDay(state: GameState): number {
   claimAllDone(state);
   state.day++;
+  const yesterdayRevenue = state.today.revenue;
   const branchIncome = simulateBranches(state, state.day - 1);
   // Reset trước các chuyến giao để giá vốn nhận hàng được ghi vào ngày mới.
   state.phase = 'morning';
   state.clock = DATA.balance.openMinute;
   state.today = emptyStats();
   state.lastSummary = null;
+  // Qua đêm (tiệm đóng cửa): trộm đột nhập, đồ đạc hao mòn / hỏng.
+  state.morningNotes.push(...resolvePoliceCases(state));
+  state.morningNotes.push(...nightBurglary(state, yesterdayRevenue));
+  state.morningNotes.push(...wearOvernight(state));
   const arrivals = deliverBranchShipments(state, state.day, DATA.balance.openMinute);
   if (arrivals) state.morningNotes.push(`🚚 ${arrivals} chuyến xe hàng đã đến chi nhánh.`);
   // Đơn nội bộ: giao xôi gói tới hạn (7h), sinh đơn định kỳ cho sáng mai, dọn đơn cũ.

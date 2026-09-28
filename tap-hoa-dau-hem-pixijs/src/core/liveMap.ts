@@ -58,8 +58,10 @@ export function customerGoal(session: LiveSessionView, c: Customer): Goal {
 }
 
 /** Nhân viên đang muốn đứng ở đâu, theo việc đang làm. `lane` = vị trí quầy nếu đang đứng quầy. */
-export function staffGoal(state: GameState, task: string | null, lane: number | null): Goal {
+export function staffGoal(state: GameState, task: string | null, lane: number | null, role?: string): Goal {
   if (lane !== null) return { kind: 'behind', lane };
+  // Bảo vệ đứng trông ở cửa.
+  if (role === 'guard' && !task) return { kind: 'door' };
   const rack = state.fixtures.find((f) => DATA.furniture.find((d) => d.id === f.type)?.kind === 'storage');
   // Rảnh việc: đứng chờ ở kệ kho, không có thì cạnh kệ hàng đầu tiên, cho khỏi chắn cửa.
   if (!task) {

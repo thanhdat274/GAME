@@ -4,6 +4,7 @@ import { isMaxLevelSimulation } from './core/simulationMode';
 import { BootScene } from './scenes/BootScene';
 import { BuildScene } from './scenes/BuildScene';
 import { DecorScene } from './scenes/DecorScene';
+import { MaintenanceScene } from './scenes/MaintenanceScene';
 import { LedgerScene } from './scenes/LedgerScene';
 import { TaxScene } from './scenes/TaxScene';
 import { PricesScene } from './scenes/PricesScene';
@@ -60,7 +61,7 @@ const game = new Phaser.Game({
   // Chỉ tạo DOM layer trong lượt thử HUD HTML/CSS; mặc định không thêm DOM container.
   dom: shopDomTest ? { createContainer: true } : undefined,
   input: { activePointers: 2 },
-  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, StoreMapScene, PricesScene, LedgerScene, TaxScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene, RestockScene, InternalScene, ReviewsScene],
+  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, StoreMapScene, PricesScene, LedgerScene, TaxScene, QuestsScene, DecorScene, MaintenanceScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene, RestockScene, InternalScene, ReviewsScene],
 });
 
 // Chỉ bản dev: đo FPS khi kiểm thử hiệu năng trên trình duyệt.
