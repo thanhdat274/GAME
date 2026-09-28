@@ -770,7 +770,9 @@ export class ShopScene extends Engine.Scene {
     if (!open.length) L.add(txt(this, W / 2, PANEL_Y + 158, 'Không có sự cố. Sự cố (trộm, phàn nàn, hết hàng) sẽ hiện ở đây.', { size: 11, color: HEX.muted, origin: [0.5, 0.5], align: 'center', wrap: W - 60 }));
     L.add(new Button(this, W / 2, PANEL_Y + 212, { w: 180, h: 36, label: '🙋 Xuống quầy tự bán', size: 13, color: C.wood, onTap: () => {
       s.today.managerDay = false;
+      s.manager.enabled = false;
       s.manager.speed = 1;
+      persist();
       this.renderPanel(true);
     } }));
   }
