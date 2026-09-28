@@ -96,17 +96,28 @@ const CHIP_HOLD_MS = 280;
 const COUNTER_X0 = 96;
 const COUNTER_DX = 72;
 
+/**
+ * Một hàng trong danh sách nhập hàng. Hàng được dựng một lần rồi tái sử dụng khi cuộn
+ * (chỉ đổi chữ / icon theo món mới), thay vì hủy và dựng lại cả chục đối tượng mỗi lần trượt qua một hàng.
+ */
 interface Row {
-  p: Product;
-  qty: Engine.GameObjects.Text;
+  /** Món đang gắn vào hàng này; null = hàng rảnh (đang ẩn). */
+  model: FilterRow | null;
+  root: Engine.GameObjects.Container;
+  bg: Engine.GameObjects.Graphics;
+  /** Khóa hình nền đã vẽ (chiều cao + khóa/mở) để khỏi vẽ lại khi không đổi. */
+  bgKey: string;
+  iconHolder: Engine.GameObjects.Container;
+  iconKey: string;
+  name: Engine.GameObjects.Text;
+  price: Engine.GameObjects.Text;
   info: Engine.GameObjects.Text;
+  /** Cụm − / số lượng / + / +10 (ẩn với món chưa mở). */
+  controls: Engine.GameObjects.Container;
+  qty: Engine.GameObjects.Text;
   /** Nhãn đỏ "thiếu N" cạnh tên món. */
   lack: Engine.GameObjects.Text;
   minus: Button;
-  plus: Button;
-  plus10: Button;
-  price: Engine.GameObjects.Text;
-  bg?: Engine.GameObjects.Graphics;
 }
 
 type ProductFilter = Category | 'all';
@@ -128,7 +139,10 @@ export class MorningScene extends Engine.Scene {
   private filterEmptyText: Engine.GameObjects.Text | null = null;
   private listH = 0;
   private listScroll: KineticScroll | null = null;
+  private listCuller: Culler | null = null;
   private resetListCuller: (() => void) | null = null;
+  /** Màu chữ đã đặt: đổi màu chữ Phaser là vẽ lại cả texture, nên chỉ đặt khi khác. */
+  private textColors = new WeakMap<Engine.GameObjects.Text, string>();
   private cartText!: Engine.GameObjects.Text;
   private cartWarn!: Engine.GameObjects.Text;
   private buyBtn!: Button;
@@ -518,6 +532,7 @@ export class MorningScene extends Engine.Scene {
     const top = this.listTop + 16;
     const viewTop = this.listTop + 14;
     const culler = new Culler(this.cameras.main);
+    this.listCuller = culler;
     const setList = (offset: number) => {
       this.list.y = snap(top - offset);
       this.renderVisibleProductRows(false, offset);
@@ -534,6 +549,10 @@ export class MorningScene extends Engine.Scene {
     setList(0);
   }
 
+  /**
+   * Gắn các món nằm trong khung nhìn (±2 hàng) vào các hàng đã dựng sẵn.
+   * Món vẫn còn trong khung giữ nguyên hàng của nó; chỉ món mới trượt vào mới đổi chữ / icon.
+   */
   private renderVisibleProductRows(force: boolean, offset = this.listTop + 16 - this.list.y): void {
     const viewport = LIST_BOTTOM - (this.listTop + 16);
     const startY = Math.max(0, offset - ROW_H * 2);
@@ -545,63 +564,145 @@ export class MorningScene extends Engine.Scene {
     const key = `${start}:${end}`;
     if (!force && key === this.visibleWindowKey) return;
     this.visibleWindowKey = key;
-    this.list.removeAll(true);
-    this.rows = [];
-    if (!this.visibleFilterRows.length) {
-      this.filterEmptyText = txt(this, W / 2, 30, 'Không có mặt hàng trong nhóm này.', { size: 12, color: HEX.muted, origin: [0.5, 0.5] });
-      this.list.add(this.filterEmptyText);
-      return;
+    this.filterEmptyText?.setVisible(this.visibleFilterRows.length === 0);
+
+    const wanted = new Set(this.visibleFilterRows.slice(start, end));
+    const free: Row[] = [];
+    for (const row of this.rows) {
+      if (row.model && wanted.has(row.model)) {
+        wanted.delete(row.model);
+        // Lọc nhóm hàng làm vị trí món đổi: dời hàng theo.
+        this.placeRow(row, row.model);
+      } else {
+        free.push(row);
+      }
     }
-    this.filterEmptyText = null;
-    for (let i = start; i < end; i++) this.renderProductRow(this.visibleFilterRows[i]);
+    for (const model of wanted) {
+      const row = free.pop() ?? this.createProductRow();
+      this.bindProductRow(row, model);
+    }
+    for (const row of free) {
+      row.model = null;
+      row.root.setVisible(false);
+    }
+    // Vị trí các hàng vừa đổi: tính lại vùng cắt cho lần cull kế tiếp.
+    this.listCuller?.reset();
   }
 
-  private renderProductRow(model: FilterRow): void {
-    const { p, y, height: rowH, locked: isLocked } = model;
-    const centerY = rowH / 2 - 1;
-    const root = this.add.container(0, y + centerY).setSize(W, rowH);
+  /** Dựng khung một hàng (một lần); nội dung gắn ở bindProductRow. */
+  private createProductRow(): Row {
+    const root = this.add.container(0, 0);
     const bg = this.add.graphics();
-    bg.fillStyle(0x1a120b, 0.15).fillRoundedRect(8, 3.5 - centerY, W - 16, rowH - 6, 6);
-    bg.fillStyle(isLocked ? 0xeadbc3 : C.panel, 1).fillRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
-    bg.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(9, 3 - centerY, W - 18, rowH - 8, 5);
-    bg.lineStyle(1.5, C.panelEdge, 0.95).strokeRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
-    const icon = productIcon(this, 33, 0, p, isLocked ? 38 : 40);
-    const name = txt(this, 58, 10 - centerY, p.name, { size: 13.5, bold: true });
-    const price = txt(this, 58, 29 - centerY, `Nhập ${formatMoney(p.cost)} · bán ${formatMoney(priceOf(p.id, G.state))}`, { size: 10.5, color: HEX.muted });
-    const info = txt(this, 58, 47 - centerY, '', { size: 10, color: HEX.green, wrap: W - 160 });
-    root.add([bg, icon, name, price, info]);
-    this.list.add(root);
+    const iconHolder = this.add.container(0, 0);
+    const name = txt(this, 58, 0, '', { size: 13.5, bold: true });
+    const price = txt(this, 58, 0, '', { size: 10.5, color: HEX.muted });
+    const info = txt(this, 58, 0, '', { size: 10, color: HEX.green, wrap: W - 160 });
+    const lack = txt(this, 58, 0, 'thiếu 0', { size: 9.5, bold: true, color: HEX.white });
+    lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1).setVisible(false);
 
-    if (isLocked) {
-      icon.setAlpha(0.4);
-      name.setAlpha(0.5);
+    // Nút đọc món từ hàng lúc bấm (hàng được tái sử dụng cho món khác khi cuộn).
+    const tap = (delta: number) => () => { const m = row.model; if (m && !m.locked) this.changeQty(m.p.id, delta); };
+    const stepperG = this.add.graphics();
+    stepperG.fillStyle(0xd5ddcc, 1).fillRoundedRect(248, -13, 32, 26, 3);
+    stepperG.lineStyle(1, 0x828f78, 1).strokeRoundedRect(248, -13, 32, 26, 3);
+    const minus = new Button(this, 232, 0, { w: 26, h: 26, radius: 4, label: '−', color: C.woodLight, size: 15, onTap: tap(-1) });
+    const qty = txt(this, 264, 0, '0', { size: 14, bold: true, color: HEX.muted, origin: [0.5, 0.5] });
+    const plus = new Button(this, 296, 0, { w: 26, h: 26, radius: 4, label: '+', color: C.green, size: 15, onTap: tap(1) });
+    const plus10 = new Button(this, 332, 0, { w: 32, h: 28, radius: 4, label: '+10', color: C.greenDark, size: 11, onTap: tap(10) });
+    const controls = this.add.container(0, 0, [stepperG, minus, qty, plus, plus10]);
+    const row: Row = {
+      model: null, root, bg, bgKey: '', iconHolder, iconKey: '', name, price, info, controls, qty, lack, minus,
+    };
+
+    root.add([bg, iconHolder, name, price, info, controls, lack]);
+    this.list.add(root);
+    this.rows.push(row);
+    return row;
+  }
+
+  private placeRow(row: Row, model: FilterRow): void {
+    const y = model.y + model.height / 2 - 1;
+    if (row.root.y !== y) row.root.setY(y);
+    row.root.setVisible(true);
+  }
+
+  /** Gắn một món vào hàng: vẽ lại phần phụ thuộc món (tên, icon, nền) rồi cập nhật số liệu. */
+  private bindProductRow(row: Row, model: FilterRow): void {
+    const { p, height: rowH, locked } = model;
+    const centerY = rowH / 2 - 1;
+    row.model = model;
+    this.placeRow(row, model);
+    row.root.setSize(W, rowH);
+
+    const bgKey = `${rowH}:${locked}`;
+    if (row.bgKey !== bgKey) {
+      row.bgKey = bgKey;
+      row.bg.clear();
+      row.bg.fillStyle(0x1a120b, 0.15).fillRoundedRect(8, 3.5 - centerY, W - 16, rowH - 6, 6);
+      row.bg.fillStyle(locked ? 0xeadbc3 : C.panel, 1).fillRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
+      row.bg.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(9, 3 - centerY, W - 18, rowH - 8, 5);
+      row.bg.lineStyle(1.5, C.panelEdge, 0.95).strokeRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
+      row.name.setY(10 - centerY);
+      row.price.setY(29 - centerY);
+      row.info.setY(47 - centerY);
+      row.lack.setY(11 - centerY);
+    }
+    const iconKey = `${p.id}:${locked}`;
+    if (row.iconKey !== iconKey) {
+      row.iconKey = iconKey;
+      row.iconHolder.removeAll(true);
+      row.iconHolder.add(productIcon(this, 33, 0, p, locked ? 38 : 40).setAlpha(locked ? 0.4 : 1));
+    }
+    row.name.setText(p.name).setAlpha(locked ? 0.5 : 1);
+    row.controls.setVisible(!locked);
+
+    if (locked) {
       const eventNames: Record<string, string> = { tet: 'Tết', mid_autumn: 'Trung thu', back_to_school: 'Khai giảng' };
       const eventActive = p.eventOnly && G.state.activeEvents.some((event) => event.id === p.eventOnly);
       const eventStocked = p.eventOnly && G.state.warehouse.some((lot) => lot.productId === p.id && lot.qty > 0)
-        || p.eventOnly && G.state.shelves.some((row) => row.some((slot) => slot.productId === p.id && slot.qty > 0));
+        || p.eventOnly && G.state.shelves.some((r) => r.some((slot) => slot.productId === p.id && slot.qty > 0));
       const reason = p.unlockLevel > G.state.level
         ? `🔒 Mở ở level ${p.unlockLevel}`
         : p.eventOnly && !eventActive && !eventStocked
           ? `🔒 Chỉ bán dịp ${eventNames[p.eventOnly] ?? 'sự kiện'}`
           : `🔒 Không bán ở chi nhánh này`;
-      info.setText(reason).setColor(HEX.grey);
+      row.price.setText(`Nhập ${formatMoney(p.cost)} · bán ${formatMoney(priceOf(p.id, G.state))}`);
+      this.paint(row.price, HEX.muted);
+      row.info.setText(reason);
+      this.paint(row.info, HEX.grey);
+      row.lack.setVisible(false);
       return;
     }
+    row.lack.setX(58 + row.name.width + 8);
+    this.updateProductRow(row);
+  }
 
-    const stepperG = this.add.graphics();
-    stepperG.fillStyle(0xd5ddcc, 1).fillRoundedRect(248, -13, 32, 26, 3);
-    stepperG.lineStyle(1, 0x828f78, 1).strokeRoundedRect(248, -13, 32, 26, 3);
-    const minus = new Button(this, 232, 0, { w: 26, h: 26, radius: 4, label: '−', color: C.woodLight, size: 15, onTap: () => this.changeQty(p.id, -1) });
-    const qty = txt(this, 264, 0, '0', { size: 14, bold: true, color: '#5a6652', origin: [0.5, 0.5] });
-    const plus = new Button(this, 296, 0, { w: 26, h: 26, radius: 4, label: '+', color: C.green, size: 15, onTap: () => this.changeQty(p.id, 1) });
-    const plus10 = new Button(this, 332, 0, { w: 32, h: 28, radius: 4, label: '+10', color: C.greenDark, size: 11, onTap: () => this.changeQty(p.id, 10) });
-    // Build the text with its real initial value before applying background and padding.
-    // Starting with an empty string leaves Text's background width at padding-only size.
-    const initialMissed = G.state.yesterdayMissed[p.id] ?? 0;
-    const lack = txt(this, 58 + name.width + 8, 11 - centerY, initialMissed > 0 ? `thiếu ${initialMissed}` : '', { size: 9.5, bold: true, color: HEX.white });
-    lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1).setVisible(initialMissed > 0);
-    root.add([stepperG, minus, qty, plus, plus10, lack]);
-    this.rows.push({ p, qty, info, lack, minus, plus, plus10, price, bg });
+  /** Số liệu thay đổi theo giỏ / mối sỉ / kho: số lượng, giá nhập, tồn kho, nhãn thiếu. */
+  private updateProductRow(row: Row): void {
+    const s = G.state;
+    const p = row.model!.p;
+    const q = this.cart[p.id] ?? 0;
+    row.qty.setText(String(q));
+    this.paint(row.qty, q > 0 ? HEX.green : HEX.muted);
+    const missed = s.yesterdayMissed[p.id] ?? 0;
+    const cost = unitCost(s, p.id, this.supplierId);
+    const trend = costTrend(s, p.id, this.supplierId);
+    const bulk = bulkDiscounted(q);
+    row.price.setText(`Nhập ${formatMoney(cost)}${trend < 0 ? '▼' : trend > 0 ? '▲' : ''}${bulk ? ' -5%' : ''} · bán ${formatMoney(priceOf(p.id, s))}`);
+    this.paint(row.price, bulk || trend < 0 ? HEX.green : trend > 0 ? HEX.red : HEX.muted);
+    const noPlace = !p.behindCounter && !hasPlaceFor(s, p);
+    const extra = noPlace ? ` · ❄ cần ${p.requiresCold === 'freezer' ? 'tủ đông' : 'tủ lạnh'}` : p.shelfLifeDays ? ` · hạn ${p.shelfLifeDays} ngày` : '';
+    row.info.setText(`Còn: ${totalQty(s, p.id)} · Hôm qua bán: ${s.yesterdaySold[p.id] ?? 0}${extra}`);
+    this.paint(row.info, noPlace ? HEX.red : HEX.green);
+    if (missed > 0) row.lack.setText(`thiếu ${missed}`).setPadding(4, 1, 4, 1);
+    row.lack.setVisible(missed > 0);
+    row.minus.setEnabled(q > 0);
+  }
+
+  private paint(t: Engine.GameObjects.Text, color: string): void {
+    if (this.textColors.get(t) === color) return;
+    this.textColors.set(t, color);
+    t.setColor(color);
   }
 
   private setProductFilter(filter: ProductFilter): void {
@@ -1160,22 +1261,7 @@ export class MorningScene extends Engine.Scene {
       for (const [id, b] of Object.entries(this.supplierBtns)) b.setColor(id === this.supplierId ? C.red : C.wood);
       for (const { filter, button } of this.categoryBtns) button.setColor(filter === this.categoryFilter ? C.red : C.wood);
       this.supplierNote?.setText(supplier(this.supplierId).note);
-      for (const r of this.rows) {
-        const q = this.cart[r.p.id] ?? 0;
-        r.qty.setText(String(q)).setColor(q > 0 ? HEX.green : HEX.muted);
-        const missed = s.yesterdayMissed[r.p.id] ?? 0;
-        const cost = unitCost(s, r.p.id, this.supplierId);
-        const trend = costTrend(s, r.p.id, this.supplierId);
-        const bulk = bulkDiscounted(q);
-        r.price.setText(`Nhập ${formatMoney(cost)}${trend < 0 ? '▼' : trend > 0 ? '▲' : ''}${bulk ? ' -5%' : ''} · bán ${formatMoney(priceOf(r.p.id, s))}`);
-        r.price.setColor(bulk || trend < 0 ? HEX.green : trend > 0 ? HEX.red : HEX.muted);
-        const noPlace = !r.p.behindCounter && !hasPlaceFor(s, r.p);
-        const extra = noPlace ? ` · ❄ cần ${r.p.requiresCold === 'freezer' ? 'tủ đông' : 'tủ lạnh'}` : r.p.shelfLifeDays ? ` · hạn ${r.p.shelfLifeDays} ngày` : '';
-        r.info.setText(`Còn: ${totalQty(s, r.p.id)} · Hôm qua bán: ${s.yesterdaySold[r.p.id] ?? 0}${extra}`);
-        r.info.setColor(noPlace ? HEX.red : HEX.green);
-        r.lack.setText(`thiếu ${missed}`).setPadding(4, 1, 4, 1).setVisible(missed > 0);
-        r.minus.setEnabled(q > 0);
-      }
+      for (const r of this.rows) if (r.model && !r.model.locked) this.updateProductRow(r);
       const check = checkCart(s, this.cart, this.supplierId);
       const sp = supplier(this.supplierId);
       this.cartText.setText(`Giỏ: ${formatMoney(check.total)} · Tiền: ${formatMoney(s.money)} · Kho: ${check.cells}/${warehouseCapacity(s)} ô`);

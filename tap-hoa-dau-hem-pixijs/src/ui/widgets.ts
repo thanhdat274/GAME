@@ -165,6 +165,8 @@ export class Button extends Engine.GameObjects.Container {
   }
 
   setColor(color: number): this {
+    // refresh() gọi lại mỗi lần đổi giỏ: cùng màu thì khỏi vẽ lại nền nút.
+    if (this.color === color) return this;
     this.color = color;
     this.draw();
     return this;
