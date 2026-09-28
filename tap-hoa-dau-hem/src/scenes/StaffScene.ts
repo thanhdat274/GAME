@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { DATA, hasFeature, type StaffRole, type StatKey } from '../core/data';
 import {
   STAT_KEYS, STAT_NAMES, bonusStaff, changeRole, ensureBoard, expToNext, fire, hire, moodLabel, nextSlotLevel, personalityDef, recommendCandidate,
-  roleDef, scoldStaff, staffSlots, transferStaff, unlockedRoles,
+  roleDef, scoldStaff, staffSlots, landBonusSlots, transferStaff, unlockedRoles,
 } from '../core/staff';
 import { scheduleEnabled, shiftsOn } from '../core/schedule';
 import { formatMoney, storeView, type Candidate, type Staff } from '../core/state';
@@ -51,10 +51,11 @@ export class StaffScene extends Phaser.Scene {
 
   private render(): void {
     const s = G.state;
-    const slots = staffSlots(s.level);
+    const slots = staffSlots(s.level, s.land);
     const next = nextSlotLevel(s.level);
     const wages = s.staff.reduce((sum, x) => sum + x.wage, 0);
-    this.header.setText(`Chỗ: ${s.staff.length}/${slots}${next ? ` (thêm chỗ ở level ${next})` : ''} · Lương cả ngày: ${formatMoney(wages)}${s.wageDebt ? ` · Nợ lương ${formatMoney(s.wageDebt)}` : ''}`);
+    const landBonus = landBonusSlots(s.land);
+    this.header.setText(`Chỗ: ${s.staff.length}/${slots}${landBonus ? ` (+${landBonus} từ đất)` : ''}${next ? ` · thêm ở cấp ${next}` : ''}\nLương cả ngày: ${formatMoney(wages)}${s.wageDebt ? ` · Nợ lương ${formatMoney(s.wageDebt)}` : ''}`);
     this.list.clear();
     let y = 4;
     if (this.tab === 'staff') {
@@ -145,7 +146,7 @@ export class StaffScene extends Phaser.Scene {
 
   private transferFlow(st: Staff): void {
     const s = G.state;
-    const slots = staffSlots(s.level);
+    const slots = staffSlots(s.level, s.land);
     const destinations = s.stores.filter((store) => store.id !== s.activeStoreId);
     const buttons = destinations.map((store) => {
       const count = storeView(s, store.id).staff.length;
@@ -187,7 +188,7 @@ export class StaffScene extends Phaser.Scene {
     this.list.add(txt(this, 62, y + 44, recommendation ? `⭐ ${recommendation}` : personalityDef(c.personality).note, { size: 10, bold: !!recommendation, color: recommendation ? HEX.green : HEX.muted, wrap: W - 180 }));
     this.list.add(txt(this, W - 20, y + 8, `${formatMoney(c.wage)}/ngày`, { size: 13, bold: true, origin: [1, 0], color: '#b7411f' }));
     this.statBars(c.stats, 18, y + 70, role.mainStat);
-    const full = s.staff.length >= staffSlots(s.level);
+    const full = s.staff.length >= staffSlots(s.level, s.land);
     const next = nextSlotLevel(s.level);
     const label = full ? (next ? `Hết chỗ · L${next}` : 'Hết chỗ') : '✓ Thuê';
     this.list.add(new Button(this, W - 70, y + h - 30, { w: 116, h: 34, label, size: 12, color: C.green, onTap: this.list.guard(() => this.hireFlow(c)) }).setEnabled(!full));

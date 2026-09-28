@@ -148,7 +148,8 @@ export class SummaryScene extends Phaser.Scene {
       y += tip.height + 10;
     }
     const h = y - top + 12;
-    panel(this, 16, top, W - 32, h);
+    // panel() usually returns a NineSlice, not Graphics; give the background an explicit lower depth.
+    panel(this, 16, top, W - 32, h).setDepth(-1);
     let end = top + h;
 
     if (hasLevelUp) {
@@ -156,12 +157,12 @@ export class SummaryScene extends Phaser.Scene {
       const labels = sum.levelUps.map((l) => `• ${DATA.levels.levels[l - 1].label}`).join('\n');
       const t = txt(this, W / 2, top + h + 36, `🎉 Lên cấp! Level ${lv}`, { size: 22, bold: true, color: '#b7411f', origin: [0.5, 0.5] });
       const list = txt(this, W / 2, top + h + 60, labels, { size: 14, origin: [0.5, 0], align: 'center', wrap: 280 });
-      panel(this, 16, top + h + 12, W - 32, 62 + list.height, 0xfff1c1);
+      panel(this, 16, top + h + 12, W - 32, 62 + list.height, 0xfff1c1).setDepth(-1);
       end += 12 + 62 + list.height;
       this.tweens.add({ targets: t, scale: 1.12, yoyo: true, repeat: 3, duration: 260 });
       play('levelup');
     } else if (sum.capReached) {
-      panel(this, 16, top + h + 12, W - 32, 90, 0xe6f0ff);
+      panel(this, 16, top + h + 12, W - 32, 90, 0xe6f0ff).setDepth(-1);
       end += 12 + 90;
       txt(this, W / 2, top + h + 56, `🚧 ${DATA.levels.nextTeaser}\nEXP vẫn được cộng dồn cho bản cập nhật sau!`, {
         size: 14,
@@ -178,8 +179,9 @@ export class SummaryScene extends Phaser.Scene {
     const buttonsTop = fresh.length ? H - (unclaimed ? 146 : 100) - 19 : unclaimed ? H - 120 : H - 70;
     const made = this.children.list.filter((o) => !before.has(o));
     const area = new ScrollArea(this, top - 4, buttonsTop - 8);
-    // Khung nền vẽ sau chữ nên đưa lên trước để nằm dưới chữ.
-    const ordered = [...made.filter((o) => o instanceof Phaser.GameObjects.Graphics), ...made.filter((o) => !(o instanceof Phaser.GameObjects.Graphics))];
+    // panel() usually returns NineSlice, so move both panel types before text before parenting into the scroll container.
+    const isBackground = (o: Phaser.GameObjects.GameObject) => o instanceof Phaser.GameObjects.Graphics || o instanceof Phaser.GameObjects.NineSlice;
+    const ordered = [...made.filter(isBackground), ...made.filter((o) => !isBackground(o))];
     for (const o of ordered) (o as unknown as Phaser.GameObjects.Components.Transform).y -= area.top;
     area.add(ordered);
     area.setHeight(end - area.top + 8);

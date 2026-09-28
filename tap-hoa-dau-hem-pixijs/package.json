@@ -1,0 +1,42 @@
+{
+  "name": "tap-hoa-dau-hem-pixijs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "test": "vitest run",
+    "simulate": "vite-node scripts/simulate.ts",
+    "playtest:max": "vite --host --open \"/?simulate=max&reset=1\"",
+    "icons": "node scripts/make-icons.mjs",
+    "sprites": "vite-node scripts/sprite-sheet.ts",
+    "playtest": "vite-node scripts/playtest.ts",
+    "sim:staff": "vite-node scripts/simulate-staff.ts",
+    "validate:events": "vite-node scripts/validate-events.ts",
+    "validate:recipes": "vite-node scripts/validate-recipes.ts",
+    "functions:build": "npm --prefix functions run build",
+    "deploy:rules": "firebase deploy --only firestore:rules --project tap-hoa-dau-hem",
+    "deploy:live": "firebase deploy --only functions,firestore:rules --project tap-hoa-dau-hem",
+    "emulators": "firebase emulators:start --only auth,firestore,functions --project demo-tap-hoa-dau-hem",
+    "compare:views": "vite-node scripts/compare-views.ts",
+    "test:emulator": "npm run functions:build && firebase emulators:exec --only auth,firestore,functions --project demo-tap-hoa-dau-hem \"vitest run -c vitest.rules.config.ts\""
+  },
+  "dependencies": {
+    "firebase": "^12.19.0",
+    "lz-string": "^1.5.0",
+    "pixi.js": "^8.6.6"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vite-node": "^6.0.0",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.11",
+    "workbox-build": "^7.4.1",
+    "workbox-window": "^7.4.1"
+  }
+}

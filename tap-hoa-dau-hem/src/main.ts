@@ -31,16 +31,18 @@ import { InternalScene } from './scenes/InternalScene';
 import { installRoundedRectFix } from './ui/roundrect';
 import { installUpdateBanner } from './ui/updateBanner';
 import { installPerfOverlay } from './ui/perfOverlay';
+import { installPowerSaver } from './ui/powerSaver';
 import { H, W, ZOOM } from './ui/theme';
 import { applyPendingCloud, configureCloudApplyGuard, enableOnlineRetry } from './services/sync';
 
 installRoundedRectFix();
 if (!isMaxLevelSimulation) enableOnlineRetry();
 
-// Mặc định giữ nhịp 60 FPS cho chuyển động mượt trên màn hình cảm ứng.
-// Có thể so sánh mức tiết kiệm pin bằng ?fps=30 (kết hợp ?perf=1 để đo).
+// Giới hạn nhịp mặc định trên điện thoại để giảm tải nhiệt; máy tính giữ 60 FPS.
+// Có thể ép mức cần so sánh bằng ?fps=30 hoặc ?fps=60 (kết hợp ?perf=1 để đo).
 const fpsOverride = new URLSearchParams(window.location.search).get('fps');
-const fpsLimit = fpsOverride === '30' ? 30 : 60;
+const mobileViewport = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 600;
+const fpsLimit = fpsOverride === '30' ? 30 : fpsOverride === '60' ? 60 : mobileViewport ? 30 : 60;
 const shopDomTest = new URLSearchParams(window.location.search).get('shop-dom') === '1';
 
 const game = new Phaser.Game({
@@ -49,7 +51,7 @@ const game = new Phaser.Game({
   width: W * ZOOM,
   height: H * ZOOM,
   backgroundColor: '#2b1d14',
-  // Cho phép chuyển động 60 FPS trên điện thoại; dùng ?fps=30 để so sánh nhiệt/pin.
+  // Giới hạn 30 FPS trên điện thoại giúp máy không render nhanh hơn mức cần thiết.
   fps: { limit: fpsLimit },
   // Căn giữa bằng flex của #game (index.html); để Phaser căn nữa thì canvas bị đẩy lệch hai lần.
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.NO_CENTER },
@@ -64,6 +66,7 @@ const game = new Phaser.Game({
 // Chỉ bản dev: đo FPS khi kiểm thử hiệu năng trên trình duyệt.
 if (import.meta.env.DEV) (window as unknown as { __thdhGame?: Phaser.Game }).__thdhGame = game;
 installPerfOverlay(game);
+installPowerSaver(game, fpsLimit);
 
 configureCloudApplyGuard(() => game.scene.isActive('Title') || game.scene.isActive('Morning'));
 let cloudScene = '';

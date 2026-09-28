@@ -288,9 +288,13 @@ export class RestockScene extends Phaser.Scene {
       ];
 
       if (missed > 0) {
-        const lackTag = txt(this, 58 + nameTxt.width + 8, y + 11, `thiếu ${missed}`, { size: 9.5, bold: true, color: HEX.white });
-        lackTag.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1);
-        itemsToAdd.push(lackTag);
+        const tagX = 58 + nameTxt.width + 8;
+        const lackTag = txt(this, tagX + 4, y + 11, `thiếu ${missed}`, { size: 9.5, bold: true, color: HEX.white });
+        // Draw the badge separately from Text's background fill; the fill can collapse to a thin
+        // strip on some mobile WebGL scales while the text texture is being resized.
+        const lackBg = this.add.graphics();
+        lackBg.fillStyle(C.red, 1).fillRect(tagX, y + 9, lackTag.width + 8, lackTag.height + 4);
+        itemsToAdd.push(lackBg, lackTag);
       }
 
       this.list.add(itemsToAdd);

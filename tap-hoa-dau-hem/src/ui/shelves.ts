@@ -5,7 +5,7 @@ import { MAX_SHELVES, fixtureOfShelf, shelfKind, shelfUsable, shelfCount, type G
 import { canRefill, slotFreshness, zoneFill, zoneOf } from '../core/stock';
 import { productIcon, productName } from './art';
 import { KineticScroll, clipInteractive, snap } from './scroll';
-import { C, H, HEX, txt } from './theme';
+import { C, H, HEX, ZOOM, txt } from './theme';
 
 export const SLOT_W = 52;
 export const SLOT_H = 54;
@@ -73,14 +73,14 @@ export interface ShelfRenderOpts {
 
 interface SlotView {
   root: Phaser.GameObjects.Container;
-  icon: Phaser.GameObjects.Container | null;
+  icon: Phaser.GameObjects.Container | Phaser.GameObjects.Image | null;
   name: Phaser.GameObjects.Text | null;
   iconId: string | null;
   qty: Phaser.GameObjects.Text | null;
   out: Phaser.GameObjects.Text | null;
   fresh: Phaser.GameObjects.Text | null;
   refillBtn: Phaser.GameObjects.Container;
-  removeBtn: Phaser.GameObjects.Container;
+  removeBtn: Phaser.GameObjects.Container | null;
   /** Khóa trạng thái nền / nhãn hạn đã vẽ, để render() chỉ vẽ lại khi thay đổi. */
   bgKey: string;
   freshKey: string;
@@ -131,7 +131,12 @@ export class ShelfView extends Phaser.GameObjects.Container {
   private rows: RowView[] = [];
   private byShelf = new Map<number, RowView>();
   private glowTween: Phaser.Tweens.Tween | null = null;
+  /** Graphics ngoài màn hình, chỉ dùng để vẽ nền ô rồi in vào slotBgBake. */
   private slotBgLayer: Phaser.GameObjects.Graphics;
+  /** Ván gỗ / khung tủ: tĩnh, in chung vào slotBgBake. */
+  private planksLayer: Phaser.GameObjects.Graphics;
+  /** Nền ô kệ đã in sẵn: vài nghìn lệnh bo góc thành một quad, chỉ in lại khi nền ô đổi. */
+  private slotBgBake: Phaser.GameObjects.RenderTexture | null = null;
   private glowLayer: Phaser.GameObjects.Graphics;
   private progressLayer: Phaser.GameObjects.Graphics;
   private glowKey = '';
@@ -152,10 +157,13 @@ export class ShelfView extends Phaser.GameObjects.Container {
     this.viewH = viewRows * ROW_PITCH;
     this.content = scene.add.container(0, 0);
     this.add(this.content);
-    const planks = scene.add.graphics();
-    this.content.add(planks);
-    this.slotBgLayer = scene.add.graphics();
-    this.content.add(this.slotBgLayer);
+    const planks = scene.make.graphics({}, false);
+    this.planksLayer = planks;
+    this.slotBgLayer = scene.make.graphics({}, false);
+    this.once(Phaser.GameObjects.Events.DESTROY, () => { this.slotBgLayer.destroy(); this.planksLayer.destroy(); });
+    // Giữ chỗ trong content (dưới ô kệ, trên ván gỗ); texture được tạo ở lần render đầu tiên.
+    const bgSlot = scene.add.zone(0, 0, 1, 1).setName('slot-bg-slot');
+    this.content.add(bgSlot);
     this.glowLayer = scene.add.graphics();
     this.content.add(this.glowLayer);
     let y = top;
@@ -314,14 +322,22 @@ export class ShelfView extends Phaser.GameObjects.Container {
       if (p.getDistance() < 10 && !this.scrollTap && this.inView(p.worldY)) this.cb.onRefill?.(r, c);
     });
 
-    const removeBtn = s.add.container(-SLOT_W / 2 + 8, -SLOT_H / 2 + 8, [s.add.image(0, 0, 'shelf_remove_button')]);
-    this.clipInput(removeBtn.setSize(24, 24));
-    removeBtn.on('pointerup', (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
-      ev.stopPropagation();
-      if (p.getDistance() < 10 && !this.scrollTap && this.inView(p.worldY)) this.cb.onRemove?.(r, c);
-    });
+    // Shop never supports removing shelf stock. Avoid allocating a hidden button and image
+    // for every slot there; arrange/restock scenes pass onRemove and retain the same control.
+    const removeBtn = this.cb.onRemove
+      ? s.add.container(-SLOT_W / 2 + 8, -SLOT_H / 2 + 8, [s.add.image(0, 0, 'shelf_remove_button')])
+      : null;
+    if (removeBtn) {
+      this.clipInput(removeBtn.setSize(24, 24));
+      removeBtn.on('pointerup', (p: Phaser.Input.Pointer, _x: number, _y: number, ev: Phaser.Types.Input.EventData) => {
+        ev.stopPropagation();
+        if (p.getDistance() < 10 && !this.scrollTap && this.inView(p.worldY)) this.cb.onRemove?.(r, c);
+      });
+    }
 
-    const root = s.add.container(x, y, [refillBtn, removeBtn]);
+    const slotChildren: Phaser.GameObjects.GameObject[] = [refillBtn];
+    if (removeBtn) slotChildren.push(removeBtn);
+    const root = s.add.container(x, y, slotChildren);
     this.clipInput(root.setSize(SLOT_W, SLOT_H));
     root.on('pointerup', (p: Phaser.Input.Pointer) => {
       if (p.getDistance() < 12 && !this.scrollTap && this.inView(p.worldY)) this.cb.onSlotTap(r, c);
@@ -450,7 +466,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
         const prog = o.refilling?.(r, c) ?? null;
         if (prog !== null) progressRects.push({ x: v.root.x, y: v.root.y, ratio: prog });
         v.refillBtn.setVisible(!o.noRefill && !locked && prog === null && canRefill(state, r, c));
-        v.removeBtn.setVisible(o.mode === 'arrange' && !locked && !!slot.productId);
+        v.removeBtn?.setVisible(o.mode === 'arrange' && !locked && !!slot.productId);
         const glow = !locked && !empty && !!slot.productId && !!o.highlight?.has(slot.productId);
         if (glow) glowRects.push({ x: v.root.x, y: v.root.y });
         v.root.setAlpha(locked ? 0.5 : 1);
@@ -458,16 +474,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
     }
     if (this.bgDirty) {
       this.bgDirty = false;
-      this.slotBgLayer.clear();
-      for (const row of this.rows) {
-        const kind = shelfKind(state, row.shelf);
-        const locked = row.shelf < MAX_SHELVES && row.shelf >= baseRows;
-        for (const v of row.slots) {
-          const { x, y } = v.root;
-          this.slotBgLayer.fillStyle(kind === 'shelf' ? C.slot : 0xeef7fd, locked ? 0.2 : 1).fillRoundedRect(x - SLOT_W / 2, y - SLOT_H / 2, SLOT_W, SLOT_H, 7);
-          this.slotBgLayer.lineStyle(2, kind === 'shelf' ? C.slotEdge : 0x9cc3de, locked ? 0.5 : 1).strokeRoundedRect(x - SLOT_W / 2, y - SLOT_H / 2, SLOT_W, SLOT_H, 7);
-        }
-      }
+      this.bakeSlotBackgrounds(state, baseRows);
     }
     const nextGlowKey = glowRects.map(({ x, y }) => `${x},${y}`).join(';');
     if (nextGlowKey !== this.glowKey) {
@@ -494,6 +501,48 @@ export class ShelfView extends Phaser.GameObjects.Container {
         this.progressLayer.fillStyle(C.green, 1).fillRoundedRect(x - SLOT_W / 2 + 4, y + 3, (SLOT_W - 8) * ratio, 5, 2);
       }
     }
+  }
+
+  private bakeSlotBackgrounds(state: GameState, baseRows: number): void {
+    const g = this.slotBgLayer;
+    g.clear();
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const row of this.rows) {
+      const kind = shelfKind(state, row.shelf);
+      const locked = row.shelf < MAX_SHELVES && row.shelf >= baseRows;
+      for (const v of row.slots) {
+        const { x, y } = v.root;
+        minY = Math.min(minY, y - SLOT_H / 2);
+        maxY = Math.max(maxY, y + SLOT_H / 2);
+        g.fillStyle(kind === 'shelf' ? C.slot : 0xeef7fd, locked ? 0.2 : 1).fillRoundedRect(x - SLOT_W / 2, y - SLOT_H / 2, SLOT_W, SLOT_H, 7);
+        g.lineStyle(2, kind === 'shelf' ? C.slotEdge : 0x9cc3de, locked ? 0.5 : 1).strokeRoundedRect(x - SLOT_W / 2, y - SLOT_H / 2, SLOT_W, SLOT_H, 7);
+      }
+    }
+    if (minY === Infinity) {
+      this.slotBgBake?.setVisible(false);
+      return;
+    }
+    // Chừa chỗ cho viền ô, khung tủ (-3px) và ván gỗ dưới ô (+7px); in ở độ phân giải ZOOM để nét vẫn sắc.
+    const top = Math.floor(minY) - 6;
+    const width = 360;
+    const height = Math.ceil(maxY) + 10 - top;
+    // Kệ cấp cao rất dài: giữ texture trong 4096px (giới hạn của nhiều máy Android cũ), chấp nhận nét mềm hơn chút.
+    const renderer = this.scene.sys.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer;
+    const maxTexture = Math.min(4096, renderer.getMaxTextureSize?.() ?? 4096);
+    const scale = Math.min(ZOOM, Math.floor((maxTexture / height) * 100) / 100);
+    const texH = Math.ceil(height * scale);
+    if (!this.slotBgBake || this.slotBgBake.height !== texH) {
+      const index = this.slotBgBake ? this.content.getIndex(this.slotBgBake) : this.content.getIndex(this.content.getByName('slot-bg-slot')!);
+      this.slotBgBake?.destroy();
+      this.content.getByName('slot-bg-slot')?.destroy();
+      this.slotBgBake = this.scene.add.renderTexture(0, top, Math.ceil(width * scale), texH).setOrigin(0, 0).setScale(1 / scale);
+      this.content.addAt(this.slotBgBake, Math.max(0, index));
+    }
+    this.slotBgBake.setY(top).setVisible(true).clear();
+    this.planksLayer.setScale(scale);
+    g.setScale(scale);
+    this.slotBgBake.draw([this.planksLayer, g], 0, -top * scale);
   }
 
   /** Rung ô kệ khi lấy sai. */

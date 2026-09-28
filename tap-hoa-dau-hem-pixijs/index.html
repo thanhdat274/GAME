@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2b1d14" />
+    <meta name="description" content="Tạp Hóa Đầu Hẻm - game mở tiệm tạp hóa nhỏ: nhập hàng, bày kệ, bán hàng và thối tiền." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Thanh trạng thái iOS nền đặc: "black-translucent" cho game vẽ xuống dưới giờ/pin
+         và iOS phủ lớp kính mờ lên đó (đồng thời làm sai chiều cao màn hình ở chế độ PWA). -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <title>Tạp Hóa Đầu Hẻm</title>
+    <script>
+      // App iOS mở từ màn hình chính (iOS 26+): hệ thống luôn phủ một dải kính mờ ~50pt ngay dưới
+      // thanh trạng thái, trang web không tắt được. Đẩy game xuống dưới dải đó; phần trống là dải màu
+      // đặc (#edge-top) nên lớp mờ chỉ làm mờ một màu phẳng. Thử độ cao khác: mở link với ?pocket=40
+      // (lưu lại cho lần sau), ?pocket= (rỗng) để về mặc định.
+      (function () {
+        try {
+          var ua = navigator.userAgent;
+          var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+          var standalone = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+          var q = new URLSearchParams(location.search).get('pocket');
+          if (q !== null) {
+            if (q === '') localStorage.removeItem('thdh-pocket');
+            else localStorage.setItem('thdh-pocket', q);
+          }
+          var saved = localStorage.getItem('thdh-pocket');
+          var px = saved !== null ? Number(saved) : ios && standalone ? 48 : 0;
+          if (px > 0) document.documentElement.style.setProperty('--edge-pad', px + 'px');
+          // Lỗi iOS ở app màn hình chính: vùng web ngắn hơn màn hình (thiếu đúng chiều cao thanh trạng thái)
+          // nên đã kết thúc phía trên thanh Home; chừa thêm safe-area dưới chỉ làm game nhỏ lại và lệch.
+          if (ios && standalone && Math.max(screen.width, screen.height) - Math.max(window.innerWidth, window.innerHeight) > 40) {
+            document.documentElement.style.setProperty('--safe-bottom', '0px');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+        height: 100dvh;
+        background: var(--thdh-bg, #2b1d14);
+        overflow: hidden;
+        overscroll-behavior: none;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* Game luôn nằm trong vùng an toàn (dưới tai thỏ / Dynamic Island, trên thanh Home).
+         Phần viền ngoài là nền đặc của body nên không còn chữ bị mờ dưới thanh trạng thái. */
+      #game {
+        position: fixed;
+        inset: 0;
+        inset: calc(env(safe-area-inset-top, 0px) + var(--edge-pad, 0px)) env(safe-area-inset-right, 0px) var(--safe-bottom, env(safe-area-inset-bottom, 0px)) env(safe-area-inset-left, 0px);
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        /* Nền đặc: iOS 26 lấy màu nền của phần tử fixed ở mép màn hình để tô thanh trạng thái;
+           không có màu (chỉ có canvas) thì iOS phủ lớp kính mờ lên phần trên cùng của game. */
+        background-color: var(--thdh-edge-top, #2b1d14);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #game canvas {
+        display: block;
+        touch-action: none;
+        max-width: 100%;
+        max-height: 100%;
+      }
+      /* Hai dải nền đặc che vùng tai thỏ / thanh Home. WebKit (iOS 26) dò phần tử fixed ngay mép
+         trên/dưới: gặp dải có màu đặc thì dùng màu đó cho thanh hệ thống, không làm mờ nội dung. */
+      .edge {
+        position: fixed;
+        left: 0;
+        right: 0;
+        z-index: 5;
+        pointer-events: none;
+      }
+      #edge-top {
+        top: 0;
+        background-color: var(--thdh-edge-top, #2b1d14);
+        height: calc(env(safe-area-inset-top, 0px) + var(--edge-pad, 0px));
+      }
+      #edge-bottom {
+        bottom: 0;
+        background-color: var(--thdh-edge-bottom, #2b1d14);
+        height: var(--safe-bottom, env(safe-area-inset-bottom, 0px));
+      }
+      #rotate {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: #2b1d14;
+        color: #f6e3c4;
+        font: 600 20px system-ui, sans-serif;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+      }
+      #rotate .phone {
+        font-size: 56px;
+        animation: tilt 1.6s ease-in-out infinite;
+      }
+      @keyframes tilt {
+        50% {
+          transform: rotate(-90deg);
+        }
+      }
+      @media (orientation: landscape) and (pointer: coarse) and (max-height: 600px) {
+        #rotate {
+          display: flex;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="edge-top" class="edge"></div>
+    <div id="edge-bottom" class="edge"></div>
+    <div id="rotate"><div class="phone">📱</div>Xoay dọc điện thoại để chơi</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+

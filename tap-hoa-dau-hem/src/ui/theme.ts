@@ -29,6 +29,7 @@ export function computeGameHeight(): number {
 
 export const W = 360;
 export const H = computeGameHeight();
+// Keep a fixed integer render scale: several pixel-art textures and UI badges use it for crisp sizing.
 export const ZOOM = 2;
 
 export const C = {

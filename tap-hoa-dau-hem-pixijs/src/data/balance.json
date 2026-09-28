@@ -1,0 +1,440 @@
+{
+  "startMoney": 500000,
+  "warehouseCells": 30,
+  "slotsPerShelf": 12,
+  "slotCapacity": 20,
+  "daySeconds": 180,
+  "openMinute": 480,
+  "closeMinute": 1320,
+  "tickMs": 100,
+  "maxQueue": 3,
+  "maxShoppers": 3,
+  "baseSpawnSeconds": 5.5,
+  "queuePatienceRate": 0.5,
+  "topDown": {
+    "playerTilesPerSecond": 4,
+    "awayPatienceRate": 0.6
+  },
+  "zoneWalkSeconds": 1.2,
+  "pickSeconds": 0.8,
+  "askStockSeconds": 4,
+  "shopBudgetFactor": 1.8,
+  "zoneLowThreshold": 0.4,
+  "zoneCriticalThreshold": 0.15,
+  "zoneRefillSecondsPerSlot": 0.5,
+  "scanComboSeconds": 3,
+  "scanTipBonus": 1000,
+  "cashlessChance": 0.67,
+  "uncarriedAskChance": 0.1,
+  "counterSlots": 4,
+  "counterCapacity": 5,
+  "counterRequestSeconds": 6,
+  "counterWrongPenalty": 2,
+  "refillSeconds": 1,
+  "fastChangeSeconds": 4,
+  "tipMin": 1000,
+  "tipMax": 3000,
+  "expPerItem": 1,
+  "expPerHappy": 3,
+  "ratingWindow": 20,
+  "newShopRamp": [
+    0.6,
+    0.8
+  ],
+  "suggest": {
+    "buffer": 1.25,
+    "newCheap": 10,
+    "newPricey": 5,
+    "cheapPrice": 8000,
+    "freshFactor": 0.8,
+    "newFresh": 0,
+    "perishableMaxDays": 7
+  },
+  "orderLineWeights": [
+    0.6,
+    0.3,
+    0.1
+  ],
+  "qtyByPrice": [
+    {
+      "maxPrice": 5000,
+      "maxQty": 2
+    },
+    {
+      "maxPrice": 15000,
+      "maxQty": 2
+    }
+  ],
+  "grandmaGift": 50000,
+  "grandmaCooldownDays": 3,
+  "denominations": [
+    500,
+    1000,
+    2000,
+    5000,
+    10000,
+    20000,
+    50000,
+    100000,
+    200000,
+    500000
+  ],
+  "drawer": [
+    500,
+    1000,
+    2000,
+    5000,
+    10000,
+    20000,
+    50000,
+    100000,
+    200000
+  ],
+  "density": [
+    {
+      "from": 480,
+      "to": 540,
+      "mul": 1.8
+    },
+    {
+      "from": 540,
+      "to": 660,
+      "mul": 1
+    },
+    {
+      "from": 660,
+      "to": 780,
+      "mul": 1.7
+    },
+    {
+      "from": 780,
+      "to": 1020,
+      "mul": 0.65
+    },
+    {
+      "from": 1020,
+      "to": 1140,
+      "mul": 1.9
+    },
+    {
+      "from": 1140,
+      "to": 1200,
+      "mul": 1
+    }
+  ],
+  "walkSecondsPerTile": 0.35,
+  "warehouseTiers": [
+    {
+      "name": "Kệ gỗ",
+      "cells": 30,
+      "cost": 0,
+      "unlockLevel": 1
+    },
+    {
+      "name": "Kệ sắt",
+      "cells": 50,
+      "cost": 250000,
+      "unlockLevel": 8
+    },
+    {
+      "name": "Kho lớn",
+      "cells": 80,
+      "cost": 500000,
+      "unlockLevel": 9
+    },
+    {
+      "name": "Kho tổng",
+      "cells": 120,
+      "cost": 900000,
+      "unlockLevel": 11
+    }
+  ],
+  "notColdBuyChance": 0.5,
+  "pricing": {
+    "min": 0.8,
+    "max": 1.5,
+    "step": 500,
+    "cheapSpawnMax": 0.1,
+    "minKeep": 0.1
+  },
+  "clearance": {
+    "options": [
+      30,
+      50
+    ],
+    "pickWeightMul": 2
+  },
+  "supplier": {
+    "volatility": 0.15,
+    "bulkQty": 50,
+    "bulkDiscount": 0.05
+  },
+  "debt": {
+    "limitRatio": 0.2,
+    "dueDays": 3,
+    "badAfterDays": 7,
+    "onTime": 0.8,
+    "late": 0.15,
+    "reminderRepay": 0.95,
+    "reminderDays": 2,
+    "wrongReminderStars": 2,
+    "refuseStars": 2
+  },
+  "bargain": {
+    "unlockLevel": 9,
+    "minPct": 5,
+    "maxPct": 15,
+    "declineLeave": 0.5,
+    "declineMaxStars": 3
+  },
+  "attraction": {
+    "max": 100,
+    "divisor": 400
+  },
+  "cat": {
+    "waitSeconds": 5,
+    "chance": 0.2,
+    "bonusSeconds": 2
+  },
+  "quests": {
+    "perDay": 3,
+    "rerollsPerDay": 1,
+    "unlockLevel": 5
+  },
+  "loveStreakRating": 4.8,
+  "sellBackRatio": 0.5,
+  "staff": {
+    "candidateMin": 7,
+    "candidateMax": 9,
+    "refreshDays": 2,
+    "wageBase": 5000,
+    "wagePerStat": 700,
+    "wageStep": 1000,
+    "timeBase": 1.4,
+    "timePerSpeed": 0.08,
+    "tiredSpeedMul": 0.7,
+    "lowMoodThreshold": 30,
+    "lowMoodSpeedMul": 0.8,
+    "errorBase": 0.12,
+    "errorPerAccuracy": 0.011,
+    "errorMin": 0.01,
+    "friendlyStarPerPoint": 0.1,
+    "friendlyTipPerPoint": 0.05,
+    "tipChance": 0.5,
+    "staminaBaseHours": 3,
+    "staminaPerPoint": 0.5,
+    "expPerJob": 1,
+    "expPerLevel": 40,
+    "levelWageMul": 1.08,
+    "mood": {
+      "start": 70,
+      "dayOff": 10,
+      "overworkDays": 6,
+      "overworkPenalty": 8,
+      "doubleShift": 5,
+      "scold": 10,
+      "bonus": 15,
+      "unpaid": 20,
+      "wageWeight": 20,
+      "wageCap": 10,
+      "lowThreshold": 30,
+      "quitThreshold": 10,
+      "quitDays": 2,
+      "retainRaise": 0.15,
+      "retainMood": 30,
+      "tiredBubbleDays": 7
+    },
+    "bonusAmount": 20000,
+    "scoldAccuracy": 2,
+    "severanceDays": 1,
+    "scanSecondsPerItem": 0,
+    "counterSeconds": 0,
+    "changeSeconds": 0,
+    "bargainAcceptMax": 10,
+    "wrongChangeValues": [
+      1000,
+      2000,
+      5000
+    ],
+    "refillWalkSeconds": 2.5,
+    "refillThreshold": 0.4,
+    "refillCheckSeconds": 0.5,
+    "managerExpMul": 0.5,
+    "shifts": [
+      {
+        "name": "Ca sáng",
+        "from": 480,
+        "to": 840
+      },
+      {
+        "name": "Ca chiều",
+        "from": 840,
+        "to": 1200
+      }
+    ]
+  },
+  "security": {
+    "thiefChance": 0.03,
+    "catchWindowSeconds": 3,
+    "fineMul": 2,
+    "refillDetect": 0.3,
+    "cameraDetect": 0.8,
+    "cameraCost": 250000
+  },
+  "delivery": {
+    "ringChancePerSecond": 0.012,
+    "minItems": 3,
+    "maxItems": 8,
+    "answerSeconds": 15,
+    "feeBase": 5000,
+    "feePerDistance": 2000,
+    "deadlineMin": 60,
+    "deadlineMax": 120,
+    "secondsPerDistance": 4,
+    "onTimeStars": 5,
+    "lateStars": 2,
+    "addresses": [
+      {
+        "name": "Cô Hoa",
+        "place": "nhà số 12",
+        "distance": 1
+      },
+      {
+        "name": "Chú Tư",
+        "place": "cuối hẻm",
+        "distance": 3
+      },
+      {
+        "name": "Chị Lụa",
+        "place": "hẻm nhánh 5",
+        "distance": 2
+      },
+      {
+        "name": "Bác Bảy",
+        "place": "đầu hẻm bên kia",
+        "distance": 4
+      },
+      {
+        "name": "Anh Hùng",
+        "place": "khu trọ",
+        "distance": 5
+      }
+    ]
+  },
+  "manager": {
+    "speeds": [
+      1,
+      2,
+      4
+    ],
+    "skipMaxTicks": 20000
+  },
+  "offline": {
+    "maxHours": 8,
+    "efficiency": 0.6,
+    "realMinutesPerDay": 60,
+    "historyDays": 3
+  },
+  "cart": {
+    "chance": 0.4,
+    "minItems": 3,
+    "maxItems": 6,
+    "patienceMul": 1.5,
+    "types": [
+      "noi_tro",
+      "me_bim",
+      "ba_ban_hang"
+    ]
+  },
+  "analytics": {
+    "historyDays": 30,
+    "topCount": 5,
+    "slowDays": 5
+  },
+  "restock": {
+    "suggestThresholdDays": 1,
+    "suggestQtyDays": 2
+  },
+  "dining": {
+    "mealSeconds": 36,
+    "extraOrderSeconds": 12,
+    "maxExtraOrders": 2
+  },
+  "chain": {
+    "maxStores": 6
+  },
+  "stickyRice": {
+    "soakMinMinutes": 360,
+    "soakMaxMinutes": 1440,
+    "kgPerSoakTank": 10,
+    "portionsPerKg": 5,
+    "warmMinutes": 300,
+    "coldQualityCap": 0.85,
+    "steamSeconds": 10,
+    "orderDueMinute": 420,
+    "recurringShortLimit": 3,
+    "orderKeepDays": 7,
+    "cookPortionsPerHour": 1.2,
+    "workHours": 12,
+    "simRetailPerDay": 55,
+    "tableTurnsPerDay": 10,
+    "minSimPortions": 20
+  },
+  "tax": {
+    "yearlyThreshold": 25000000,
+    "rates": {
+      "goods": {
+        "vat": 0.01,
+        "pit": 0.005
+      },
+      "food": {
+        "vat": 0.03,
+        "pit": 0.015
+      },
+      "service": {
+        "vat": 0.05,
+        "pit": 0.02
+      }
+    },
+    "dueDays": 5,
+    "remindDays": 2,
+    "lateInterestPerDay": 0.005,
+    "enforceAfterDays": 10,
+    "enforceFine": 0.2,
+    "historyBills": 12,
+    "underDeclarePct": 0.3,
+    "audit": {
+      "chance": 0.15,
+      "noMachineExtraChance": 0.15,
+      "withMachineChance": 0.05,
+      "evasionFineMul": 1,
+      "evasionStars": 1,
+      "marketFineRate": 0.4,
+      "noMachineFine": 500000,
+      "cleanStars": 5
+    },
+    "invoiceMachine": {
+      "cost": 1500000,
+      "requiredYearRevenue": 50000000
+    },
+    "invoiceCustomer": {
+      "type": "van_phong",
+      "chance": 0.3,
+      "companyChance": 0.6,
+      "bonusExp": 20,
+      "noInvoiceMaxStars": 3
+    },
+    "staffPit": {
+      "dailyThreshold": 150000,
+      "rate": 0.05
+    },
+    "company": {
+      "setupCost": 3000000,
+      "vatRate": 0.08,
+      "citRate": 0.2,
+      "supplierDiscount": 0.05,
+      "partyRewardMul": 1.3
+    },
+    "settlementExp": 300
+  }
+}

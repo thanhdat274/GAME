@@ -1,0 +1,438 @@
+import { compressSave, decompressSave } from './compress';
+import { DATA, product } from './data';
+import { applyLevelUps } from './progression';
+import { arrangeStorageRacks, stowMisplacedFixtures } from './layout';
+import { activeShopType, shopTypeOf } from './shopTypes';
+import { createNewGame, defaultFixtures, emptySlots, syncActiveStore, type GameState, type Lot, type Slot } from './state';
+
+export const SAVE_KEY = 'thdh.save.v1';
+export const BACKUP_KEY = 'thdh.save.v1.bak';
+export const CURRENT_VERSION = 7;
+/** Bản lưu trước khi migrate lên version mới, giữ 14 ngày để khôi phục. */
+export const PRE_MIGRATE_KEY = 'thdh.save.premigrate';
+const PRE_MIGRATE_DAYS = 14;
+let activeKeys = { save: SAVE_KEY, backup: BACKUP_KEY, preMigrate: PRE_MIGRATE_KEY };
+
+/** Use an isolated save namespace for disposable in-browser simulations. */
+export function setSaveProfile(profile: 'default' | 'max-simulation' | 'pixijs' | 'pixijs-max-simulation'): void {
+  if (profile === 'default') activeKeys = { save: SAVE_KEY, backup: BACKUP_KEY, preMigrate: PRE_MIGRATE_KEY };
+  else if (profile === 'max-simulation') activeKeys = { save: 'thdh.simulation.max.save', backup: 'thdh.simulation.max.backup', preMigrate: 'thdh.simulation.max.premigrate' };
+  else if (profile === 'pixijs') activeKeys = { save: 'thdh.pixijs.save.v1', backup: 'thdh.pixijs.save.v1.bak', preMigrate: 'thdh.pixijs.save.premigrate' };
+  else activeKeys = { save: 'thdh.pixijs.simulation.max.save', backup: 'thdh.pixijs.simulation.max.backup', preMigrate: 'thdh.pixijs.simulation.max.premigrate' };
+}
+
+/** Giao diện tối thiểu của localStorage để test được. */
+export interface KeyValueStore {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+interface SaveFile {
+  version: number;
+  savedAt: number;
+  state: GameState;
+}
+
+export type LoadResult =
+  | { status: 'none' }
+  | { status: 'ok'; state: GameState }
+  | { status: 'corrupt'; error: string };
+
+type Migration = (state: Record<string, unknown>) => Record<string, unknown>;
+
+/** migrations[n] chuyển bản lưu version n lên n+1. Giai đoạn sau thêm vào đây. */
+const migrations: Record<number, Migration> = {
+  1: (state) => {
+    const shelves = Array.isArray(state.shelves) ? (state.shelves as { productId: string | null; qty: number }[][]) : [];
+    const warehouse: Record<string, number> = state.warehouse && !Array.isArray(state.warehouse) ? { ...(state.warehouse as Record<string, number>) } : {};
+    const zones: (string | null)[] = shelves.map((row) => {
+      const counts = new Map<string, number>();
+      for (const slot of row) {
+        if (!slot.productId || slot.qty <= 0) continue;
+        const p = product(slot.productId);
+        if (p.behindCounter) {
+          warehouse[p.id] = (warehouse[p.id] ?? 0) + slot.qty;
+          slot.productId = null;
+          slot.qty = 0;
+          continue;
+        }
+        counts.set(p.category, (counts.get(p.category) ?? 0) + slot.qty);
+      }
+      return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    });
+    for (let r = 0; r < shelves.length; r++) {
+      for (const slot of shelves[r]) {
+        if (!slot.productId || !slot.qty) continue;
+        const p = product(slot.productId);
+        if (p.category !== zones[r]) {
+          warehouse[p.id] = (warehouse[p.id] ?? 0) + slot.qty;
+          slot.productId = null;
+          slot.qty = 0;
+        }
+      }
+    }
+    return {
+      ...state,
+      version: 2,
+      shelves,
+      zones,
+      counter: Array.from({ length: DATA.balance.counterSlots }, () => ({ productId: null, qty: 0 })),
+      warehouse,
+      settings: { ...(state.settings as object ?? {}), autoScan: false },
+    };
+  },
+  /** v2 (self-service) -> v3 (giai đoạn 2): kho thành lô không hạn, thêm lưới mặt bằng với 3 kệ ở vị trí cũ. */
+  2: (state) => {
+    const raw = state.warehouse;
+    const warehouse: Lot[] = Array.isArray(raw)
+      ? (raw as Lot[]).filter((lot) => lot && lot.qty > 0 && knownProduct(lot.productId))
+      : Object.entries((raw as Record<string, number> | undefined) ?? {})
+        .filter(([id, qty]) => qty > 0 && knownProduct(id))
+        .map(([productId, qty]) => ({ productId, qty, exp: null }));
+    const shelves = Array.isArray(state.shelves) ? (state.shelves as { productId: string | null; qty: number }[][]) : [];
+    while (shelves.length < 3) shelves.push(emptySlots(DATA.balance.slotsPerShelf));
+    const counter = Array.isArray(state.counter) ? state.counter : emptySlots(DATA.balance.counterSlots);
+    return {
+      ...state,
+      version: 3,
+      warehouse,
+      holding: [],
+      shelves: shelves.map((row) => row.map((slot) => (slot.productId && slot.qty > 0 ? { productId: slot.productId, qty: slot.qty, lots: [{ qty: slot.qty, exp: null }] } : { productId: slot.productId, qty: slot.qty }))),
+      counter,
+      fixtures: defaultFixtures(),
+    };
+  },
+  /** v3 (giai đoạn 2) -> v4 (giai đoạn 3): thêm nhân viên, lịch ca, quy tắc, lịch sử; giữ nguyên khu hàng và kho lô. */
+  3: (state) => ({
+    ...state,
+    version: 4,
+    staff: [],
+    staffBoard: null,
+    fixedCandidateUsed: false,
+    schedule: {},
+    scheduleReady: false,
+    rules: [],
+    planogram: null,
+    analytics: [],
+    managerStats: [],
+    manager: { enabled: false, speed: 1 },
+    wageDebt: 0,
+    camera: false,
+    morningNotes: [],
+    lastSeen: typeof state.lastSeen === 'number' ? state.lastSeen : Date.now(),
+    /** EXP dư từ giai đoạn 2 (bị chặn ở L9) được tính lên level khi tải. */
+    pendingLevelUp: true,
+  }),
+  /** v4 (giai đoạn 3) -> v5 (giai đoạn 4): đóng gói tiệm cũ thành cửa hàng chính. */
+  4: (state) => ({
+    ...state,
+    version: 5,
+    stores: [{ id: 'main', name: 'Tiệm chính', kind: 'main', data: {} }],
+    activeStoreId: 'main',
+    calendarStartMonth: 3,
+    calendarStartYear: 1,
+    activeEvents: [],
+    eventProgress: {},
+    eventHistory: [],
+    eventRollDay: 0,
+    eventRewards: [],
+    activeRecipes: [],
+    branchLastSimDay: {},
+    branchShipments: [],
+    storyProgress: [],
+    storyStarted: {},
+  }),
+  /** v5 (giai đoạn 4) -> v6 (tiệm xôi): mọi tiệm cũ là tạp hóa; thêm đơn nội bộ và mẻ nếp rỗng. */
+  5: (state) => ({
+    ...state,
+    version: 6,
+    stores: (Array.isArray(state.stores) ? state.stores as Record<string, unknown>[] : []).map((store) => ({
+      ...store,
+      shopType: 'grocery',
+      data: { ...(store.data as Record<string, unknown> ?? {}), soakBatches: [], cookedRice: [] },
+    })),
+    soakBatches: [],
+    cookedRice: [],
+    internalOrders: [],
+    recurringOrders: [],
+  }),
+  /** v6 -> v7: đổi tủ lạnh hiện có thành tủ 2 cánh, giữ nguyên diện tích đặt và hàng đang bày. */
+  6: (state) => {
+    const migrateFridges = (raw: Record<string, unknown>): Record<string, unknown> => {
+      const fixtures = Array.isArray(raw.fixtures) ? raw.fixtures as Record<string, unknown>[] : [];
+      const shelves = Array.isArray(raw.shelves) ? raw.shelves as Slot[][] : [];
+      for (const fixture of fixtures) {
+        if (fixture.type !== 'fridge') continue;
+        fixture.rot = fixture.rot === 1 ? 0 : 1;
+        const index = fixture.shelf;
+        if (typeof index !== 'number' || !Array.isArray(shelves[index])) continue;
+        if (shelves[index].length < 24) shelves[index].push(...emptySlots(24 - shelves[index].length));
+      }
+      return { ...raw, fixtures, shelves };
+    };
+    const stores = Array.isArray(state.stores) ? state.stores as Record<string, unknown>[] : [];
+    return {
+      ...migrateFridges(state),
+      version: 7,
+      stores: stores.map((store) => ({
+        ...store,
+        data: migrateFridges((store.data && typeof store.data === 'object') ? store.data as Record<string, unknown> : {}),
+      })),
+    };
+  },
+};
+
+/** Kệ / tủ từ bản lưu cũ (ít ô hơn) được nới thêm ô trống cho đủ số ô hiện tại. */
+function padShelves(shelves: GameState['shelves']): void {
+  for (const row of shelves) {
+    if (Array.isArray(row) && row.length < DATA.balance.slotsPerShelf) row.push(...emptySlots(DATA.balance.slotsPerShelf - row.length));
+  }
+}
+
+function knownProduct(id: string): boolean {
+  try {
+    product(id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Mảnh I/J/K cũ được gộp thành một mảnh I liền nhau. */
+function normalizeLandIds(ids: string[]): string[] {
+  const normalized = ids.map((id) => id === 'J' || id === 'K' ? 'I' : id);
+  return [...new Set(normalized)];
+}
+
+/** Các productId trong bản lưu mà bản game này không biết (bản lưu từ phiên bản mới hơn). */
+export function unknownProductIds(value: unknown, out = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) unknownProductIds(item, out);
+  } else if (value && typeof value === 'object') {
+    for (const [key, v] of Object.entries(value)) {
+      if (key === 'productId' && typeof v === 'string') {
+        if (!knownProduct(v)) out.add(v);
+      } else unknownProductIds(v, out);
+    }
+  }
+  return out;
+}
+
+export function migrate(file: { version: number; state: Record<string, unknown> }): GameState {
+  let { version, state } = file;
+  if (version > CURRENT_VERSION) throw new Error(`Bản lưu version ${version} mới hơn game (${CURRENT_VERSION})`);
+  // Mặt hàng không bao giờ bị xóa khỏi products.json, nên id lạ nghĩa là game đang chạy bản cũ (cache PWA).
+  const unknown = [...unknownProductIds(state)];
+  if (unknown.length) throw new Error(`Bản lưu đến từ phiên bản game mới hơn (có mặt hàng ${unknown.slice(0, 3).join(', ')}). Hãy cập nhật game rồi tải lại.`);
+  while (version < CURRENT_VERSION) {
+    const step = migrations[version];
+    if (!step) throw new Error(`Không có migrate từ version ${version}`);
+    state = step(state);
+    version++;
+  }
+  // Bổ sung trường thiếu bằng giá trị mặc định (an toàn khi thêm trường không đổi version).
+  const base = createNewGame();
+  const { pendingLevelUp, ...rest } = state as Partial<GameState> & { pendingLevelUp?: boolean };
+  const loaded = rest as Partial<GameState>;
+  const result = {
+    ...base,
+    ...loaded,
+    land: (() => {
+      const ids = normalizeLandIds(loaded.land ?? base.land);
+      return ids.includes('H') || (loaded.level ?? base.level) < 21 ? ids : [...ids, 'H'];
+    })(),
+    settings: { ...base.settings, ...loaded.settings },
+    zones: loaded.zones?.length ? loaded.zones : base.zones,
+    counter: loaded.counter?.length ? loaded.counter : base.counter,
+    fixtures: loaded.fixtures?.length ? loaded.fixtures : base.fixtures,
+    storedFixtures: Array.isArray(loaded.storedFixtures) ? loaded.storedFixtures : [],
+    diningTables: Array.isArray(loaded.diningTables) ? loaded.diningTables : [],
+    nextUid: Math.max(loaded.nextUid ?? 0, ...(loaded.fixtures ?? base.fixtures).map((f) => f.uid + 1), ...(loaded.storedFixtures ?? []).map((f) => f.uid + 1)),
+    lifetime: { ...base.lifetime, ...loaded.lifetime },
+    today: { ...base.today, ...loaded.today },
+    sync: { ...base.sync, ...loaded.sync },
+    summary: {
+      ...base.summary, ...loaded.summary,
+      level: loaded.level ?? base.level,
+      day: loaded.day ?? base.day,
+      money: loaded.money ?? base.money,
+    },
+    manager: { ...base.manager, ...loaded.manager },
+    stores: (loaded.stores?.length ? loaded.stores : base.stores).map((store) => ({ ...store, shopType: store.shopType ?? 'grocery' })),
+    activeStoreId: loaded.activeStoreId ?? 'main',
+    calendarStartMonth: loaded.calendarStartMonth ?? base.calendarStartMonth,
+    calendarStartYear: loaded.calendarStartYear ?? base.calendarStartYear,
+    activeEvents: loaded.activeEvents ?? [],
+    eventProgress: loaded.eventProgress ?? {},
+    eventHistory: loaded.eventHistory ?? [],
+    eventRollDay: loaded.eventRollDay ?? 0,
+    eventRewards: loaded.eventRewards ?? [],
+    activeRecipes: loaded.activeRecipes ?? [],
+    branchLastSimDay: loaded.branchLastSimDay ?? {},
+    branchShipments: Array.isArray(loaded.branchShipments) ? loaded.branchShipments : [],
+    storyProgress: loaded.storyProgress ?? [],
+    storyStarted: loaded.storyStarted ?? {},
+    soakBatches: Array.isArray(loaded.soakBatches) ? loaded.soakBatches : [],
+    cookedRice: Array.isArray(loaded.cookedRice) ? loaded.cookedRice : [],
+    internalOrders: Array.isArray(loaded.internalOrders) ? loaded.internalOrders : [],
+    recurringOrders: Array.isArray(loaded.recurringOrders) ? loaded.recurringOrders : [],
+    tax: loaded.tax ? {
+      ...base.tax, ...loaded.tax,
+      monthRevenue: { ...base.tax.monthRevenue, ...loaded.tax.monthRevenue },
+      bills: Array.isArray(loaded.tax.bills) ? loaded.tax.bills : [],
+      audits: Array.isArray(loaded.tax.audits) ? loaded.tax.audits : [],
+      years: Array.isArray(loaded.tax.years) ? loaded.tax.years : [],
+    } : base.tax,
+    version: CURRENT_VERSION,
+  } as GameState;
+  arrangeStorageRacks(result);
+  if (result.level >= 21) {
+    const generator = result.fixtures.find((fixture) => fixture.type === 'generator');
+    if (generator) { generator.x = 8; generator.y = 0; generator.rot = 0; }
+    for (const store of result.stores) {
+      const data = store.data as Record<string, unknown>;
+      if (Array.isArray(data.land)) data.land = normalizeLandIds(data.land as string[]);
+      if (Array.isArray(data.land) && Array.isArray(data.fixtures)) {
+        arrangeStorageRacks(data as unknown as Pick<GameState, 'land' | 'fixtures'>);
+      }
+      const land = Array.isArray(data.land) ? data.land as string[] : [];
+      if (!land.includes('H')) data.land = [...land, 'H'];
+      const fixtures = Array.isArray(data.fixtures) ? data.fixtures as { type: string; x: number; y: number; rot: number }[] : [];
+      const storedGenerator = fixtures.find((fixture) => fixture.type === 'generator');
+      if (storedGenerator) { storedGenerator.x = 8; storedGenerator.y = 0; storedGenerator.rot = 0; }
+    }
+  }
+  for (const store of result.stores) {
+    const data = store.data as Record<string, unknown>;
+    if (Array.isArray(data.land)) data.land = normalizeLandIds(data.land as string[]);
+  }
+  // Mảnh đất đổi hình giữa các phiên bản (KHO dời sát tiệm): cất nội thất nằm trên ô không còn hợp lệ.
+  stowMisplacedFixtures(result, activeShopType(result).def.landPlots);
+  for (const store of result.stores) {
+    if (store.id === result.activeStoreId) continue;
+    const data = store.data as Record<string, unknown>;
+    if (!Array.isArray(data.land) || !Array.isArray(data.fixtures)) continue;
+    if (!Array.isArray(data.storedFixtures)) data.storedFixtures = [];
+    stowMisplacedFixtures(data as unknown as Pick<GameState, 'land' | 'fixtures' | 'storedFixtures'>, shopTypeOf(store).def.landPlots);
+  }
+  padShelves(result.shelves);
+  for (const store of result.stores) if (Array.isArray(store.data?.shelves)) padShelves(store.data.shelves as GameState['shelves']);
+  syncActiveStore(result);
+  if (pendingLevelUp) applyLevelUps(result);
+  return result;
+}
+
+function defaultStore(): KeyValueStore | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function saveGame(state: GameState, store: KeyValueStore | null = defaultStore(), markDirty = true): boolean {
+  if (!store) return false;
+  try {
+    if (markDirty) state.sync.dirty = true;
+    syncActiveStore(state);
+    state.summary.level = state.level;
+    state.summary.day = state.day;
+    state.summary.money = state.money;
+    state.lastSeen = Date.now();
+    const file: SaveFile = { version: CURRENT_VERSION, savedAt: Date.now(), state };
+    store.setItem(activeKeys.save, JSON.stringify(file));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadGame(store: KeyValueStore | null = defaultStore()): LoadResult {
+  if (!store) return { status: 'none' };
+  let raw: string | null;
+  try {
+    raw = store.getItem(activeKeys.save);
+  } catch {
+    return { status: 'none' };
+  }
+  if (!raw) return { status: 'none' };
+  try {
+    const file = JSON.parse(raw) as SaveFile;
+    if (!file || typeof file.version !== 'number' || typeof file.state !== 'object') throw new Error('Sai cấu trúc');
+    const state = migrate(file as unknown as { version: number; state: Record<string, unknown> });
+    if (file.version < CURRENT_VERSION) keepPreMigrate(store, raw, file.version);
+    return { status: 'ok', state };
+  } catch (e) {
+    try {
+      store.setItem(activeKeys.backup, raw);
+    } catch {
+      /* hết chỗ lưu: bỏ qua */
+    }
+    return { status: 'corrupt', error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export function hasSave(store: KeyValueStore | null = defaultStore()): boolean {
+  return loadGame(store).status === 'ok';
+}
+
+export function deleteSave(store: KeyValueStore | null = defaultStore()): void {
+  try {
+    store?.removeItem(activeKeys.save);
+  } catch {
+    /* bỏ qua */
+  }
+}
+
+/** Giữ bản lưu cũ trước khi migrate (không ghi đè bản dự phòng còn hạn). */
+function keepPreMigrate(store: KeyValueStore, raw: string, version: number): void {
+  try {
+    const existing = store.getItem(activeKeys.preMigrate);
+    if (existing) {
+      const parsed = JSON.parse(existing) as { expiresAt: number };
+      if (parsed.expiresAt > Date.now()) return;
+    }
+    store.setItem(activeKeys.preMigrate, JSON.stringify({ version, expiresAt: Date.now() + PRE_MIGRATE_DAYS * 86_400_000, raw }));
+  } catch {
+    /* hết chỗ lưu: bỏ qua */
+  }
+}
+
+// ---------- Mã sao lưu (xuất/nhập bằng chữ) ----------
+
+const CODE_PREFIX = 'THDH1:';
+
+function toBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+function fromBase64(code: string): string {
+  const binary = atob(code);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+/** Xuất bản lưu thành mã chữ để chép sang máy khác. */
+export async function exportBackupCode(state: GameState): Promise<string> {
+  const packed = await compressSave({ version: CURRENT_VERSION, state });
+  return CODE_PREFIX + toBase64(packed);
+}
+
+/** Đọc mã sao lưu; ném lỗi tiếng Việt nếu mã sai. */
+export async function importBackupCode(code: string): Promise<GameState> {
+  const trimmed = code.trim().replace(/\s+/g, '');
+  if (!trimmed.startsWith(CODE_PREFIX)) throw new Error('Mã sao lưu không đúng định dạng.');
+  let file: { version: number; state: Record<string, unknown> };
+  try {
+    file = await decompressSave(fromBase64(trimmed.slice(CODE_PREFIX.length)));
+  } catch {
+    throw new Error('Mã sao lưu bị hỏng hoặc chép thiếu.');
+  }
+  if (!file || typeof file.version !== 'number' || typeof file.state !== 'object') throw new Error('Mã sao lưu bị hỏng hoặc chép thiếu.');
+  return migrate(file);
+}

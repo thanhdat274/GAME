@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "savedAt": 1790000000000,
+  "state": {
+    "version": 2, "day": 9, "phase": "morning", "clock": 480, "money": 432100, "exp": 800, "level": 4,
+    "warehouse": { "mi_goi": 30, "the_cao": 4 },
+    "shelves": [
+      [{ "productId": "mi_goi", "qty": 6 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }],
+      [{ "productId": "keo", "qty": 3 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }],
+      [{ "productId": "pin", "qty": 2 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }]
+    ],
+    "zones": ["dry", "snack", "household"],
+    "counter": [{ "productId": "gas_mini", "qty": 2 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }, { "productId": null, "qty": 0 }],
+    "settings": { "sound": false, "autoChange": false, "autoScan": true },
+    "ratings": [5, 4], "yesterdaySold": {}, "yesterdayMissed": {}, "lastGrandmaDay": -99, "seenIntro": true, "lastSummary": null,
+    "announcedLevel": 4, "loginPromptSeen": true,
+    "sync": { "baseRevision": 3, "dirty": false, "lastSyncedAt": 1789999999000, "deviceId": "device-a" },
+    "summary": { "level": 4, "day": 9, "money": 432100, "playSeconds": 3600 }
+  }
+}

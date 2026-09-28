@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
+import { DATA } from '../core/data';
 import { averageRating, levelProgress } from '../core/progression';
 import { openLevelRoadmap } from './levelRoadmap';
 import { formatClock, formatMoney, type GameState } from '../core/state';
 import { Bar, toast } from './widgets';
-import { C, HEX, W, txt } from './theme';
+import { C, H, HEX, W, txt } from './theme';
 import { cloudSaveEnabled } from '../services/firebase';
 import { getSyncStatus, onSyncStatus, syncNow, type SyncStatus } from '../services/sync';
 import { calendarDate } from '../core/calendar';
@@ -18,6 +19,7 @@ export class Hud extends Phaser.GameObjects.Container {
   private lv: Phaser.GameObjects.Text;
   private bar: Bar;
   private shownMoney = -1;
+  private shownLevel = -1;
   private cloudIcon?: Phaser.GameObjects.Text;
   private htmlHud?: Phaser.GameObjects.DOMElement;
   private htmlMoney?: HTMLSpanElement;
@@ -151,6 +153,12 @@ export class Hud extends Phaser.GameObjects.Container {
     this.lv.setText(level);
     if (this.htmlLevel) this.htmlLevel.textContent = level;
     this.bar.set(levelProgress(s.exp, s.level));
+    if (this.shownLevel >= 0 && s.level > this.shownLevel) {
+      const gained = DATA.levels.levels.filter((item) => item.level > this.shownLevel && item.level <= s.level);
+      const unlocks = gained.map((item) => `${item.level}: ${item.label}`).join(' · ');
+      toast(this.scene, `🎉 Lên level ${s.level}!${unlocks ? `\nMở khóa: ${unlocks}` : ''}`, Math.max(96, H * 0.18), 0x3b8d5b);
+    }
+    this.shownLevel = s.level;
   }
 
   private roadmap: Phaser.GameObjects.Container | null = null;

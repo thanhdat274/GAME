@@ -18,13 +18,13 @@ export class ScheduleScene extends Phaser.Scene {
 
   create(): void {
     setupCamera(this);
-    pageFrame(this, '📅 Xếp ca', () => { persist(); this.scene.start('Morning'); }, 'Ca sáng 08–14 · ca chiều 14–20 · nửa lương mỗi ca');
+    pageFrame(this, '📅 Xếp ca', () => { persist(); this.scene.start('Morning'); });
     new Button(this, W / 2, PAGE_TOP + 20, {
       w: 200, h: 34, label: '✨ Xếp tự động', size: 13, color: C.green,
       onTap: () => { autoSchedule(G.state); play('pick'); persist(); this.render(); },
     });
-    txt(this, 14, PAGE_TOP + 42, 'Chạm tên để thêm/bỏ khỏi ca. Vàng: ca đôi (trừ tâm trạng). Đỏ: ca không có thu ngân.', { size: 10, color: HEX.muted, wrap: W - 28 });
-    this.list = new ScrollArea(this, PAGE_TOP + 72, H - 8);
+    txt(this, 14, PAGE_TOP + 44, 'Ca sáng 08–14 · chiều 14–20 · nửa lương mỗi ca\nTự động: phủ thu ngân, chia đều ca; 2 người cần ca đôi.\nChạm tên để đổi. Vàng: ca đôi. Đỏ: thiếu thu ngân.', { size: 10, color: HEX.muted, wrap: W - 28 });
+    this.list = new ScrollArea(this, PAGE_TOP + 100, H - 8);
     this.render();
   }
 
@@ -33,6 +33,9 @@ export class ScheduleScene extends Phaser.Scene {
     this.list.clear();
     const grid = scheduleGrid(s);
     const today = weekday(s.day);
+    const columns = Math.max(1, Math.min(3, s.staff.length));
+    const chipRows = Math.ceil(s.staff.length / columns);
+    const shiftH = 38 + chipRows * 38;
     let y = 4;
     if (!s.staff.length) {
       this.list.add(txt(this, W / 2, 60, 'Chưa có nhân viên để xếp ca.', { size: 14, color: HEX.muted, origin: [0.5, 0.5] }));
@@ -43,36 +46,37 @@ export class ScheduleScene extends Phaser.Scene {
       // Bắt đầu từ hôm nay để người chơi thấy ngay ca sắp tới.
       const dow = (today + i) % WEEK_DAYS;
       const day = s.day + i;
-      const rowH = 28 + SHIFTS.length * 46;
+      const rowH = 30 + SHIFTS.length * shiftH;
       this.list.add(card(this, 8, y, W - 16, rowH - 6, i === 0 ? 0xfff0d0 : C.panel));
       this.list.add(txt(this, 18, y + 8, `${i === 0 ? 'Hôm nay · ' : ''}Ngày ${day}`, { size: 13, bold: true }));
       for (const shift of SHIFTS) {
         const cell = grid.find((c) => c.dow === dow && c.shift === shift)!;
-        const sy = y + 30 + shift * 46;
+        const sy = y + 30 + shift * shiftH;
         const empty = cell.cashiers === 0;
         const bg = this.add.graphics();
-        bg.fillStyle(empty ? 0xfbd5cc : 0xf3e7d0, 1).fillRoundedRect(14, sy - 2, W - 28, 40, 8);
+        bg.fillStyle(empty ? 0xfbd5cc : 0xf3e7d0, 1).fillRoundedRect(14, sy - 2, W - 28, shiftH - 6, 8);
         this.list.add(bg);
         this.list.add(txt(this, 20, sy + 4, DATA.balance.staff.shifts[shift].name, { size: 11, bold: true }));
-        this.list.add(txt(this, 20, sy + 20, empty ? 'Không ai đứng quầy' : `${cell.cashiers} thu ngân`, { size: 9, bold: empty, color: empty ? HEX.red : HEX.muted }));
-        this.chips(dow, shift, sy + 18);
+        this.list.add(txt(this, W - 20, sy + 5, empty ? 'Không ai đứng quầy' : `${cell.cashiers} thu ngân`, { size: 9, bold: empty, color: empty ? HEX.red : HEX.muted, origin: [1, 0] }));
+        this.chips(dow, shift, sy + 36, columns);
       }
       y += rowH;
     }
     this.list.setHeight(y + 20);
   }
 
-  private chips(dow: number, shift: Shift, cy: number): void {
+  private chips(dow: number, shift: Shift, firstCy: number, columns: number): void {
     const s = G.state;
-    const n = s.staff.length;
-    const x0 = 110;
-    const w = Math.min(78, (W - x0 - 18) / Math.max(1, n) - 4);
+    const gap = 6;
+    const w = (W - 40 - (columns - 1) * gap) / columns;
     s.staff.forEach((st, i) => {
       const on = !!s.schedule[st.id]?.[dow * 2 + shift];
       const dbl = on && doubleShift(s, st.id, dow);
       const label = `${roleDef(st.role).icon}${st.name.split(' ').slice(-1)[0]}`;
-      this.list.add(new Button(this, x0 + w / 2 + i * (w + 4), cy, {
-        w, h: 30, size: 10, label,
+      const col = i % columns;
+      const row = Math.floor(i / columns);
+      this.list.add(new Button(this, 20 + w / 2 + col * (w + gap), firstCy + row * 38, {
+        w, h: 30, size: 11, label,
         color: !on ? C.grey : dbl ? C.yellow : C.green,
         textColor: dbl ? HEX.ink : HEX.white,
         onTap: this.list.guard(() => { toggleShift(s, st.id, dow, shift); play('tap'); persist(); this.render(); }),

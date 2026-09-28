@@ -1,0 +1,11 @@
+[
+  {"id":"pho_hem","name":"Chủ tiệm đầu hẻm","stars":1},
+  {"id":"chuoi_nho","name":"Nhà bán lẻ khu phố","stars":3},
+  {"id":"chuoi_noi_tieng","name":"Ông/bà chủ chuỗi","stars":5},
+  {"id":"doanh_nhan","name":"Doanh nhân phố thị","stars":8},
+  {"id":"thuong_hieu","name":"Thương hiệu thân quen","stars":12},
+  {"id":"dai_gia","name":"Đại gia tạp hóa","stars":16},
+  {"id":"ong_to","name":"Ông tổ bán lẻ","stars":20},
+  {"id":"huyen_thoai","name":"Huyền thoại đầu hẻm","stars":25},
+  {"id":"vua_ban_le","name":"Vua/bà hoàng bán lẻ","stars":30}
+]

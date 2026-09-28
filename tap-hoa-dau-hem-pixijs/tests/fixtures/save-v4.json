@@ -1,0 +1,352 @@
+{
+  "savedAt": 1790000000000,
+  "state": {
+    "version": 4,
+    "day": 24,
+    "phase": "morning",
+    "clock": 480,
+    "money": 2450000,
+    "exp": 18470,
+    "level": 20,
+    "warehouse": [
+      {
+        "productId": "rau_muong",
+        "qty": 6,
+        "exp": 26
+      },
+      {
+        "productId": "mi_goi",
+        "qty": 20,
+        "exp": null
+      },
+      {
+        "productId": "nuoc_ngot",
+        "qty": 24,
+        "exp": null
+      }
+    ],
+    "holding": [],
+    "shelves": [
+      [
+        {
+          "productId": "mi_goi",
+          "qty": 10,
+          "lots": [
+            {
+              "qty": 10,
+              "exp": null
+            }
+          ]
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        }
+      ],
+      [
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        }
+      ],
+      [
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        }
+      ],
+      [
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        },
+        {
+          "productId": null,
+          "qty": 0
+        }
+      ]
+    ],
+    "zones": [
+      "dry",
+      null,
+      null,
+      null
+    ],
+    "counter": [
+      {
+        "productId": "the_cao",
+        "qty": 0,
+        "lots": []
+      },
+      {
+        "productId": null,
+        "qty": 0
+      },
+      {
+        "productId": null,
+        "qty": 0
+      },
+      {
+        "productId": null,
+        "qty": 0
+      }
+    ],
+    "fixtures": [
+      {
+        "uid": 1,
+        "type": "shelf",
+        "x": 0,
+        "y": 5,
+        "rot": 1,
+        "shelf": 0
+      },
+      {
+        "uid": 2,
+        "type": "shelf",
+        "x": 2,
+        "y": 5,
+        "rot": 0,
+        "shelf": 1
+      },
+      {
+        "uid": 3,
+        "type": "shelf",
+        "x": 2,
+        "y": 6,
+        "rot": 0,
+        "shelf": 2
+      },
+      {
+        "uid": 4,
+        "type": "counter",
+        "x": 2,
+        "y": 7,
+        "rot": 0
+      },
+      {
+        "uid": 5,
+        "type": "fridge",
+        "x": 0,
+        "y": 3,
+        "rot": 0,
+        "shelf": 3
+      }
+    ],
+    "nextUid": 6,
+    "land": [
+      "A",
+      "B",
+      "C"
+    ],
+    "warehouseTier": 0,
+    "prices": {},
+    "deliveries": [],
+    "ledger": [],
+    "regulars": {},
+    "quests": null,
+    "achievements": [],
+    "decorOwned": [],
+    "lifetime": {
+      "sold": 0,
+      "served": 0,
+      "debtsCollected": 0,
+      "landsOpened": 3,
+      "loveStreak": 0
+    },
+    "tutorialsSeen": [],
+    "ratings": [],
+    "yesterdaySold": {},
+    "yesterdayMissed": {},
+    "today": {
+      "revenue": 0,
+      "cogs": 0,
+      "tips": 0,
+      "overpaid": 0,
+      "served": 0,
+      "happy": 0,
+      "left": 0,
+      "ratingSum": 0,
+      "ratingCount": 0,
+      "expGained": 0,
+      "itemsScanned": 0,
+      "counterServed": 0,
+      "sold": {},
+      "missed": {},
+      "priceComplaints": {},
+      "notCold": {},
+      "spoiled": {},
+      "spoiledCost": 0,
+      "electricity": 0,
+      "debtCollected": 0,
+      "debtCollectedAmount": 0,
+      "debtGiven": 0,
+      "badDebt": 0,
+      "bargainDiscount": 0,
+      "questMoney": 0
+    },
+    "lastGrandmaDay": -99,
+    "seenIntro": false,
+    "settings": {
+      "sound": true,
+      "autoChange": true,
+      "autoScan": false
+    },
+    "lastSummary": null,
+    "announcedLevel": 1,
+    "loginPromptSeen": false,
+    "sync": {
+      "baseRevision": 0,
+      "dirty": true,
+      "lastSyncedAt": null,
+      "deviceId": "fixture-device"
+    },
+    "summary": {
+      "level": 1,
+      "day": 1,
+      "money": 500000,
+      "playSeconds": 0
+    },
+    "staff": [
+      {
+        "wage": 18000,
+        "look": {
+          "pants": "#3949ab",
+          "shirt": "#e57373",
+          "skin": "#ffccbc",
+          "hair": "#3e2723"
+        },
+        "lowMoodDays": 0,
+        "mood": 80,
+        "quitting": false,
+        "role": "cashier",
+        "streak": 0,
+        "personality": "careful",
+        "stats": {
+          "speed": 5,
+          "accuracy": 8,
+          "stamina": 6,
+          "friendly": 7
+        },
+        "name": "Bé Lan",
+        "id": "fixture-lan",
+        "scoldedDay": null,
+        "level": 2,
+        "hiredDay": 1,
+        "lifetime": {
+          "mistakes": 1,
+          "jobs": 12,
+          "served": 12,
+          "ratingSum": 50,
+          "ratingCount": 12
+        },
+        "exp": 120
+      }
+    ],
+    "staffBoard": null,
+    "fixedCandidateUsed": true,
+    "schedule": {
+      "fixture-lan": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    "scheduleReady": true,
+    "rules": [],
+    "planogram": null,
+    "analytics": [],
+    "managerStats": [],
+    "manager": {
+      "enabled": false,
+      "speed": 1
+    },
+    "wageDebt": 0,
+    "camera": false,
+    "morningNotes": [],
+    "lastSeen": 1790000000000
+  },
+  "version": 4
+}

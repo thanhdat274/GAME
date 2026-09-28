@@ -1,0 +1,5 @@
+[
+  { "id": "neighborhood_feast", "customer": "Cô Sáu", "items": { "mi_goi": 24, "banh_quy": 12, "nuoc_ngot": 12 }, "deadlineDays": 2 },
+  { "id": "class_party", "customer": "Thầy Minh", "items": { "snack": 24, "nuoc_suoi": 18, "keo": 18 }, "deadlineDays": 1 },
+  { "id": "factory_meeting", "customer": "Chú Tư", "items": { "mi_goi": 30, "nuoc_ngot": 18, "banh_quy": 12 }, "deadlineDays": 2 }
+]

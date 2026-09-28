@@ -172,6 +172,55 @@ export function productTexture(scene: Phaser.Scene, id: string): string | null {
   return rows ? spriteTexture(scene, `icon_${id}`, rows) : null;
 }
 
+/** Gộp nền tròn và pixel art vào cùng texture để mỗi biểu tượng là một Image duy nhất. */
+function productBadgeTexture(scene: Phaser.Scene, p: Product, size: number): string | null {
+  const rows = PRODUCT_SPRITES[p.id];
+  if (!rows) return null;
+  const logicalSize = Math.max(1, Math.round(size));
+  const key = `badge_${p.id}_${logicalSize}`;
+  if (scene.textures.exists(key)) return key;
+  const dimension = logicalSize * ZOOM;
+  const texture = scene.textures.createCanvas(key, dimension, dimension);
+  if (!texture) return null;
+  const ctx = texture.getContext();
+  const base = Phaser.Display.Color.IntegerToColor(color(p.color));
+  const light = Phaser.Display.Color.Interpolate.ColorWithColor(base, Phaser.Display.Color.IntegerToColor(0xffffff), 100, 55);
+  const fill = Phaser.Display.Color.GetColor(light.r, light.g, light.b).toString(16).padStart(6, '0');
+  const center = dimension / 2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath();
+  ctx.arc(center, center + 2 * ZOOM, center, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = `#${fill}`;
+  ctx.beginPath();
+  ctx.arc(center, center, center, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = 2 * ZOOM;
+  ctx.strokeStyle = p.color;
+  ctx.beginPath();
+  ctx.arc(center, center, center - ZOOM, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Giữ đúng số pixel nguyên như texture cũ để nét sản phẩm không bị nhòe.
+  const pixelScale = Math.max(1, Math.floor((logicalSize * 0.88 * ZOOM) / 16));
+  const spriteW = rows[0].length * pixelScale;
+  const spriteH = rows.length * pixelScale;
+  const spriteX = Math.floor((dimension - spriteW) / 2);
+  const spriteY = Math.floor((dimension - spriteH) / 2);
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const hex = PALETTE[row[x]];
+      if (hex === undefined) continue;
+      ctx.fillStyle = `#${hex.toString(16).padStart(6, '0')}`;
+      ctx.fillRect(spriteX + x * pixelScale, spriteY + y * pixelScale, pixelScale, pixelScale);
+    }
+  });
+  texture.refresh();
+  texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  return key;
+}
+
 /** Ngoại hình chủ tiệm, dùng chung cho texture và sprite đứng quầy. */
 const OWNER_LOOK: CustomerType = {
   id: 'owner',
@@ -198,20 +247,17 @@ export function ownerSprite(scene: Phaser.Scene, x: number, y: number): Phaser.G
   return customerSprite(scene, x, y, OWNER_LOOK);
 }
 
-/** Biểu tượng mặt hàng: hình tròn màu + emoji. */
-export function productIcon(scene: Phaser.Scene, x: number, y: number, p: Product, size = 36): Phaser.GameObjects.Container {
+/** Biểu tượng mặt hàng: texture gộp hình tròn và pixel art; món chưa có sprite dùng emoji dự phòng. */
+export function productIcon(scene: Phaser.Scene, x: number, y: number, p: Product, size = 36): Phaser.GameObjects.Container | Phaser.GameObjects.Image {
+  const badge = productBadgeTexture(scene, p, size);
+  if (badge) return scene.add.image(x, y, badge).setScale(1 / ZOOM);
   const g = scene.add.graphics();
-  const base = Phaser.Display.Color.IntegerToColor(color(p.color));
-  const light = Phaser.Display.Color.Interpolate.ColorWithColor(base, Phaser.Display.Color.IntegerToColor(0xffffff), 100, 55);
   g.fillStyle(0x000000, 0.12).fillCircle(0, 2, size / 2);
-  g.fillStyle(Phaser.Display.Color.GetColor(light.r, light.g, light.b), 1).fillCircle(0, 0, size / 2);
+  g.fillStyle(Phaser.Display.Color.Interpolate.ColorWithColor(
+    Phaser.Display.Color.IntegerToColor(color(p.color)), Phaser.Display.Color.IntegerToColor(0xffffff), 100, 55,
+  ).color, 1).fillCircle(0, 0, size / 2);
   g.lineStyle(2, color(p.color), 0.9).strokeCircle(0, 0, size / 2 - 1);
-  const key = productTexture(scene, p.id);
-  if (!key) return scene.add.container(x, y, [g, emoji(scene, 0, 1, p.icon, Math.round(size * 0.58))]);
-  // Số pixel canvas cho mỗi điểm ảnh: số nguyên để hình không bị nhòe/méo.
-  const k = Math.max(1, Math.floor((size * 0.88 * ZOOM) / 16));
-  const img = scene.add.image(0, 0, key).setScale(k / ZOOM);
-  return scene.add.container(x, y, [g, img]);
+  return scene.add.container(x, y, [g, emoji(scene, 0, 1, p.icon, Math.round(size * 0.58))]);
 }
 
 /**

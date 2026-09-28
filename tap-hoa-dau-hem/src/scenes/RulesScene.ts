@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import {
   addRule, autoRestockUnlocked, lockPlanogram, moveRule, removeRule, stockLevel, suggestRule,
 } from '../core/autorestock';
-import { DATA, hasFeature, product, supplier } from '../core/data';
+import { DATA, hasFeature, product, supplier, type Category } from '../core/data';
 import { formatMoney, unlockedProducts, type RestockRule } from '../core/state';
 import { supplierUnlocked } from '../core/stock';
 import { G, persist } from '../game';
@@ -12,6 +12,20 @@ import { play } from '../ui/sound';
 import { Button, toast } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
+type ProductFilter = Category | 'all';
+const FILTERS: { id: ProductFilter; label: string }[] = [
+  { id: 'all', label: 'Tất cả' },
+  { id: 'dry', label: 'Đồ khô' },
+  { id: 'snack', label: 'Ăn vặt' },
+  { id: 'household', label: 'Đồ dùng' },
+  { id: 'drink', label: 'Đồ uống' },
+  { id: 'fresh', label: 'Đồ tươi' },
+  { id: 'frozen', label: 'Đông lạnh' },
+  { id: 'counter', label: 'Sau quầy' },
+  { id: 'food', label: 'Đồ ăn' },
+  { id: 'beverage', label: 'Pha chế' },
+];
+
 /** Màn Quy tắc: "Khi tồn [món] dưới X thì nhập Y từ [mối]" và chốt sơ đồ kệ cho nhân viên kho. */
 export class RulesScene extends Phaser.Scene {
   private list!: ScrollArea;
@@ -20,6 +34,8 @@ export class RulesScene extends Phaser.Scene {
   private suggestionsTop = 0;
   private suggestionsLayer: Phaser.GameObjects.Container | null = null;
   private suggestionsWindow = '';
+  private categoryFilter: ProductFilter = 'all';
+  private filterTop = 0;
 
   constructor() {
     super('Rules');
@@ -27,6 +43,7 @@ export class RulesScene extends Phaser.Scene {
 
   create(): void {
     setupCamera(this);
+    this.categoryFilter = 'all';
     pageFrame(this, '⚙️ Quy tắc tự động', () => { this.flushPendingPersist(); persist(); this.scene.start('Morning'); }, 'Chạy mỗi buổi sáng theo thứ tự ưu tiên');
     this.list = new ScrollArea(this, PAGE_TOP + 4, H - 8, () => this.renderSuggestionsWindow());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.flushPendingPersist());
@@ -55,7 +72,7 @@ export class RulesScene extends Phaser.Scene {
     this.suggestionsLayer = null;
     this.suggestionsWindow = '';
     let y = 4;
-    if (hasFeature(s.level, 'stocker')) y = this.planogramCard(y);
+    y = this.planogramCard(y);
     if (!autoRestockUnlocked(s)) {
       this.list.add(txt(this, W / 2, y + 30, `Đặt hàng tự động mở ở level ${DATA.levels.levels.find((l) => l.features?.includes('autorestock'))?.level}.`, { size: 13, color: HEX.muted, origin: [0.5, 0.5] }));
       this.list.setHeight(y + 80);
@@ -67,12 +84,32 @@ export class RulesScene extends Phaser.Scene {
     y += 8;
     this.list.add(txt(this, 14, y, 'Thêm quy tắc (gợi ý theo bán trung bình 7 ngày)', { size: 12, bold: true }));
     y += 22;
+    this.filterTop = y;
+    const cols = 5;
+    const gap = 3;
+    const buttonW = (W - 20 - gap * (cols - 1)) / cols;
+    FILTERS.forEach(({ id, label }, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      this.list.add(new Button(this, 10 + buttonW / 2 + col * (buttonW + gap), y + 12 + row * 27, {
+        w: buttonW, h: 24, radius: 4, label, size: 10,
+        color: id === this.categoryFilter ? C.red : C.wood,
+        onTap: this.list.guard(() => {
+          this.categoryFilter = id;
+          this.render();
+          this.list.setScroll(Math.max(0, this.filterTop - 34));
+        }),
+      }));
+    });
+    y += 64;
     const has = new Set(s.rules.map((r) => r.productId));
-    this.suggestions = unlockedProducts(s.level, s).filter((p) => !p.behindCounter && !has.has(p.id));
+    this.suggestions = unlockedProducts(s.level, s).filter((p) => !has.has(p.id) && (this.categoryFilter === 'all' || p.category === this.categoryFilter));
     this.suggestionsTop = y;
-    this.suggestionsLayer = this.add.container(0, 0);
+    const suggestionsHeight = this.suggestions.length * 48 + 20;
+    this.suggestionsLayer = this.add.container(0, y + suggestionsHeight / 2).setSize(W, suggestionsHeight);
     this.list.add(this.suggestionsLayer);
-    this.list.setHeight(y + this.suggestions.length * 48 + 20);
+    if (!this.suggestions.length) this.list.add(txt(this, W / 2, y + 28, 'Chưa có món để thêm trong danh mục này.', { size: 12, color: HEX.muted, origin: [0.5, 0.5] }));
+    this.list.setHeight(y + Math.max(60, this.suggestions.length * 48 + 20));
     this.renderSuggestionsWindow(true);
   }
 
@@ -90,7 +127,7 @@ export class RulesScene extends Phaser.Scene {
     layer.removeAll(true);
     for (let i = first; i < end; i++) {
       const p = this.suggestions[i];
-      const y = this.suggestionsTop + i * rowHeight;
+      const y = i * rowHeight - layer.height / 2;
       const sug = suggestRule(G.state, p.id);
       layer.add(card(this, 8, y, W - 16, 44));
       layer.add(productIcon(this, 30, y + 22, p, 28));
@@ -112,7 +149,14 @@ export class RulesScene extends Phaser.Scene {
     const s = G.state;
     this.list.add(card(this, 8, y, W - 16, 74, 0xe8f1fb));
     this.list.add(txt(this, 18, y + 8, '📐 Sơ đồ kệ', { size: 14, bold: true }));
-    const status = s.planogram ? 'Đã chốt. Nhân viên kho/bổ sung kệ bày theo sơ đồ này.' : 'Chưa chốt. Bày kệ như ý rồi bấm "Chốt" để nhân viên làm theo.';
+    const stockerUnlocked = hasFeature(s.level, 'stocker');
+    const status = s.planogram
+      ? stockerUnlocked
+        ? 'Đã chốt. Nhân viên kho/bổ sung kệ bày theo sơ đồ này.'
+        : 'Đã lưu sơ đồ. Nhân viên kho sẽ làm theo khi mở khóa.'
+      : stockerUnlocked
+        ? 'Chưa chốt. Bày kệ như ý rồi bấm "Chốt" để nhân viên làm theo.'
+        : 'Chốt cách bày hiện tại. Nhân viên kho làm theo sau khi mở khóa.';
     this.list.add(txt(this, 18, y + 28, status, { size: 10, color: HEX.muted, wrap: W - 150 }));
     this.list.add(new Button(this, W - 66, y + 36, {
       w: 104, h: 34, label: s.planogram ? '📐 Chốt lại' : '📐 Chốt', size: 12, color: C.blue,

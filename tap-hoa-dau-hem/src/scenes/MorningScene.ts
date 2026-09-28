@@ -147,7 +147,7 @@ export class MorningScene extends Phaser.Scene {
   private chipTop = 0;
   private chipMax = 0;
   /** Món đang được giữ để kéo thả lên kệ. */
-  private chipDrag: { id: string; ghost: Phaser.GameObjects.Container } | null = null;
+  private chipDrag: { id: string; ghost: Phaser.GameObjects.Container | Phaser.GameObjects.Image } | null = null;
   private counterPanel!: Phaser.GameObjects.Container;
   private counterTabBtn!: Button;
   private whLabel!: Phaser.GameObjects.Text;
@@ -595,8 +595,11 @@ export class MorningScene extends Phaser.Scene {
     const qty = txt(this, 264, 0, '0', { size: 14, bold: true, color: '#5a6652', origin: [0.5, 0.5] });
     const plus = new Button(this, 296, 0, { w: 26, h: 26, radius: 4, label: '+', color: C.green, size: 15, onTap: () => this.changeQty(p.id, 1) });
     const plus10 = new Button(this, 332, 0, { w: 32, h: 28, radius: 4, label: '+10', color: C.greenDark, size: 11, onTap: () => this.changeQty(p.id, 10) });
-    const lack = txt(this, 58 + name.width + 8, 11 - centerY, '', { size: 9.5, bold: true, color: HEX.white });
-    lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1);
+    // Build the text with its real initial value before applying background and padding.
+    // Starting with an empty string leaves Text's background width at padding-only size.
+    const initialMissed = G.state.yesterdayMissed[p.id] ?? 0;
+    const lack = txt(this, 58 + name.width + 8, 11 - centerY, initialMissed > 0 ? `thiếu ${initialMissed}` : '', { size: 9.5, bold: true, color: HEX.white });
+    lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1).setVisible(initialMissed > 0);
     root.add([stepperG, minus, qty, plus, plus10, lack]);
     this.rows.push({ p, qty, info, lack, minus, plus, plus10, price, bg });
   }
@@ -1170,7 +1173,7 @@ export class MorningScene extends Phaser.Scene {
         const extra = noPlace ? ` · ❄ cần ${r.p.requiresCold === 'freezer' ? 'tủ đông' : 'tủ lạnh'}` : r.p.shelfLifeDays ? ` · hạn ${r.p.shelfLifeDays} ngày` : '';
         r.info.setText(`Còn: ${totalQty(s, r.p.id)} · Hôm qua bán: ${s.yesterdaySold[r.p.id] ?? 0}${extra}`);
         r.info.setColor(noPlace ? HEX.red : HEX.green);
-        r.lack.setText(`thiếu ${missed}`).setVisible(missed > 0);
+        r.lack.setText(`thiếu ${missed}`).setPadding(4, 1, 4, 1).setVisible(missed > 0);
         r.minus.setEnabled(q > 0);
       }
       const check = checkCart(s, this.cart, this.supplierId);

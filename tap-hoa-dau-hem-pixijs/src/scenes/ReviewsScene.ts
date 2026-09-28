@@ -1,0 +1,145 @@
+import * as Engine from '../engine';
+import { averageRating } from '../core/progression';
+import {
+  REPLY_WINDOW_DAYS, ratingBreakdown, ratingWindow, replyOptions, replyToReview, type Review,
+} from '../core/reviews';
+import { formatClock } from '../core/state';
+import { G, persist } from '../game';
+import { PAGE_TOP, ScrollArea, card, pageFrame } from '../ui/page';
+import { Button, toast } from '../ui/widgets';
+import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
+
+type Filter = 'all' | 'unreplied' | 'bad';
+const CARD_W = W - 16;
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: 'all', label: 'Tất cả' },
+  { id: 'unreplied', label: 'Chưa trả lời' },
+  { id: 'bad', label: 'Xấu (≤3★)' },
+];
+
+function starText(n: number): string {
+  const k = Math.max(0, Math.min(5, Math.round(n)));
+  return '★'.repeat(k) + '☆'.repeat(5 - k);
+}
+
+/** Đánh giá của khách: vì sao sao tăng / giảm, đọc từng lời khách viết và trả lời. */
+export class ReviewsScene extends Engine.Scene {
+  private list!: ScrollArea;
+  private back = 'Morning';
+  private filter: Filter = 'all';
+
+  constructor() {
+    super('Reviews');
+  }
+
+  create(data: { back?: string }): void {
+    setupCamera(this);
+    this.back = data?.back ?? 'Morning';
+    this.filter = 'all';
+    pageFrame(this, '⭐ Đánh giá', () => { persist(); this.scene.start(this.back); }, 'Khách nhận xét gì về tiệm');
+    this.list = new ScrollArea(this, PAGE_TOP + 4, H - 8);
+    this.render();
+  }
+
+  private render(): void {
+    const s = G.state;
+    this.list.clear();
+    let y = this.summaryCard(4);
+    // Bộ lọc.
+    const fw = (CARD_W - 16) / FILTERS.length;
+    FILTERS.forEach((f, i) => {
+      this.list.add(new Button(this, 8 + fw / 2 + i * (fw + 8), y + 18, {
+        w: fw, h: 30, size: 11, label: f.label, color: this.filter === f.id ? C.blue : C.grey,
+        onTap: this.list.guard(() => { this.filter = f.id; this.render(); }),
+      }));
+    });
+    y += 44;
+    const shown = s.reviews.filter((r) => (this.filter === 'unreplied' ? !r.reply : this.filter === 'bad' ? r.stars <= 3 : true));
+    if (!shown.length) {
+      const msg = s.reviews.length ? 'Không có đánh giá nào ở mục này.' : 'Chưa có đánh giá nào.\nBán hàng để khách để lại lời nhận xét nhé!';
+      this.list.add(txt(this, W / 2, y + 40, msg, { size: 13, color: HEX.muted, origin: [0.5, 0.5], align: 'center' }));
+      y += 90;
+    }
+    for (const r of shown) y = this.reviewCard(r, y) + 8;
+    this.list.setHeight(y + 20);
+  }
+
+  /** Sao trung bình và số lượt chấm theo từng mức: giải thích vì sao con số trên thanh trên cùng thay đổi. */
+  private summaryCard(y: number): number {
+    const s = G.state;
+    const h = 158;
+    this.list.add(card(this, 8, y, CARD_W, h));
+    const avg = averageRating(s);
+    const total = s.ratings.length;
+    this.list.add(txt(this, 62, y + 40, avg.toFixed(1), { size: 34, bold: true, origin: [0.5, 0.5] }));
+    this.list.add(txt(this, 62, y + 70, starText(avg), { size: 13, color: '#e0a100', origin: [0.5, 0.5] }));
+    this.list.add(txt(this, 62, y + 90, `${total} lượt chấm`, { size: 10, color: HEX.muted, origin: [0.5, 0.5] }));
+    const rows = ratingBreakdown(s);
+    const max = Math.max(1, ...rows.map((r) => r.count));
+    const bx = 136;
+    const bw = CARD_W - bx - 40;
+    const g = this.add.graphics();
+    rows.forEach((row, i) => {
+      const ry = y + 16 + i * 17;
+      this.list.add(txt(this, bx - 6, ry, `${row.stars}★`, { size: 11, bold: true, color: HEX.ink, origin: [1, 0] }));
+      g.fillStyle(0xe8dcc8, 1).fillRoundedRect(bx, ry + 3, bw, 9, 4);
+      const w = (bw * row.count) / max;
+      if (row.count) g.fillStyle(row.stars >= 4 ? C.green : row.stars === 3 ? C.yellow : C.red, 1).fillRoundedRect(bx, ry + 3, Math.max(8, w), 9, 4);
+      this.list.add(txt(this, bx + bw + 6, ry, String(row.count), { size: 10, color: HEX.muted }));
+    });
+    this.list.add(g);
+    this.list.add(txt(this, 18, y + 108,
+      `Sao = trung bình ${ratingWindow()} lượt chấm gần nhất: khách nào về cũng chấm, chỉ một số viết nhận xét. `
+      + `Xin lỗi đánh giá xấu trong ${REPLY_WINDOW_DAYS} ngày sẽ gỡ lại uy tín; cãi khách thì mất điểm.`,
+      { size: 10, color: HEX.muted, wrap: CARD_W - 20 }));
+    return y + h + 8;
+  }
+
+  private reviewCard(r: Review, y: number): number {
+    const s = G.state;
+    const pad = 12;
+    const inner = CARD_W - pad * 2;
+    const items: Engine.GameObjects.GameObject[] = [];
+    const name = txt(this, 8 + pad, y + 10, r.name, { size: 13, bold: true });
+    const stars = txt(this, 8 + CARD_W - pad, y + 10, starText(r.stars), { size: 13, color: r.stars >= 4 ? '#e0a100' : r.stars === 3 ? '#b7791f' : HEX.red, origin: [1, 0] });
+    const when = txt(this, 8 + pad, y + 28, `Ngày ${r.day} · ${formatClock(r.minute)}${r.day === s.day ? ' · mới' : ''}`, { size: 10, color: HEX.muted });
+    const body = txt(this, 8 + pad, y + 44, r.text, { size: 12, color: HEX.ink, wrap: inner });
+    items.push(name, stars, when, body);
+    let cy = y + 44 + body.height + 8;
+    if (r.reply) {
+      const reply = txt(this, 8 + pad + 10, cy + 6, `💬 Chủ tiệm: ${r.reply.text}`, { size: 11, color: r.reply.kind === 'argue' ? HEX.red : '#1f5fa0', wrap: inner - 20 });
+      const box = this.add.graphics();
+      box.fillStyle(0xf1e6d2, 1).fillRoundedRect(8 + pad, cy, inner, reply.height + 12, 8);
+      items.push(box, reply);
+      cy += reply.height + 12 + 10;
+    } else {
+      const opts = replyOptions(r);
+      const bw = 104;
+      opts.forEach((o, i) => {
+        items.push(new Button(this, 8 + pad + bw / 2 + i * (bw + 8), cy + 16, {
+          w: bw, h: 30, size: 11, label: o.label, color: o.kind === 'argue' ? C.red : o.kind === 'sorry' ? C.blue : C.green,
+          onTap: this.list.guard(() => this.reply(r, o.kind)),
+        }).setEnabled(!G.liveSnapshot));
+      });
+      if (r.stars <= 3 && s.day - r.day > REPLY_WINDOW_DAYS) {
+        items.push(txt(this, 8 + CARD_W - pad, cy + 16, 'Đã cũ, trả lời\nkhông gỡ được sao', { size: 9, color: HEX.muted, origin: [1, 0.5], align: 'right' }));
+      }
+      cy += 40;
+    }
+    this.list.add(card(this, 8, y, CARD_W, cy - y, r.stars <= 2 ? 0xfbe4dc : C.panel));
+    this.list.add(items);
+    return cy;
+  }
+
+  private reply(r: Review, kind: 'thanks' | 'sorry' | 'argue'): void {
+    // Chơi chung: trạng thái do máy chủ giữ, chưa hỗ trợ trả lời từ máy này.
+    if (G.liveSnapshot) { toast(this, 'Đang chơi chung: trả lời đánh giá ở chế độ chơi một mình nhé'); return; }
+    const effect = replyToReview(G.state, r.id, kind);
+    if (!effect) return;
+    persist();
+    if (effect === 'recovered') toast(this, '🙇 Khách khác thấy tiệm có tâm: gỡ lại chút uy tín', undefined, C.greenDark);
+    else if (effect === 'hurt') toast(this, '😬 Cãi khách công khai: người đọc chê tiệm', undefined, C.redDark);
+    else toast(this, '💬 Đã trả lời');
+    this.render();
+  }
+}

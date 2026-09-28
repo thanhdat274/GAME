@@ -1,0 +1,171 @@
+{
+  "cols": 10,
+  "rows": 10,
+  "door": {
+    "x": 0,
+    "y": 7
+  },
+  "initial": [
+    {
+      "x": 0,
+      "y": 5,
+      "w": 4,
+      "h": 3
+    }
+  ],
+  "plots": [
+    {
+      "id": "A",
+      "name": "Đất A",
+      "level": 5,
+      "cost": 150000,
+      "queueBonus": 1,
+      "rects": [
+        {
+          "x": 0,
+          "y": 3,
+          "w": 4,
+          "h": 2
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Đất B",
+      "level": 8,
+      "cost": 400000,
+      "queueBonus": 1,
+      "rects": [
+        {
+          "x": 4,
+          "y": 3,
+          "w": 2,
+          "h": 5
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "name": "KHO",
+      "level": 9,
+      "cost": 600000,
+      "queueBonus": 0,
+      "storageOnly": true,
+      "rects": [
+        { "x": 6, "y": 6, "w": 4, "h": 2 }
+      ]
+    },
+    {
+      "id": "D",
+      "name": "Đất D · Mini Mart",
+      "level": 15,
+      "cost": 1200000,
+      "queueBonus": 1,
+      "miniMart": true,
+      "rects": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 4,
+          "h": 3
+        }
+      ],
+      "shopperBonus": 2
+    },
+    {
+      "id": "E",
+      "name": "Đất E · Góc đồ ăn",
+      "level": 21,
+      "cost": 1800000,
+      "queueBonus": 1,
+      "rects": [{ "x": 6, "y": 0, "w": 2, "h": 4 }]
+    },
+    {
+      "id": "F",
+      "name": "Đất F · Quầy nước",
+      "level": 25,
+      "cost": 2500000,
+      "queueBonus": 1,
+      "rects": [{ "x": 6, "y": 4, "w": 4, "h": 2 }]
+    },
+    {
+      "id": "G",
+      "name": "Đất G · Khu mở rộng",
+      "level": 35,
+      "cost": 3500000,
+      "queueBonus": 1,
+      "rects": [{ "x": 8, "y": 1, "w": 2, "h": 3 }]
+    },
+    {
+      "id": "H",
+      "name": "Ô kỹ thuật · Máy phát điện",
+      "level": 21,
+      "cost": 0,
+      "queueBonus": 0,
+      "generatorOnly": true,
+      "rects": [{ "x": 8, "y": 0, "w": 2, "h": 1 }]
+    },
+    {
+      "id": "I",
+      "name": "Đất I · Khu mở rộng",
+      "level": 11,
+      "cost": 1200000,
+      "queueBonus": 1,
+      "rects": [{ "x": 4, "y": 0, "w": 2, "h": 3 }]
+    },
+    {
+      "id": "L",
+      "name": "Đất L · Khu mở rộng",
+      "level": 21,
+      "cost": 1500000,
+      "queueBonus": 1,
+      "rects": [{ "x": 0, "y": 8, "w": 4, "h": 2 }]
+    },
+    {
+      "id": "M",
+      "name": "Đất M · Khu mở rộng",
+      "level": 25,
+      "cost": 2000000,
+      "queueBonus": 1,
+      "rects": [{ "x": 4, "y": 8, "w": 4, "h": 2 }]
+    },
+    {
+      "id": "N",
+      "name": "KHO · Mở rộng",
+      "level": 29,
+      "cost": 1200000,
+      "queueBonus": 0,
+      "storageOnly": true,
+      "rects": [{ "x": 8, "y": 8, "w": 2, "h": 2 }]
+    }
+  ],
+  "defaultLayout": [
+    {
+      "type": "shelf",
+      "x": 0,
+      "y": 5,
+      "rot": 1,
+      "shelf": 0
+    },
+    {
+      "type": "shelf",
+      "x": 2,
+      "y": 5,
+      "rot": 0,
+      "shelf": 1
+    },
+    {
+      "type": "shelf",
+      "x": 2,
+      "y": 6,
+      "rot": 0,
+      "shelf": 2
+    },
+    {
+      "type": "counter",
+      "x": 2,
+      "y": 7,
+      "rot": 0
+    }
+  ]
+}
