@@ -31,6 +31,11 @@
           var saved = localStorage.getItem('thdh-pocket');
           var px = saved !== null ? Number(saved) : ios && standalone ? 48 : 0;
           if (px > 0) document.documentElement.style.setProperty('--edge-pad', px + 'px');
+          // Lỗi iOS ở app màn hình chính: vùng web ngắn hơn màn hình (thiếu đúng chiều cao thanh trạng thái)
+          // nên đã kết thúc phía trên thanh Home; chừa thêm safe-area dưới chỉ làm game nhỏ lại và lệch.
+          if (ios && standalone && Math.max(screen.width, screen.height) - Math.max(window.innerWidth, window.innerHeight) > 40) {
+            document.documentElement.style.setProperty('--safe-bottom', '0px');
+          }
         } catch (e) {}
       })();
     </script>
@@ -56,7 +61,7 @@
       #game {
         position: fixed;
         inset: 0;
-        inset: calc(env(safe-area-inset-top, 0px) + var(--edge-pad, 0px)) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+        inset: calc(env(safe-area-inset-top, 0px) + var(--edge-pad, 0px)) env(safe-area-inset-right, 0px) var(--safe-bottom, env(safe-area-inset-bottom, 0px)) env(safe-area-inset-left, 0px);
         margin: 0;
         padding: 0;
         overflow: hidden;
@@ -90,7 +95,7 @@
       #edge-bottom {
         bottom: 0;
         background-color: var(--thdh-edge-bottom, #2b1d14);
-        height: env(safe-area-inset-bottom, 0px);
+        height: var(--safe-bottom, env(safe-area-inset-bottom, 0px));
       }
       #rotate {
         display: none;
