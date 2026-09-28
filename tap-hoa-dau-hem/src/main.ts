@@ -46,7 +46,8 @@ const game = new Phaser.Game({
   // ShopScene moves and redraws several layers every frame. On touch devices,
   // cap the loop at 30 FPS to leave the GPU idle between frames and reduce heat.
   fps: { limit: window.matchMedia('(pointer: coarse)').matches ? 30 : 60 },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  // Căn giữa bằng flex của #game (index.html); để Phaser căn nữa thì canvas bị đẩy lệch hai lần.
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.NO_CENTER },
   // Game dùng pixel art; tắt MSAA để giảm chi phí render trên thiết bị yếu.
   render: { antialias: false, roundPixels: false },
   input: { activePointers: 2 },
