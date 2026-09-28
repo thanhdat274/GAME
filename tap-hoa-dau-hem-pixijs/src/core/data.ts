@@ -160,7 +160,21 @@ export interface Balance {
   loveStreakRating: number;
   sellBackRatio: number;
   staff: StaffBalance;
-  security: { thiefChance: number; catchWindowSeconds: number; fineMul: number; refillDetect: number; cameraDetect: number; cameraCost: number };
+  security: {
+    thiefChance: number; catchWindowSeconds: number; fineMul: number; refillDetect: number; cameraDetect: number; cameraCost: number;
+    /** Bảo vệ đang trong ca bắt được bao nhiêu phần kẻ trộm vặt. */
+    guardDetect: number;
+    /** Trộm đột nhập ban đêm: xác suất mỗi đêm, hệ số khi có camera, phần hàng trên kệ bị lấy, số món tối đa. */
+    nightChance: number; nightCameraMul: number; nightStealMin: number; nightStealMax: number; nightMaxItems: number;
+  };
+  /** Hàng chờ tính tiền: khách chen hàng, khách phá phách. */
+  queue: { cutChance: number; cutNoticeSeconds: number; cutSkipPatience: number; rowdyChance: number; rowdyAnnoySeconds: number };
+  /** Hao mòn và sửa chữa nội thất / thiết bị. */
+  maintenance: {
+    wearMin: number; wearMax: number; breakFrom: number; breakPerWear: number; majorWear: number; majorChance: number;
+    repairPct: number; repairMin: number; repairWear: number; lightTrafficMul: number; fanPatienceMul: number;
+    equipment: { id: string; name: string; icon: string; cost: number }[];
+  };
   delivery: {
     ringChancePerSecond: number; minItems: number; maxItems: number; answerSeconds: number; feeBase: number; feePerDistance: number;
     deadlineMin: number; deadlineMax: number; secondsPerDistance: number; onTimeStars: number; lateStars: number;
@@ -287,7 +301,7 @@ export interface StaffBalance {
   shifts: { name: string; from: number; to: number }[];
 }
 
-export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'branch_manager' | 'xoi_cook';
+export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'branch_manager' | 'xoi_cook' | 'guard';
 export type StatKey = 'speed' | 'accuracy' | 'friendly' | 'stamina';
 export type StaffStats = Record<StatKey, number>;
 export interface Look { shirt: string; pants: string; hair: string; skin: string }

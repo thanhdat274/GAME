@@ -22,6 +22,7 @@ export const ROLE_TASKS: Record<StaffRole, TaskKind[]> = {
   barista: [],
   branch_manager: [],
   xoi_cook: [],
+  guard: [],
 };
 
 export const PLAYER = 'player';

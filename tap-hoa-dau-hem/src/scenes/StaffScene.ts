@@ -173,7 +173,7 @@ export class StaffScene extends Phaser.Scene {
       onTap: () => { changeRole(s, st.id, r); persist(); this.render(); },
     }));
     buttons.push({ label: 'Đóng', color: C.grey, onTap: () => undefined });
-    dialog(this, { title: `Vai trò của ${st.name}`, body: 'Thu ngân đứng quầy; Bổ sung kệ nạp ô vơi dưới 40%; Kho cất hàng và bày theo sơ đồ; Giao hàng chạy đơn điện thoại.', buttons });
+    dialog(this, { title: `Vai trò của ${st.name}`, body: 'Thu ngân đứng quầy; Bổ sung kệ nạp ô vơi dưới 40%; Kho cất hàng và bày theo sơ đồ; Giao hàng chạy đơn điện thoại; Bảo vệ đứng cửa bắt trộm, nhắc khách chen hàng / phá phách và trực đêm chống trộm đột nhập.', buttons });
   }
 
   private candidateCard(c: Candidate, y: number, recommendation?: string): number {

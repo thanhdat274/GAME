@@ -4,6 +4,7 @@ import { isMaxLevelSimulation } from './core/simulationMode';
 import { BootScene } from './scenes/BootScene';
 import { BuildScene } from './scenes/BuildScene';
 import { DecorScene } from './scenes/DecorScene';
+import { MaintenanceScene } from './scenes/MaintenanceScene';
 import { LedgerScene } from './scenes/LedgerScene';
 import { TaxScene } from './scenes/TaxScene';
 import { PricesScene } from './scenes/PricesScene';
@@ -52,7 +53,7 @@ const game = new Engine.Game({
   // ?loop=timeout: chạy vòng lặp bằng setTimeout (giống Phaser forceSetTimeOut) để kiểm thử trong khung ẩn.
   fps: { limit: fpsLimit, forceSetTimeOut: new URLSearchParams(window.location.search).get('loop') === 'timeout' },
   antialias: false,
-  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, StoreMapScene, PricesScene, LedgerScene, TaxScene, QuestsScene, DecorScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene, RestockScene, InternalScene, ReviewsScene],
+  scene: [BootScene, TitleScene, HowToScene, MorningScene, ShopScene, SummaryScene, BuildScene, WarehouseScene, StoreMapScene, PricesScene, LedgerScene, TaxScene, QuestsScene, DecorScene, MaintenanceScene, StaffScene, ScheduleScene, RulesScene, AnalyticsScene, CalendarScene, KitchenScene, CookScene, BranchesScene, StoryScene, PrestigeScene, DiningScene, RestockScene, InternalScene, ReviewsScene],
 });
 
 if (import.meta.env.DEV) (window as unknown as { __thdhGame?: Engine.Game }).__thdhGame = game;

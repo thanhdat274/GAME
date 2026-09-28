@@ -274,12 +274,42 @@
     ]
   },
   "security": {
-    "thiefChance": 0.03,
+    "thiefChance": 0.015,
     "catchWindowSeconds": 3,
     "fineMul": 2,
     "refillDetect": 0.3,
     "cameraDetect": 0.8,
-    "cameraCost": 250000
+    "cameraCost": 250000,
+    "guardDetect": 0.9,
+    "nightChance": 0.1,
+    "nightCameraMul": 0.5,
+    "nightStealMin": 0.08,
+    "nightStealMax": 0.2,
+    "nightMaxItems": 40
+  },
+  "queue": {
+    "cutChance": 0.05,
+    "cutNoticeSeconds": 1.6,
+    "cutSkipPatience": 5,
+    "rowdyChance": 0.04,
+    "rowdyAnnoySeconds": 6
+  },
+  "maintenance": {
+    "wearMin": 1,
+    "wearMax": 4,
+    "breakFrom": 55,
+    "breakPerWear": 0.006,
+    "majorWear": 88,
+    "majorChance": 0.25,
+    "repairPct": 0.25,
+    "repairMin": 20000,
+    "repairWear": 20,
+    "lightTrafficMul": 0.85,
+    "fanPatienceMul": 0.85,
+    "equipment": [
+      { "id": "light", "name": "Bóng đèn", "icon": "💡", "cost": 60000 },
+      { "id": "fan", "name": "Quạt", "icon": "🌀", "cost": 250000 }
+    ]
   },
   "delivery": {
     "ringChancePerSecond": 0.012,

@@ -584,6 +584,17 @@ export class ShopScene extends Phaser.Scene {
       toast(this, `${who}\nTrả hàng + bồi thường ${formatMoney(fine)}`, 240, C.greenDark);
     });
     e.on('thiefEscaped', ({ cost }) => { play('wrong'); toast(this, `🏃 Kẻ trộm chạy mất! Mất ${formatMoney(cost)} tiền hàng`, 240, C.red); });
+    // Góc nhìn ngang không có bong bóng trên đầu: báo nhắc nhở bằng dòng chữ nổi.
+    e.on('queueScold', ({ by }) => {
+      if (this.topDown || this.liveMap.visible) return;
+      const who = by === 'player' ? 'Bạn' : this.session.staffOf(by)?.name ?? 'Thu ngân';
+      this.sideFloat(W / 2, 240 + DY, `🗯️ ${who}: "Chen gì mà chen, ra sau xếp hàng!"`, HEX.red, 12);
+    });
+    e.on('rowdy', ({ by, guard }) => {
+      if (this.topDown || this.liveMap.visible) return;
+      const who = by === 'player' ? 'Bạn' : this.session.staffOf(by)?.name ?? 'Nhân viên';
+      this.sideFloat(W / 2, 200 + DY, `${guard ? '💂' : '🗯️'} ${who}: "Giữ trật tự giùm nha!"`, HEX.red, 12);
+    });
     e.on('phoneRing', () => { play('door'); vibrate(40); this.updatePhone(); });
     e.on('phoneOrderUpdate', () => this.updatePhone());
     e.on('incident', (i) => {
@@ -1525,7 +1536,8 @@ export class ShopScene extends Phaser.Scene {
         '🗄️ Chạm kệ: đi tới sát kệ rồi bấm + để nạp, chạm ô trống để bày món, chạm ô "HẠN" để bán xả.',
         '🍳 Chạm bếp / quầy nước để nấu, 📦 kệ kho để xem kho.',
         '🧾 Chạm quầy để về tính tiền. Rời quầy thì khách đầu hàng phải chờ bạn.',
-        staffed ? '👥 Có thu ngân: bạn rời quầy thì khách tự sang quầy thu ngân, bạn đi phụ việc thoải mái.' : '👥 Thuê thu ngân thì bạn được đi lại tự do, khách sẽ sang quầy thu ngân.',
+        staffed ? '👥 Có thu ngân: bạn rời quầy thì khách mới vào quầy thu ngân; khách đang xếp hàng chờ bạn, người tới sớm được mời sang quầy trống.' : '👥 Thuê thu ngân thì bạn được đi lại tự do, khách sẽ sang quầy thu ngân.',
+        '🗯️ Ai tới trước tính trước: khách chen hàng sẽ bị người đứng quầy nhắc ra sau.',
         '🚨 Kẻ trộm bỏ chạy: chạy lại gần rồi chạm để bắt.',
       ].join('\n'),
       width: 330,

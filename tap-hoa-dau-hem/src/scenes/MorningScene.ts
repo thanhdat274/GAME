@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { maintenanceItems, maintenanceUnlocked } from '../core/maintenance';
 import { DATA, hasFeature, product, supplier, type Category, type Product } from '../core/data';
 import { activeShopType } from '../core/shopTypes';
 import { openShop, setManagerMode } from '../core/day';
@@ -358,6 +359,10 @@ export class MorningScene extends Phaser.Scene {
       items.push({ label: `🧾 Sổ thuế${bills.length ? ` (${bills.length})` : ''}`, color: late ? C.red : C.wood, onTap: go('Tax') });
     }
     if (hasFeature(s.level, 'decor')) items.push({ label: '🪴 Trang trí', color: C.wood, onTap: go('Decor') });
+    if (maintenanceUnlocked(s)) {
+      const broken = maintenanceItems(s).filter((item) => item.broken).length;
+      items.push({ label: `🔧 Sửa chữa${broken ? ` (${broken})` : ''}`, color: broken ? C.red : C.wood, onTap: go('Maintenance') });
+    }
     if (hasFeature(s.level, 'staff')) items.push({ label: '👥 Nhân sự', color: C.blue, onTap: go('Staff') });
     if (hasFeature(s.level, 'schedule')) items.push({ label: '📅 Xếp ca', color: C.blue, onTap: go('Schedule') });
     if (hasFeature(s.level, 'stocker') || hasFeature(s.level, 'autorestock')) items.push({ label: '⚙️ Quy tắc', color: C.blue, onTap: go('Rules') });
