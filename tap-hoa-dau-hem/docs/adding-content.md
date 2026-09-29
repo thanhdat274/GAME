@@ -36,3 +36,7 @@ Cần: `fixtures` (có ít nhất một quầy thu ngân), `customers` (id trong
 ## Tra cứu
 
 Dùng `product(id)`, `furniture(id)`, `supplier(id)`, `recipeById(id)`, `recipeByOutput(output)`, `shopTypeById(id)` (đều O(1)) thay cho `DATA.xxx.find(...)`.
+
+## Bản đồ phố (`src/data/cityMap.json`)
+
+Định dạng Tiled JSON (mở/sửa được bằng Tiled; tileset "city" 16×16 do `src/ui/cityTiles.ts` vẽ lúc chạy). Lớp `ground` và `objects` là ô; lớp đối tượng `lots` là các lô đất với thuộc tính `storeId` (`main`, id chi nhánh trong `branches.json`, hoặc rỗng = đất trống), `doorX`, `doorY`. Thêm chi nhánh mới: thêm bản ghi vào `branches.json` **và** một lô có `storeId` tương ứng, nếu không `npm run validate:data` báo lỗi. Bản đồ khởi đầu sinh bằng `npm run city-map` (ghi đè file, dùng khi chưa sửa tay).

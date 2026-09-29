@@ -15,6 +15,7 @@
     "playtest": "vite-node scripts/playtest.ts",
     "sim:staff": "vite-node scripts/simulate-staff.ts",
     "bench:sim": "vite-node scripts/bench-sim.ts",
+    "city-map": "vite-node scripts/make-city-map.ts",
     "validate:data": "vite-node scripts/validate-data.ts",
     "validate:events": "vite-node scripts/validate-events.ts",
     "validate:recipes": "vite-node scripts/validate-recipes.ts",

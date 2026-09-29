@@ -1,5 +1,7 @@
 import { DATA, validateLevels, validateProducts, type Category, type GameData } from './data';
 import events from '../data/events.json';
+import cityMapJson from '../data/cityMap.json';
+import { parseCityMap, validateCityMap, type TiledMap } from './cityMap';
 import { validateEventsData } from './effects';
 import { validateRecipes } from './recipes';
 import { validateShopTypes } from './shopTypes';
@@ -184,6 +186,9 @@ export function validateContent(data: GameData = DATA): string[] {
   }
   ids(data.titles, 'titles', report);
   data.titles.forEach((t, i) => { if (i > 0 && t.stars <= data.titles[i - 1].stars) report.add(`titles.${t.id}`, 'stars phải tăng dần'); });
+
+  const storeIds = new Set(['main', ...data.branches.map((b) => b.id)]);
+  report.errors.push(...validateCityMap(parseCityMap(cityMapJson as unknown as TiledMap), storeIds, data.branches.map((b) => b.id)));
 
   return report.errors;
 }
