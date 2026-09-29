@@ -41,7 +41,7 @@ export function drawFloor(scene: Phaser.Scene, geom: FloorGeom, land: string[]):
 /** Một nội thất trên mặt bằng, kèm nhãn kệ và chấm mức hàng. */
 export function drawFixture(
   scene: Phaser.Scene, geom: FloorGeom, f: Fixture,
-  o: { selected?: boolean; stock?: keyof typeof STOCK_COLOR | null } = {},
+  o: { selected?: boolean; stock?: keyof typeof STOCK_COLOR | null; alert?: boolean } = {},
 ): Phaser.GameObjects.Container {
   const { gx, gy, cell } = geom;
   const def = furniture(f.type);
@@ -58,7 +58,12 @@ export function drawFixture(
     const tag = txt(scene, (w * cell) / 2, h * cell - 8, `${def.kind === 'shelf' ? 'Kệ' : def.name} ${f.shelf + 1}`, { size: 8, bold: true, color: HEX.white, origin: [0.5, 0.5] });
     c.add(tag.setBackgroundColor('#000000aa').setPadding(3, 0, 3, 0));
   }
-  if (o.stock) c.add(scene.add.circle(w * cell - 8, 8, 5, STOCK_COLOR[o.stock]).setStrokeStyle(1.5, 0xffffff));
+  if (o.stock) {
+    c.add(scene.add.circle(w * cell - 8, 8, 5, STOCK_COLOR[o.stock]).setStrokeStyle(1.5, 0xffffff));
+    if (o.stock === 'empty' || o.alert) {
+      c.add(txt(scene, w * cell - 8, 8, '!', { size: 9, bold: true, color: HEX.white, origin: [0.5, 0.5] }));
+    }
+  }
   return c;
 }
 

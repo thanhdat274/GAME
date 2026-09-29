@@ -1,5 +1,5 @@
 {
-  "maxLevel": 35,
+  "maxLevel": 50,
   "prestigeExpPerStar": 43210,
   "nextTeaser": "Đã đạt level tối đa; EXP tiếp tục cộng danh hiệu",
   "levels": [
@@ -30,8 +30,8 @@
         "snack"
       ],
       "shelves": 3,
-      "counterUnlock": true,
-      "label": "Mở thêm kệ thứ 3 · Hàng sau quầy"
+      "label": "Mở thêm kệ thứ 3 · Hàng sau quầy",
+      "counterUnlock": true
     },
     {
       "level": 4,
@@ -558,7 +558,8 @@
       "shelves": 3,
       "staffSlots": 12,
       "features": [
-        "truck"
+        "truck",
+        "shop_veg"
       ],
       "label": "Xe tải chuyển hàng · Thêm chỗ nhân viên",
       "traffic": 7.7
@@ -577,7 +578,8 @@
       "shelves": 3,
       "staffSlots": 12,
       "features": [
-        "chain_analytics"
+        "chain_analytics",
+        "shop_drink"
       ],
       "label": "Báo cáo toàn chuỗi",
       "traffic": 7.9
@@ -615,7 +617,8 @@
       "shelves": 3,
       "staffSlots": 14,
       "features": [
-        "story_chain"
+        "story_chain",
+        "shop_home"
       ],
       "label": "Chương Lên phố mở chuỗi · Thêm chỗ nhân viên",
       "traffic": 8.3
@@ -634,11 +637,270 @@
       "shelves": 3,
       "staffSlots": 16,
       "features": [
-        "branch_industrial",
+        "branch_industrial"
+      ],
+      "label": "Chi nhánh Khu công nghiệp (16 chỗ)",
+      "traffic": 8.5
+    },
+    {
+      "level": 36,
+      "exp": 38250,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 16,
+      "features": [
+        "shop_tea",
+        "tea_barista"
+      ],
+      "label": "Tiệm trà sữa · Quầy pha trà",
+      "traffic": 8.7
+    },
+    {
+      "level": 37,
+      "exp": 41550,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 17,
+      "label": "Lục trà, siro vải · Thêm chỗ nhân viên (17 chỗ)",
+      "traffic": 8.9
+    },
+    {
+      "level": 38,
+      "exp": 45150,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 17,
+      "features": [
+        "warehouse_hub"
+      ],
+      "label": "Kho trung tâm · Trà thái đỏ, hồng trà đào",
+      "traffic": 9.1
+    },
+    {
+      "level": 39,
+      "exp": 49050,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 17,
+      "label": "Ô long sữa · Matcha latte",
+      "traffic": 9.3
+    },
+    {
+      "level": 40,
+      "exp": 53250,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 18,
+      "features": [
+        "shop_bakery"
+      ],
+      "label": "Tiệm bánh kẹo · Trà dâu thạch (18 chỗ)",
+      "traffic": 9.5
+    },
+    {
+      "level": 41,
+      "exp": 57800,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 18,
+      "features": [
+        "foam_machine",
+        "foam_specialist"
+      ],
+      "label": "Máy đánh foam · Hồng trà macchiato",
+      "traffic": 9.7
+    },
+    {
+      "level": 42,
+      "exp": 62750,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 18,
+      "label": "Pudding trứng · Biển neon trà sữa",
+      "traffic": 9.9
+    },
+    {
+      "level": 43,
+      "exp": 68150,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 19,
+      "label": "Matcha foam · Thêm chỗ nhân viên (19 chỗ)",
+      "traffic": 10.1
+    },
+    {
+      "level": 44,
+      "exp": 74000,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 19,
+      "label": "Trà nho sương sáo · Kệ hoa trang trí",
+      "traffic": 10.3
+    },
+    {
+      "level": 45,
+      "exp": 80350,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 20,
+      "features": [
+        "shop_mart"
+      ],
+      "label": "Siêu thị mini · Ô long foam muối (20 chỗ)",
+      "traffic": 10.5
+    },
+    {
+      "level": 46,
+      "exp": 87200,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 20,
+      "label": "Trà chanh dây",
+      "traffic": 10.7
+    },
+    {
+      "level": 47,
+      "exp": 94650,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 21,
+      "label": "Trà sữa khoai môn · Thêm chỗ nhân viên (21 chỗ)",
+      "traffic": 10.9
+    },
+    {
+      "level": 48,
+      "exp": 102750,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 21,
+      "label": "Tranh tường trà sữa",
+      "traffic": 11.1
+    },
+    {
+      "level": 49,
+      "exp": 111500,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 22,
+      "label": "Thêm chỗ nhân viên (22 chỗ)",
+      "traffic": 11.3
+    },
+    {
+      "level": 50,
+      "exp": 121000,
+      "categories": [
+        "dry",
+        "snack",
+        "household",
+        "drink",
+        "fresh",
+        "frozen"
+      ],
+      "shelves": 3,
+      "staffSlots": 22,
+      "features": [
         "prestige"
       ],
-      "label": "Chi nhánh Khu công nghiệp · Danh hiệu (16 chỗ)",
-      "traffic": 8.5
+      "label": "Danh hiệu · Cấp tối đa",
+      "traffic": 11.5
     }
   ]
 }

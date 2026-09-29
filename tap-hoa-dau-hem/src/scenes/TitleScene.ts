@@ -5,7 +5,7 @@ import { G, newGame, persist, sceneForPhase, setPlayClockRunning } from '../game
 import { isMaxLevelSimulation } from '../core/simulationMode';
 import { drawStorefront } from '../ui/art';
 import { play, setSoundEnabled, startMusic, stopMusic } from '../ui/sound';
-import { Button, dialog, toast, type DialogButton } from '../ui/widgets';
+import { Button, dialog, panel, toast, type DialogButton } from '../ui/widgets';
 import { C, H, HEX, W, setEdgeColors, setupCamera, txt } from '../ui/theme';
 import { currentAccount, deleteCurrentAccount, googleSignInErrorMessage, signInWithGoogle, signOutGoogle, type AccountUser } from '../services/auth';
 import { chromeIntentUrl, detectInAppBrowser } from '../services/inAppBrowser';
@@ -13,7 +13,7 @@ import { cloudSaveEnabled, firebaseConfigured, hasAuthHint } from '../services/f
 import { getPendingConflict, onSyncStatus, resolveConflict, startSync, syncNow, type SyncStatus } from '../services/sync';
 import { loadDiscarded, saveDiscarded } from '../services/cloudSave';
 import { fetchMyRank, fetchTopLeaderboard } from '../services/leaderboard';
-import { joinLiveShop, liveShopEnabled } from '../services/liveShop';
+import { joinLiveShop } from '../services/liveShop';
 import { applyOfflineIncome, offlineElapsed, offlineUnlocked, type OfflineReport } from '../core/offline';
 import { formatMoney } from '../core/state';
 import { getServerNow } from '../services/serverTime';
@@ -58,20 +58,24 @@ export class TitleScene extends Phaser.Scene {
     setEdgeColors('#eb6434', '#473b35');
 
     // Vẽ toàn bộ phối cảnh tiệm tạp hóa hoài niệm (bầu trời, mây trôi, ánh nắng, tiệm cổ xưa, dây đèn vàng, mèo tam thể, vỉa hè)
-    drawStorefront(this, W / 2, 352, G.state.land.includes('D'));
-    if (isMaxLevelSimulation) txt(this, W / 2, 58, 'MÔ PHỎNG MAX LEVEL · SAVE RIÊNG', { size: 9, bold: true, color: '#fff2c8', origin: [0.5, 0.5] });
+    const landscapeMenu = W > H;
+    const storeX = landscapeMenu ? Math.round(W * 0.28) : W / 2;
+    drawStorefront(this, storeX, 352, G.state.land.includes('D'));
+    if (isMaxLevelSimulation) txt(this, storeX, 58, 'MÔ PHỎNG MAX LEVEL · SAVE RIÊNG', { size: 9, bold: true, color: '#fff2c8', origin: [0.5, 0.5] });
 
     // Nút Âm thanh nhanh góc trên bên trái
+    const soundX = landscapeMenu ? 24 : 28;
+    const soundY = landscapeMenu ? 20 : 22;
     const soundBtnG = this.add.graphics();
-    soundBtnG.fillStyle(0x000000, 0.25).fillCircle(28, 23, 16);
-    soundBtnG.fillStyle(0x3e2314, 1).fillCircle(28, 22, 16);
-    soundBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(28, 22, 16);
-    const soundIcon = txt(this, 28, 22, G.state.settings.sound ? '🔊' : '🔇', {
-      size: 14,
+    soundBtnG.fillStyle(0x000000, 0.25).fillCircle(soundX, soundY + 1, 15);
+    soundBtnG.fillStyle(0x3e2314, 1).fillCircle(soundX, soundY, 15);
+    soundBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(soundX, soundY, 15);
+    const soundIcon = txt(this, soundX, soundY, G.state.settings.sound ? '🔊' : '🔇', {
+      size: 13,
       emoji: true,
       origin: [0.5, 0.5],
     });
-    const soundZone = this.add.zone(28, 22, 34, 34).setInteractive({ useHandCursor: true });
+    const soundZone = this.add.zone(soundX, soundY, 32, 32).setInteractive({ useHandCursor: true });
     soundZone.on('pointerup', () => {
       G.state.settings.sound = !G.state.settings.sound;
       setSoundEnabled(G.state.settings.sound);
@@ -80,13 +84,15 @@ export class TitleScene extends Phaser.Scene {
     });
 
     // Nút Kiểm tra cập nhật cạnh nút âm thanh
+    const updateX = landscapeMenu ? 58 : 66;
+    const updateY = soundY;
     const updateBtnG = this.add.graphics();
-    updateBtnG.fillStyle(0x000000, 0.25).fillCircle(66, 23, 16);
-    updateBtnG.fillStyle(0x3e2314, 1).fillCircle(66, 22, 16);
-    updateBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(66, 22, 16);
-    txt(this, 66, 22, '🔄', { size: 14, emoji: true, origin: [0.5, 0.5] });
+    updateBtnG.fillStyle(0x000000, 0.25).fillCircle(updateX, updateY + 1, 15);
+    updateBtnG.fillStyle(0x3e2314, 1).fillCircle(updateX, updateY, 15);
+    updateBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(updateX, updateY, 15);
+    txt(this, updateX, updateY, '🔄', { size: 13, emoji: true, origin: [0.5, 0.5] });
     let checkingUpdate = false;
-    const updateZone = this.add.zone(66, 22, 34, 34).setInteractive({ useHandCursor: true });
+    const updateZone = this.add.zone(updateX, updateY, 32, 32).setInteractive({ useHandCursor: true });
     updateZone.on('pointerup', () => {
       if (checkingUpdate) return;
       checkingUpdate = true;
@@ -98,50 +104,488 @@ export class TitleScene extends Phaser.Scene {
     });
 
     // Nút Mã sao lưu (xuất / nhập tiến trình để chuyển máy) cạnh nút cập nhật
+    const backupX = landscapeMenu ? 92 : 104;
+    const backupY = soundY;
     const backupBtnG = this.add.graphics();
-    backupBtnG.fillStyle(0x000000, 0.25).fillCircle(104, 23, 16);
-    backupBtnG.fillStyle(0x3e2314, 1).fillCircle(104, 22, 16);
-    backupBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(104, 22, 16);
-    txt(this, 104, 22, '💾', { size: 14, emoji: true, origin: [0.5, 0.5] });
-    const backupZone = this.add.zone(104, 22, 34, 34).setInteractive({ useHandCursor: true });
+    backupBtnG.fillStyle(0x000000, 0.25).fillCircle(backupX, backupY + 1, 15);
+    backupBtnG.fillStyle(0x3e2314, 1).fillCircle(backupX, backupY, 15);
+    backupBtnG.lineStyle(1.5, 0xdfb475, 1).strokeCircle(backupX, backupY, 15);
+    txt(this, backupX, backupY, '💾', { size: 13, emoji: true, origin: [0.5, 0.5] });
+    const backupZone = this.add.zone(backupX, backupY, 32, 32).setInteractive({ useHandCursor: true });
     backupZone.on('pointerup', () => openBackupMenu(this, () => this.scene.restart()));
 
-    // Pill tài khoản Google góc trên bên phải
-    if (!isMaxLevelSimulation && cloudSaveEnabled()) {
-      const pillW = 168;
-      const pillH = 32;
-      const pillR = 16;
-      const pillX = W - 14 - pillW / 2;
-      const pillY = 22;
+    const saved = hasSave();
+    const hasCloud = !isMaxLevelSimulation && cloudSaveEnabled();
 
-      const pillG = this.add.graphics();
-      pillG.fillStyle(0x000000, 0.25).fillRoundedRect(pillX - pillW / 2, pillY - pillH / 2 + 1.5, pillW, pillH, pillR);
-      pillG.fillStyle(0xfffaef, 1).fillRoundedRect(pillX - pillW / 2, pillY - pillH / 2, pillW, pillH, pillR);
-      pillG.lineStyle(1.5, 0xdfb475, 1).strokeRoundedRect(pillX - pillW / 2, pillY - pillH / 2, pillW, pillH, pillR);
+    if (landscapeMenu) {
+      // Bảng điều khiển gỗ gọn gàng, trang nhã bên phải trong chế độ ngang
+      const rightAreaLeft = 352;
+      const cardW = Math.min(276, Math.floor((W - rightAreaLeft - 16)));
+      const cardH = hasCloud ? 306 : 288;
+      const cardX = Math.round(rightAreaLeft + (W - rightAreaLeft) / 2);
+      const cardY = Math.round((H - cardH) / 2);
 
-      // Icon tròn 'G'
-      pillG.fillStyle(0xffffff, 1).fillCircle(pillX - pillW / 2 + 16, pillY, 11);
-      pillG.lineStyle(1, 0xe5d8c5, 1).strokeCircle(pillX - pillW / 2 + 16, pillY, 11);
-      this.accountAvatarPlaceholder = txt(this, pillX - pillW / 2 + 16, pillY, 'G', { size: 13, bold: true, color: '#4285f4', origin: [0.5, 0.5] });
-      this.accountAvatarPosition = { x: pillX - pillW / 2 + 16, y: pillY };
+      const cardG = this.add.graphics();
+      // Bóng đổ
+      cardG.fillStyle(0x000000, 0.35).fillRoundedRect(cardX - cardW / 2 + 2, cardY + 3, cardW, cardH, 12);
+      // Nền gỗ sậm sang trọng
+      cardG.fillStyle(0x2d1b11, 0.94).fillRoundedRect(cardX - cardW / 2, cardY, cardW, cardH, 12);
+      // Viền kép chỉ vàng cổ điển
+      cardG.lineStyle(1.5, 0xb88846, 0.85).strokeRoundedRect(cardX - cardW / 2 + 1, cardY + 1, cardW - 2, cardH - 2, 11);
+      cardG.lineStyle(1, 0xe5c278, 0.3).strokeRoundedRect(cardX - cardW / 2 + 4, cardY + 4, cardW - 8, cardH - 8, 9);
 
-      this.accountLabel = txt(this, pillX - pillW / 2 + 32, pillY, 'Đăng nhập', {
-        size: 11,
+      // 1. Khung tài khoản Google tích hợp bên trong bảng điều khiển (không nổi lơ lửng ngoài màn hình)
+      if (hasCloud) {
+        const accW = cardW - 24;
+        const accH = 26;
+        const accX = cardX;
+        const accY = cardY + 18;
+
+        const accG = this.add.graphics();
+        accG.fillStyle(0x000000, 0.25).fillRoundedRect(accX - accW / 2, accY - accH / 2 + 1, accW, accH, 7);
+        accG.fillStyle(0x1d1109, 0.92).fillRoundedRect(accX - accW / 2, accY - accH / 2, accW, accH, 7);
+        accG.lineStyle(1.2, 0xb88846, 0.8).strokeRoundedRect(accX - accW / 2, accY - accH / 2, accW, accH, 7);
+
+        const avatarX = accX - accW / 2 + 14;
+        const avatarY = accY;
+        accG.fillStyle(0x3e2314, 1).fillCircle(avatarX, avatarY, 9.5);
+        accG.lineStyle(1, 0xdfb475, 1).strokeCircle(avatarX, avatarY, 9.5);
+        this.accountAvatarPlaceholder = txt(this, avatarX, avatarY, 'G', { size: 11, bold: true, color: '#f2c94c', origin: [0.5, 0.5] });
+        this.accountAvatarPosition = { x: avatarX, y: avatarY };
+
+        this.accountLabel = txt(this, avatarX + 15, avatarY, 'Đăng nhập · Lưu đám mây', {
+          size: 10,
+          bold: true,
+          color: '#fff4d6',
+          origin: [0, 0.5],
+        });
+
+        this.syncDot = this.add.graphics({ x: accX + accW / 2 - 24, y: avatarY });
+        this.updateSyncDot(this.syncStatus);
+
+        txt(this, accX + accW / 2 - 10, avatarY - 1, '›', { size: 14, bold: true, color: '#dfb475', origin: [0.5, 0.5] });
+
+        const accountBtn = this.add.zone(accX, accY, accW, accH).setInteractive({ useHandCursor: true });
+        accountBtn.on('pointerup', () => { void this.openAccount(); });
+
+        cardG.lineStyle(1, 0x5a3d28, 0.7).lineBetween(cardX - cardW / 2 + 16, cardY + 34, cardX + cardW / 2 - 16, cardY + 34);
+      }
+
+      // 2. Tiêu đề bảng điều khiển
+      const titleY = hasCloud ? cardY + 48 : cardY + 18;
+      const subY = hasCloud ? cardY + 62 : cardY + 33;
+      const divY = hasCloud ? cardY + 72 : cardY + 45;
+
+      txt(this, cardX, titleY, '🏪 TIỆM TẠP HÓA ĐẦU HẺM', {
+        size: 12.5,
         bold: true,
-        color: HEX.ink,
-        origin: [0, 0.5],
+        color: '#ffdf8d',
+        origin: [0.5, 0.5],
       });
+      const subText = saved
+        ? `Ngày ${G.state.day} · Vốn ${formatMoney(G.state.money)}`
+        : 'Khai trương tiệm mới · 500k làm vốn';
+      txt(this, cardX, subY, subText, {
+        size: 9.5,
+        color: '#d9c2a7',
+        origin: [0.5, 0.5],
+      });
+      // Vạch ngăn cách
+      cardG.lineStyle(1, 0x5a3d28, 0.8).lineBetween(cardX - cardW / 2 + 16, divY, cardX + cardW / 2 - 16, divY);
 
-      // Chấm tròn trạng thái sync
-      this.syncDot = this.add.graphics({ x: pillX + pillW / 2 - 25, y: pillY });
-      this.updateSyncDot(this.syncStatus);
+      const btnW = cardW - 28;
+      const toggleW = Math.floor((btnW - 8) / 2);
 
-      // Mũi tên ›
-      txt(this, pillX + pillW / 2 - 12, pillY - 1, '›', { size: 15, bold: true, color: HEX.muted, origin: [0.5, 0.5] });
+      const autoChangeColor = () => (G.state.settings.autoChange ? 0x2e7545 : 0x4e3322);
+      const autoChangeStroke = () => (G.state.settings.autoChange ? 0x5ebd7c : 0x7c5840);
+      const autoChangeLabel = () => (G.state.settings.autoChange ? '🧮 Thối: Bật' : '✋ Thối: Tắt');
 
-      const accountBtn = this.add.zone(pillX, pillY, pillW, pillH).setInteractive({ useHandCursor: true });
-      accountBtn.on('pointerup', () => { void this.openAccount(); });
+      const autoScanColor = () => (G.state.settings.autoScan ? 0x2e7545 : 0x4e3322);
+      const autoScanStroke = () => (G.state.settings.autoScan ? 0x5ebd7c : 0x7c5840);
+      const autoScanLabel = () => (G.state.settings.autoScan ? '📦 Quét: Bật' : '🧺 Quét: Tắt');
 
+      const offsetY = hasCloud ? 24 : 0;
+
+      if (saved) {
+        // 1. Chơi tiếp
+        const continueBtn = new Button(this, cardX, cardY + 74 + offsetY, {
+          w: btnW,
+          h: 40,
+          label: `▶   Chơi tiếp (Ngày ${G.state.day})`,
+          color: 0x2e8b4e,
+          stroke: 0x66cc8a,
+          strokeAlpha: 0.65,
+          size: 14,
+          radius: 10,
+          onTap: () => this.continueGame(),
+        });
+        this.tweens.add({
+          targets: continueBtn,
+          scale: 1.025,
+          duration: 950,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+
+        // 2. Chơi mới
+        new Button(this, cardX, cardY + 120 + offsetY, {
+          w: btnW,
+          h: 34,
+          label: '✨   Chơi mới',
+          color: 0xc8562d,
+          stroke: 0xf59871,
+          strokeAlpha: 0.55,
+          size: 13,
+          radius: 9,
+          onTap: () => this.askNewGame(saved),
+        });
+
+        // 3. Cách chơi
+        new Button(this, cardX, cardY + 162 + offsetY, {
+          w: btnW,
+          h: 32,
+          label: '📖   Cách chơi',
+          color: 0x734828,
+          stroke: 0xdfb475,
+          strokeAlpha: 0.45,
+          size: 12.5,
+          radius: 9,
+          onTap: () => this.scene.start('HowTo'),
+        });
+
+        // 4. Hai nút trợ giúp thối / quét
+        const toggleY = cardY + 202 + offsetY;
+        const autoBtn = new Button(this, cardX - toggleW / 2 - 4, toggleY, {
+          w: toggleW,
+          h: 28,
+          label: autoChangeLabel(),
+          color: autoChangeColor(),
+          stroke: autoChangeStroke(),
+          strokeAlpha: 0.6,
+          size: 11,
+          radius: 8,
+          onTap: () => {
+            G.state.settings.autoChange = !G.state.settings.autoChange;
+            autoBtn.setText(autoChangeLabel());
+            autoBtn.setStyle(autoChangeColor(), autoChangeStroke());
+            persist();
+          },
+        });
+        const scanBtn = new Button(this, cardX + toggleW / 2 + 4, toggleY, {
+          w: toggleW,
+          h: 28,
+          label: autoScanLabel(),
+          color: autoScanColor(),
+          stroke: autoScanStroke(),
+          strokeAlpha: 0.6,
+          size: 11,
+          radius: 8,
+          onTap: () => {
+            G.state.settings.autoScan = !G.state.settings.autoScan;
+            scanBtn.setText(autoScanLabel());
+            scanBtn.setStyle(autoScanColor(), autoScanStroke());
+            persist();
+          },
+        });
+
+        // 5. Bảng xếp hạng
+        this.addLeaderboardButton(cardY + 240 + offsetY, cardX, true, btnW);
+      } else {
+        // Người chơi mới
+        const startBtn = new Button(this, cardX, cardY + 80 + offsetY, {
+          w: btnW,
+          h: 44,
+          label: '▶   Mở tiệm ngay',
+          color: 0x2e8b4e,
+          stroke: 0x66cc8a,
+          strokeAlpha: 0.65,
+          size: 15,
+          radius: 10,
+          onTap: () => this.startNew(),
+        });
+        this.tweens.add({
+          targets: startBtn,
+          scale: 1.025,
+          duration: 950,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+
+        new Button(this, cardX, cardY + 134 + offsetY, {
+          w: btnW,
+          h: 36,
+          label: '📖   Cách chơi',
+          color: 0x734828,
+          stroke: 0xdfb475,
+          strokeAlpha: 0.45,
+          size: 13,
+          radius: 9,
+          onTap: () => this.scene.start('HowTo'),
+        });
+
+        const toggleY = cardY + 182 + offsetY;
+        const autoBtn = new Button(this, cardX - toggleW / 2 - 4, toggleY, {
+          w: toggleW,
+          h: 28,
+          label: autoChangeLabel(),
+          color: autoChangeColor(),
+          stroke: autoChangeStroke(),
+          strokeAlpha: 0.6,
+          size: 11,
+          radius: 8,
+          onTap: () => {
+            G.state.settings.autoChange = !G.state.settings.autoChange;
+            autoBtn.setText(autoChangeLabel());
+            autoBtn.setStyle(autoChangeColor(), autoChangeStroke());
+            persist();
+          },
+        });
+        const scanBtn = new Button(this, cardX + toggleW / 2 + 4, toggleY, {
+          w: toggleW,
+          h: 28,
+          label: autoScanLabel(),
+          color: autoScanColor(),
+          stroke: autoScanStroke(),
+          strokeAlpha: 0.6,
+          size: 11,
+          radius: 8,
+          onTap: () => {
+            G.state.settings.autoScan = !G.state.settings.autoScan;
+            scanBtn.setText(autoScanLabel());
+            scanBtn.setStyle(autoScanColor(), autoScanStroke());
+            persist();
+          },
+        });
+
+        this.addLeaderboardButton(cardY + 224 + offsetY, cardX, true, btnW);
+      }
+    } else {
+      // Chế độ dọc: Pill tài khoản Google ở góc trên bên phải
+      if (hasCloud) {
+        const pillW = 168;
+        const pillH = 32;
+        const pillR = 16;
+        const pillX = W - 14 - pillW / 2;
+        const pillY = soundY;
+
+        const pillG = this.add.graphics();
+        pillG.fillStyle(0x000000, 0.25).fillRoundedRect(pillX - pillW / 2, pillY - pillH / 2 + 1.5, pillW, pillH, pillR);
+        pillG.fillStyle(0xfffaef, 1).fillRoundedRect(pillX - pillW / 2, pillY - pillH / 2, pillW, pillH, pillR);
+        pillG.lineStyle(1.5, 0xdfb475, 1).strokeRoundedRect(pillX - pillW / 2, pillY - pillH / 2, pillW, pillH, pillR);
+
+        // Icon tròn 'G'
+        pillG.fillStyle(0xffffff, 1).fillCircle(pillX - pillW / 2 + 16, pillY, 11);
+        pillG.lineStyle(1, 0xe5d8c5, 1).strokeCircle(pillX - pillW / 2 + 16, pillY, 11);
+        this.accountAvatarPlaceholder = txt(this, pillX - pillW / 2 + 16, pillY, 'G', { size: 13, bold: true, color: '#4285f4', origin: [0.5, 0.5] });
+        this.accountAvatarPosition = { x: pillX - pillW / 2 + 16, y: pillY };
+
+        this.accountLabel = txt(this, pillX - pillW / 2 + 32, pillY, 'Đăng nhập', {
+          size: 11,
+          bold: true,
+          color: HEX.ink,
+          origin: [0, 0.5],
+        });
+
+        // Chấm tròn trạng thái sync
+        this.syncDot = this.add.graphics({ x: pillX + pillW / 2 - 25, y: pillY });
+        this.updateSyncDot(this.syncStatus);
+
+        // Mũi tên ›
+        txt(this, pillX + pillW / 2 - 12, pillY - 1, '›', { size: 15, bold: true, color: HEX.muted, origin: [0.5, 0.5] });
+
+        const accountBtn = this.add.zone(pillX, pillY, pillW, pillH).setInteractive({ useHandCursor: true });
+        accountBtn.on('pointerup', () => { void this.openAccount(); });
+      }
+      const btnX = W / 2;
+      const btnW = 268;
+      const extraY = Math.max(0, (H - 640) * 0.9);
+      const continueY = 388 + extraY;
+      const newGameY = 444 + extraY;
+      const howToY = 496 + extraY;
+      const toggleYResponsive = 546 + extraY;
+      const toggleCenterX = W / 2;
+      const toggleGap = 69;
+      const toggleWResponsive = 130;
+
+      if (saved) {
+        const continueBtn = new Button(this, btnX, continueY, {
+          w: btnW,
+          h: 48,
+          label: `▶   Chơi tiếp (Ngày ${G.state.day})`,
+          color: 0x2e8b4e,
+          stroke: 0x66cc8a,
+          strokeAlpha: 0.65,
+          size: 16,
+          radius: 12,
+          onTap: () => this.continueGame(),
+        });
+        this.tweens.add({
+          targets: continueBtn,
+          scale: 1.025,
+          duration: 950,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+
+        new Button(this, btnX, newGameY, {
+          w: btnW,
+          h: 42,
+          label: '✨   Chơi mới',
+          color: 0xc8562d,
+          stroke: 0xf59871,
+          strokeAlpha: 0.55,
+          size: 15,
+          radius: 11,
+          onTap: () => this.askNewGame(saved),
+        });
+
+        new Button(this, btnX, howToY, {
+          w: btnW,
+          h: 38,
+          label: '📖   Cách chơi',
+          color: 0x734828,
+          stroke: 0xdfb475,
+          strokeAlpha: 0.45,
+          size: 14,
+          radius: 10,
+          onTap: () => this.scene.start('HowTo'),
+        });
+
+        const toggleW = toggleWResponsive;
+        const toggleH = 36;
+        const toggleY = toggleYResponsive;
+
+        const autoChangeColor = () => (G.state.settings.autoChange ? 0x2e7545 : 0x4e3322);
+        const autoChangeStroke = () => (G.state.settings.autoChange ? 0x5ebd7c : 0x7c5840);
+        const autoChangeLabel = () => (G.state.settings.autoChange ? '🧮  Thối: Bật' : '✋  Thối: Tắt');
+
+        const autoBtn = new Button(this, toggleCenterX - toggleGap, toggleY, {
+          w: toggleW,
+          h: toggleH,
+          label: autoChangeLabel(),
+          color: autoChangeColor(),
+          stroke: autoChangeStroke(),
+          strokeAlpha: 0.6,
+          size: 12.5,
+          radius: 9,
+          onTap: () => {
+            G.state.settings.autoChange = !G.state.settings.autoChange;
+            autoBtn.setText(autoChangeLabel());
+            autoBtn.setStyle(autoChangeColor(), autoChangeStroke());
+            persist();
+          },
+        });
+
+        const autoScanColor = () => (G.state.settings.autoScan ? 0x2e7545 : 0x4e3322);
+        const autoScanStroke = () => (G.state.settings.autoScan ? 0x5ebd7c : 0x7c5840);
+        const autoScanLabel = () => (G.state.settings.autoScan ? '📦  Quét: Bật' : '🧺  Quét: Tắt');
+
+        const scanBtn = new Button(this, toggleCenterX + toggleGap, toggleY, {
+          w: toggleW,
+          h: toggleH,
+          label: autoScanLabel(),
+          color: autoScanColor(),
+          stroke: autoScanStroke(),
+          strokeAlpha: 0.6,
+          size: 12.5,
+          radius: 9,
+          onTap: () => {
+            G.state.settings.autoScan = !G.state.settings.autoScan;
+            scanBtn.setText(autoScanLabel());
+            scanBtn.setStyle(autoScanColor(), autoScanStroke());
+            persist();
+          },
+        });
+
+        this.addLeaderboardButton(toggleY + 44, W / 2, false);
+      } else {
+        const startBtn = new Button(this, btnX, 406 + extraY, {
+          w: btnW,
+          h: 50,
+          label: '▶   Mở tiệm ngay',
+          color: 0x2e8b4e,
+          stroke: 0x66cc8a,
+          strokeAlpha: 0.65,
+          size: 17,
+          radius: 12,
+          onTap: () => this.startNew(),
+        });
+        this.tweens.add({
+          targets: startBtn,
+          scale: 1.025,
+          duration: 950,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+
+        new Button(this, btnX, howToY, {
+          w: btnW,
+          h: 42,
+          label: '📖   Cách chơi',
+          color: 0x734828,
+          stroke: 0xdfb475,
+          strokeAlpha: 0.45,
+          size: 15,
+          radius: 11,
+          onTap: () => this.scene.start('HowTo'),
+        });
+
+        const toggleW = toggleWResponsive;
+        const toggleH = 36;
+        const toggleY = toggleYResponsive;
+
+        const autoChangeColor = () => (G.state.settings.autoChange ? 0x2e7545 : 0x4e3322);
+        const autoChangeStroke = () => (G.state.settings.autoChange ? 0x5ebd7c : 0x7c5840);
+        const autoChangeLabel = () => (G.state.settings.autoChange ? '🧮  Thối: Bật' : '✋  Thối: Tắt');
+
+        const autoBtn = new Button(this, toggleCenterX - toggleGap, toggleY, {
+          w: toggleW,
+          h: toggleH,
+          label: autoChangeLabel(),
+          color: autoChangeColor(),
+          stroke: autoChangeStroke(),
+          strokeAlpha: 0.6,
+          size: 12.5,
+          radius: 9,
+          onTap: () => {
+            G.state.settings.autoChange = !G.state.settings.autoChange;
+            autoBtn.setText(autoChangeLabel());
+            autoBtn.setStyle(autoChangeColor(), autoChangeStroke());
+            persist();
+          },
+        });
+
+        const autoScanColor = () => (G.state.settings.autoScan ? 0x2e7545 : 0x4e3322);
+        const autoScanStroke = () => (G.state.settings.autoScan ? 0x5ebd7c : 0x7c5840);
+        const autoScanLabel = () => (G.state.settings.autoScan ? '📦  Quét: Bật' : '🧺  Quét: Tắt');
+
+        const scanBtn = new Button(this, toggleCenterX + toggleGap, toggleY, {
+          w: toggleW,
+          h: toggleH,
+          label: autoScanLabel(),
+          color: autoScanColor(),
+          stroke: autoScanStroke(),
+          strokeAlpha: 0.6,
+          size: 12.5,
+          radius: 9,
+          onTap: () => {
+            G.state.settings.autoScan = !G.state.settings.autoScan;
+            scanBtn.setText(autoScanLabel());
+            scanBtn.setStyle(autoScanColor(), autoScanStroke());
+            persist();
+          },
+        });
+
+        this.addLeaderboardButton(toggleY + 44, W / 2, false);
+      }
+    }
+
+    // Đăng ký lắng nghe trạng thái đồng bộ đám mây
+    if (hasCloud) {
       const unsubscribeStatus = onSyncStatus((status, message) => {
         this.syncStatus = status;
         this.syncMessage = message ?? null;
@@ -150,10 +594,6 @@ export class TitleScene extends Phaser.Scene {
       });
 
       if (firebaseConfigured()) {
-        // On redirect-capable browsers (notably iOS Safari), finish the OAuth
-        // callback before checking the persisted user. Running both in parallel
-        // can let currentAccount() observe the pre-redirect null state and leave
-        // the title pill showing “Đăng nhập” until the player taps it again.
         void (async () => {
           await startSync();
           await this.refreshAccount();
@@ -163,195 +603,11 @@ export class TitleScene extends Phaser.Scene {
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribeStatus);
     }
 
-    // Các nút chức năng chính trên vỉa hè (tự canh đều theo chiều cao màn hình)
-    const saved = hasSave();
-    const btnW = 268;
-    const extraY = Math.max(0, (H - 640) * 0.9);
-
-    if (saved) {
-      // 1. Nút Chơi tiếp (chính, nổi bật có hiệu ứng nhịp thở nhẹ)
-      const continueBtn = new Button(this, W / 2, 388 + extraY, {
-        w: btnW,
-        h: 48,
-        label: `▶   Chơi tiếp (Ngày ${G.state.day})`,
-        color: 0x2e8b4e,
-        stroke: 0x66cc8a,
-        strokeAlpha: 0.65,
-        size: 16,
-        radius: 12,
-        onTap: () => this.continueGame(),
-      });
-      this.tweens.add({
-        targets: continueBtn,
-        scale: 1.025,
-        duration: 950,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-
-      // 2. Nút Chơi mới (cam gạch retro)
-      new Button(this, W / 2, 444 + extraY, {
-        w: btnW,
-        h: 42,
-        label: '✨   Chơi mới',
-        color: 0xc8562d,
-        stroke: 0xf59871,
-        strokeAlpha: 0.55,
-        size: 15,
-        radius: 11,
-        onTap: () => this.askNewGame(saved),
-      });
-
-      // 3. Nút Cách chơi (nâu gỗ ấm)
-      new Button(this, W / 2, 496 + extraY, {
-        w: btnW,
-        h: 38,
-        label: '📖   Cách chơi',
-        color: 0x734828,
-        stroke: 0xdfb475,
-        strokeAlpha: 0.45,
-        size: 14,
-        radius: 10,
-        onTap: () => this.scene.start('HowTo'),
-      });
-
-      // 4. Hàng Cài đặt trợ giúp tiện ích (2 nút đặt song song ngang nhau)
-      const toggleW = 130;
-      const toggleH = 36;
-      const toggleY = 546 + extraY;
-
-      const autoChangeColor = () => (G.state.settings.autoChange ? 0x2e7545 : 0x4e3322);
-      const autoChangeStroke = () => (G.state.settings.autoChange ? 0x5ebd7c : 0x7c5840);
-      const autoChangeLabel = () => (G.state.settings.autoChange ? '🧮  Thối: Bật' : '✋  Thối: Tắt');
-
-      const autoBtn = new Button(this, W / 2 - 69, toggleY, {
-        w: toggleW,
-        h: toggleH,
-        label: autoChangeLabel(),
-        color: autoChangeColor(),
-        stroke: autoChangeStroke(),
-        strokeAlpha: 0.6,
-        size: 12.5,
-        radius: 9,
-        onTap: () => {
-          G.state.settings.autoChange = !G.state.settings.autoChange;
-          autoBtn.setText(autoChangeLabel());
-          autoBtn.setStyle(autoChangeColor(), autoChangeStroke());
-          persist();
-        },
-      });
-
-      const autoScanColor = () => (G.state.settings.autoScan ? 0x2e7545 : 0x4e3322);
-      const autoScanStroke = () => (G.state.settings.autoScan ? 0x5ebd7c : 0x7c5840);
-      const autoScanLabel = () => (G.state.settings.autoScan ? '📦  Quét: Bật' : '🧺  Quét: Tắt');
-
-      const scanBtn = new Button(this, W / 2 + 69, toggleY, {
-        w: toggleW,
-        h: toggleH,
-        label: autoScanLabel(),
-        color: autoScanColor(),
-        stroke: autoScanStroke(),
-        strokeAlpha: 0.6,
-        size: 12.5,
-        radius: 9,
-        onTap: () => {
-          G.state.settings.autoScan = !G.state.settings.autoScan;
-          scanBtn.setText(autoScanLabel());
-          scanBtn.setStyle(autoScanColor(), autoScanStroke());
-          persist();
-        },
-      });
-
-      this.addLeaderboardButton(toggleY + 44);
-    } else {
-      // Khi chưa có file lưu (người chơi mới)
-      const startBtn = new Button(this, W / 2, 406 + extraY, {
-        w: btnW,
-        h: 50,
-        label: '▶   Mở tiệm ngay',
-        color: 0x2e8b4e,
-        stroke: 0x66cc8a,
-        strokeAlpha: 0.65,
-        size: 17,
-        radius: 12,
-        onTap: () => this.startNew(),
-      });
-      this.tweens.add({
-        targets: startBtn,
-        scale: 1.025,
-        duration: 950,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-
-      new Button(this, W / 2, 474 + extraY, {
-        w: btnW,
-        h: 42,
-        label: '📖   Cách chơi',
-        color: 0x734828,
-        stroke: 0xdfb475,
-        strokeAlpha: 0.45,
-        size: 15,
-        radius: 11,
-        onTap: () => this.scene.start('HowTo'),
-      });
-
-      const toggleW = 130;
-      const toggleH = 36;
-      const toggleY = 530 + extraY;
-
-      const autoChangeColor = () => (G.state.settings.autoChange ? 0x2e7545 : 0x4e3322);
-      const autoChangeStroke = () => (G.state.settings.autoChange ? 0x5ebd7c : 0x7c5840);
-      const autoChangeLabel = () => (G.state.settings.autoChange ? '🧮  Thối: Bật' : '✋  Thối: Tắt');
-
-      const autoBtn = new Button(this, W / 2 - 69, toggleY, {
-        w: toggleW,
-        h: toggleH,
-        label: autoChangeLabel(),
-        color: autoChangeColor(),
-        stroke: autoChangeStroke(),
-        strokeAlpha: 0.6,
-        size: 12.5,
-        radius: 9,
-        onTap: () => {
-          G.state.settings.autoChange = !G.state.settings.autoChange;
-          autoBtn.setText(autoChangeLabel());
-          autoBtn.setStyle(autoChangeColor(), autoChangeStroke());
-          persist();
-        },
-      });
-
-      const autoScanColor = () => (G.state.settings.autoScan ? 0x2e7545 : 0x4e3322);
-      const autoScanStroke = () => (G.state.settings.autoScan ? 0x5ebd7c : 0x7c5840);
-      const autoScanLabel = () => (G.state.settings.autoScan ? '📦  Quét: Bật' : '🧺  Quét: Tắt');
-
-      const scanBtn = new Button(this, W / 2 + 69, toggleY, {
-        w: toggleW,
-        h: toggleH,
-        label: autoScanLabel(),
-        color: autoScanColor(),
-        stroke: autoScanStroke(),
-        strokeAlpha: 0.6,
-        size: 12.5,
-        radius: 9,
-        onTap: () => {
-          G.state.settings.autoScan = !G.state.settings.autoScan;
-          scanBtn.setText(autoScanLabel());
-          scanBtn.setStyle(autoScanColor(), autoScanStroke());
-          persist();
-        },
-      });
-
-      this.addLeaderboardButton(toggleY + 44);
-    }
-
     // Chân trang hoài niệm
     const version = import.meta.env.VITE_APP_VERSION ?? '0.1.0';
     const buildTime = import.meta.env.VITE_BUILD_TIME;
-    txt(this, W / 2, H - 24, `★  Tiệm Tạp Hóa Đầu Hẻm · v${version}${buildTime ? ` (${buildTime})` : ''}  ★`, {
-      size: 10,
+    txt(this, landscapeMenu ? storeX : W / 2, H - (landscapeMenu ? 14 : 24), `★  Tiệm Tạp Hóa Đầu Hẻm · v${version}${buildTime ? ` (${buildTime})` : ''}  ★`, {
+      size: landscapeMenu ? 9.5 : 10,
       color: '#dfc7a8',
       origin: [0.5, 0.5],
     });
@@ -381,13 +637,15 @@ export class TitleScene extends Phaser.Scene {
   private async refreshAccount(): Promise<void> {
     try {
       this.account = await currentAccount();
+      const landscapeMenu = W > H;
       if (this.account) {
         const rawName = this.account.displayName ?? 'Tài khoản';
-        const shortName = rawName.length > 11 ? rawName.slice(0, 9) + '…' : rawName;
+        const maxLen = landscapeMenu ? 16 : 11;
+        const shortName = rawName.length > maxLen ? rawName.slice(0, maxLen - 2) + '…' : rawName;
         this.accountLabel?.setText(shortName);
         void this.refreshAccountAvatar(this.account);
       } else {
-        this.accountLabel?.setText('Đăng nhập');
+        this.accountLabel?.setText(landscapeMenu ? 'Đăng nhập · Lưu đám mây' : 'Đăng nhập');
         this.clearAccountAvatar();
       }
       this.updateSyncDot(this.syncStatus);
@@ -404,9 +662,10 @@ export class TitleScene extends Phaser.Scene {
     if (!this.scene.isActive() || this.account?.uid !== account.uid) return;
     this.clearAccountAvatar();
     this.accountAvatarTextureKey = key;
-    this.accountAvatar = this.add.image(position.x, position.y, key).setDisplaySize(22, 22);
+    const radius = W > H ? 9.5 : 11;
+    this.accountAvatar = this.add.image(position.x, position.y, key).setDisplaySize(radius * 2, radius * 2);
     const maskShape = this.make.graphics({}, false).setPosition(position.x, position.y);
-    maskShape.fillStyle(0xffffff, 1).fillCircle(0, 0, 11);
+    maskShape.fillStyle(0xffffff, 1).fillCircle(0, 0, radius);
     this.accountAvatarMask = maskShape;
     this.accountAvatar.setMask(maskShape.createGeometryMask());
     this.accountAvatarPlaceholder?.setVisible(false);
@@ -462,31 +721,234 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private showSignedInMenu(): void {
-    const buttons: DialogButton[] = [
-      { label: this.syncStatus === 'error' ? 'Thử lại đồng bộ' : 'Lưu ngay', color: C.green, onTap: () => { void syncNow(true).then(() => toast(this, this.statusText(this.syncStatus, this.syncMessage ?? undefined))); } },
-      { label: '🏆 Bảng xếp hạng', color: C.wood, onTap: () => { void this.showLeaderboard(); } },
-      ...(liveShopEnabled() ? [{ label: '🤝 Chơi chung trên hai máy', color: C.blue, onTap: () => { void this.joinSharedShop(); } } as DialogButton] : []),
-      { label: 'Đăng xuất', color: C.blue, onTap: () => { void this.signOut(); } },
-      { label: 'Xóa tài khoản', color: C.red, onTap: () => this.confirmDeleteAccount() },
-      { label: 'Đóng', color: C.grey },
-    ];
+    const landscape = W > H;
+    const modalW = landscape ? 460 : Math.min(320, W - 24);
     const backups = loadDiscarded();
-    if (backups.length) buttons.splice(2, 0, { label: 'Khôi phục bản cũ', color: C.wood, onTap: () => this.confirmRestoreBackup() });
-    buttons.splice(buttons.length - 1, 0, { label: 'Quyền riêng tư', color: C.wood, onTap: () => { window.open('./privacy.html', '_blank', 'noopener'); } });
+    const modalH = landscape ? (backups.length ? 246 : 224) : (backups.length ? 370 : 336);
+    const cx = W / 2;
+    const cy = H / 2;
+
+    const layer = this.add.container(0, 0).setDepth(2000);
+    this.events.emit('thdh-hud-overlay', true);
+    const close = () => {
+      this.tweens.add({
+        targets: layer,
+        alpha: 0,
+        duration: 120,
+        onComplete: () => {
+          this.events.emit('thdh-hud-overlay', false);
+          layer.destroy();
+        },
+      });
+    };
+
+    // Nền tối mờ che màn hình, bấm ra ngoài để đóng
+    const shade = this.add.rectangle(cx, cy, W, H, 0x000000, 0.6).setInteractive();
+    shade.on('pointerup', close);
+    layer.add(shade);
+
+    // Bảng hộp thoại phong cách tiệm cổ
+    const card = panel(this, cx - modalW / 2, cy - modalH / 2, modalW, modalH);
+    layer.add(card);
+
+    // Nút đóng '✕' góc trên bên phải
+    const closeBtn = this.add.text(cx + modalW / 2 - 16, cy - modalH / 2 + 16, '✕', {
+      fontFamily: 'sans-serif',
+      fontSize: '15px',
+      color: '#7c5840',
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0.5).setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerup', close);
+    layer.add(closeBtn);
+
+    const account = this.account;
+    const rawName = account?.displayName ?? 'Tài khoản Google';
+    const email = account?.email ?? '';
     const lastSync = G.state.sync.lastSyncedAt ? new Date(G.state.sync.lastSyncedAt).toLocaleString('vi-VN') : 'Chưa có';
-    dialog(this, { icon: '☁️', title: this.account?.displayName ?? 'Tài khoản Google', body: `${this.account?.email ?? ''}\n${this.statusText(this.syncStatus, this.syncMessage ?? undefined)}\nLần đồng bộ cuối: ${lastSync}`, buttons, portraitKey: this.accountAvatarTextureKey });
+    const statusText = this.statusText(this.syncStatus, this.syncMessage ?? undefined);
+
+    if (landscape) {
+      // 1. Header ngang: Avatar tròn bên trái + Thông tin tài khoản ở giữa
+      const avatarX = cx - modalW / 2 + 36;
+      const avatarY = cy - modalH / 2 + 38;
+      const avatarRadius = 18;
+
+      if (this.accountAvatarTextureKey && this.textures.exists(this.accountAvatarTextureKey)) {
+        const avatar = this.add.image(avatarX, avatarY, this.accountAvatarTextureKey).setDisplaySize(avatarRadius * 2, avatarRadius * 2);
+        const mask = this.make.graphics({}, false).setPosition(avatarX, avatarY);
+        mask.fillStyle(0xffffff, 1).fillCircle(0, 0, avatarRadius);
+        avatar.setMask(mask.createGeometryMask());
+        layer.add(avatar);
+      } else {
+        const bgCircle = this.add.graphics();
+        bgCircle.fillStyle(0x3e2314, 1).fillCircle(avatarX, avatarY, avatarRadius);
+        layer.add(bgCircle);
+        layer.add(txt(this, avatarX, avatarY, rawName.charAt(0).toUpperCase() || 'G', { size: 14, bold: true, color: '#f2c94c', origin: [0.5, 0.5] }));
+      }
+      const ring = this.add.graphics();
+      ring.lineStyle(1.8, 0xdfb475, 1).strokeCircle(avatarX, avatarY, avatarRadius);
+      layer.add(ring);
+
+      // Tên & email & trạng thái
+      layer.add(txt(this, avatarX + 26, avatarY - 14, rawName, { size: 13.5, bold: true, color: HEX.ink, origin: [0, 0.5] }));
+      layer.add(txt(this, avatarX + 26, avatarY + 1, email, { size: 9.5, color: HEX.muted, origin: [0, 0.5] }));
+
+      // Chấm đồng bộ & thời gian
+      const dotColor = this.syncStatus === 'synced' ? 0x388e3c : this.syncStatus === 'error' || this.syncStatus === 'conflict' ? 0xd32f2f : 0xf57c00;
+      const dot = this.add.graphics();
+      dot.fillStyle(dotColor, 1).fillCircle(avatarX + 30, avatarY + 15, 3.5);
+      layer.add(dot);
+      layer.add(txt(this, avatarX + 38, avatarY + 15, `${statusText} · Lần cuối: ${lastSync}`, { size: 9, color: '#4a3528', origin: [0, 0.5] }));
+
+      // Vạch ngăn cách trang nhã
+      const divY = cy - modalH / 2 + 68;
+      const divG = this.add.graphics();
+      divG.lineStyle(1, 0x5a3d28, 0.5).lineBetween(cx - modalW / 2 + 16, divY, cx + modalW / 2 - 16, divY);
+      layer.add(divG);
+
+      // 2. Lưới nút bấm cân đối: 2 cột rộng rãi
+      const btnW = 196;
+      const btnH = 32;
+      const col1X = cx - btnW / 2 - 6;
+      const col2X = cx + btnW / 2 + 6;
+
+      const syncLabel = this.syncStatus === 'error' ? '🔄 Thử lại đồng bộ' : '☁️ Lưu ngay';
+
+      // Hàng 1
+      layer.add(new Button(this, col1X, divY + 24, {
+        w: btnW, h: btnH, label: syncLabel, color: C.green, size: 12.5,
+        onTap: () => { close(); void syncNow(true).then(() => toast(this, this.statusText(this.syncStatus, this.syncMessage ?? undefined))); },
+      }));
+      layer.add(new Button(this, col2X, divY + 24, {
+        w: btnW, h: btnH, label: '🏆 Bảng xếp hạng', color: C.wood, size: 12.5,
+        onTap: () => { close(); void this.showLeaderboard(); },
+      }));
+
+      // Hàng 2
+      const backupBtn = backups.length ? {
+        label: '📦 Khôi phục bản cũ', color: C.wood,
+        onTap: () => { close(); this.confirmRestoreBackup(); },
+      } : {
+        label: '🔒 Quyền riêng tư', color: C.wood,
+        onTap: () => { close(); window.open('./privacy.html', '_blank', 'noopener'); },
+      };
+      layer.add(new Button(this, col1X, divY + 62, {
+        w: btnW, h: btnH, label: backupBtn.label, color: backupBtn.color, size: 12.5,
+        onTap: backupBtn.onTap,
+      }));
+      layer.add(new Button(this, col2X, divY + 62, {
+        w: btnW, h: btnH, label: '🚪 Đăng xuất', color: C.blue, size: 12.5,
+        onTap: () => { close(); void this.signOut(); },
+      }));
+
+      // Hàng 3
+      if (backups.length) {
+        layer.add(new Button(this, col1X, divY + 100, {
+          w: btnW, h: btnH, label: '🔒 Quyền riêng tư', color: C.wood, size: 12,
+          onTap: () => { close(); window.open('./privacy.html', '_blank', 'noopener'); },
+        }));
+      }
+      layer.add(new Button(this, backups.length ? col2X : col1X, divY + 100, {
+        w: btnW, h: btnH, label: '🗑️ Xóa tài khoản', color: C.red, size: 12,
+        onTap: () => { close(); this.confirmDeleteAccount(); },
+      }));
+
+      if (!backups.length) {
+        layer.add(new Button(this, col2X, divY + 100, {
+          w: btnW, h: btnH, label: '✕ Đóng', color: C.grey, size: 12,
+          onTap: close,
+        }));
+      } else {
+        layer.add(new Button(this, cx, divY + 138, {
+          w: 160, h: 26, label: '✕ Đóng', color: C.grey, size: 11,
+          onTap: close,
+        }));
+      }
+    } else {
+      // Chế độ dọc: Căn giữa avatar và danh sách nút xếp gọn
+      const avatarY = cy - modalH / 2 + 36;
+      const avatarRadius = 20;
+
+      if (this.accountAvatarTextureKey && this.textures.exists(this.accountAvatarTextureKey)) {
+        const avatar = this.add.image(cx, avatarY, this.accountAvatarTextureKey).setDisplaySize(avatarRadius * 2, avatarRadius * 2);
+        const mask = this.make.graphics({}, false).setPosition(cx, avatarY);
+        mask.fillStyle(0xffffff, 1).fillCircle(0, 0, avatarRadius);
+        avatar.setMask(mask.createGeometryMask());
+        layer.add(avatar);
+      } else {
+        const bgCircle = this.add.graphics();
+        bgCircle.fillStyle(0x3e2314, 1).fillCircle(cx, avatarY, avatarRadius);
+        layer.add(bgCircle);
+        layer.add(txt(this, cx, avatarY, rawName.charAt(0).toUpperCase() || 'G', { size: 16, bold: true, color: '#f2c94c', origin: [0.5, 0.5] }));
+      }
+      const ring = this.add.graphics();
+      ring.lineStyle(1.8, 0xdfb475, 1).strokeCircle(cx, avatarY, avatarRadius);
+      layer.add(ring);
+
+      layer.add(txt(this, cx, avatarY + 30, rawName, { size: 14, bold: true, color: HEX.ink, origin: [0.5, 0.5] }));
+      layer.add(txt(this, cx, avatarY + 48, email, { size: 10, color: HEX.muted, origin: [0.5, 0.5] }));
+      layer.add(txt(this, cx, avatarY + 64, `${statusText}\nLần cuối: ${lastSync}`, { size: 9.5, color: '#4a3528', origin: [0.5, 0.5], align: 'center' }));
+
+      const divY = avatarY + 84;
+      const divG = this.add.graphics();
+      divG.lineStyle(1, 0x5a3d28, 0.5).lineBetween(cx - modalW / 2 + 16, divY, cx + modalW / 2 - 16, divY);
+      layer.add(divG);
+
+      const btnW = (modalW - 36) / 2;
+      const btnH = 34;
+      const col1X = cx - btnW / 2 - 4;
+      const col2X = cx + btnW / 2 + 4;
+      const syncLabel = this.syncStatus === 'error' ? 'Thử lại' : 'Lưu ngay';
+
+      layer.add(new Button(this, col1X, divY + 24, {
+        w: btnW, h: btnH, label: syncLabel, color: C.green, size: 12.5,
+        onTap: () => { close(); void syncNow(true).then(() => toast(this, this.statusText(this.syncStatus, this.syncMessage ?? undefined))); },
+      }));
+      layer.add(new Button(this, col2X, divY + 24, {
+        w: btnW, h: btnH, label: '🏆 Xếp hạng', color: C.wood, size: 12.5,
+        onTap: () => { close(); void this.showLeaderboard(); },
+      }));
+
+      layer.add(new Button(this, col1X, divY + 64, {
+        w: btnW, h: btnH, label: backups.length ? '📦 Bản cũ' : '🔒 Quyền riêng tư', color: C.wood, size: 12,
+        onTap: () => { close(); if (backups.length) this.confirmRestoreBackup(); else window.open('./privacy.html', '_blank', 'noopener'); },
+      }));
+      layer.add(new Button(this, col2X, divY + 64, {
+        w: btnW, h: btnH, label: '🚪 Đăng xuất', color: C.blue, size: 12.5,
+        onTap: () => { close(); void this.signOut(); },
+      }));
+
+      layer.add(new Button(this, col1X, divY + 104, {
+        w: btnW, h: btnH, label: backups.length ? '🔒 Quyền riêng tư' : '🗑️ Xóa nick', color: backups.length ? C.wood : C.red, size: 11.5,
+        onTap: () => { close(); if (backups.length) window.open('./privacy.html', '_blank', 'noopener'); else this.confirmDeleteAccount(); },
+      }));
+      layer.add(new Button(this, col2X, divY + 104, {
+        w: btnW, h: btnH, label: backups.length ? '🗑️ Xóa nick' : '✕ Đóng', color: backups.length ? C.red : C.grey, size: 11.5,
+        onTap: () => { close(); if (backups.length) this.confirmDeleteAccount(); },
+      }));
+
+      if (backups.length) {
+        layer.add(new Button(this, cx, divY + 142, {
+          w: modalW - 28, h: 32, label: '✕ Đóng', color: C.grey, size: 12,
+          onTap: close,
+        }));
+      }
+    }
+
+    layer.setAlpha(0);
+    this.tweens.add({ targets: layer, alpha: 1, duration: 140 });
   }
 
-  private addLeaderboardButton(y: number): void {
+  private addLeaderboardButton(y: number, x = W / 2, compact = false, customW?: number): void {
     if (isMaxLevelSimulation || !cloudSaveEnabled()) return;
-    new Button(this, W / 2, y, {
-      w: 268,
-      h: 36,
+    new Button(this, x, y, {
+      w: customW ?? (compact ? 180 : 268),
+      h: compact ? 30 : 36,
       label: '🏆  Bảng xếp hạng',
       color: 0x9a6b16,
       stroke: 0xf2c65a,
       strokeAlpha: 0.6,
-      size: 13.5,
+      size: 13,
       radius: 9,
       onTap: () => { void this.showLeaderboard(); },
     });

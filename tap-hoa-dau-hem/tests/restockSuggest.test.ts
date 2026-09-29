@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DATA } from '../src/core/data';
-import { assignSlot, checkCart, recentDailySales, shelfCapacity, suggestRestockCart } from '../src/core/stock';
+import { assignSlot, checkCart, demandSignals, recentDailySales, shelfCapacity, suggestCart, suggestRestockCart } from '../src/core/stock';
 import { createNewGame, lotsFrom, type DayRecord, type GameState } from '../src/core/state';
 
 function shop(money = 2_000_000): GameState {
@@ -68,5 +68,28 @@ describe('gợi ý nhập hàng giữa giờ bán', () => {
     expect(sug.cart.dau_an).toBeUndefined();
     const check = checkCart(s, sug.cart);
     expect(check.ok || check.reason === 'min-order').toBe(true);
+  });
+
+  it('món còn dưới 5 cái trong kho được ưu tiên dù chưa bày kệ', () => {
+    const s = shop();
+    s.warehouse = lotsFrom({ mi_goi: 4 });
+    const sug = suggestRestockCart(s);
+    expect(sug.outOfStock).toContain('mi_goi');
+    expect(sug.cart.mi_goi).toBeGreaterThan(0);
+  });
+
+  it('đánh giá chê hết món làm tăng nhu cầu ở cả đầu ngày và giữa giờ', () => {
+    const s = shop();
+    s.reviews = [{ id: 1, day: s.day, minute: 600, name: 'Khách', stars: 2, issue: 'missing', productId: 'mi_goi', text: 'Hết hàng' }];
+    expect(demandSignals(s).mi_goi).toBe(2);
+    expect(suggestCart(s).mi_goi).toBeGreaterThan(0);
+    expect(suggestRestockCart(s).cart.mi_goi).toBeGreaterThan(0);
+  });
+
+  it('thử một ít hàng mới khi đủ vốn', () => {
+    const s = shop();
+    const sug = suggestRestockCart(s);
+    expect(Object.keys(sug.cart).length).toBeGreaterThan(0);
+    expect(Object.values(sug.cart).some((qty) => qty > 0 && qty <= 3)).toBe(true);
   });
 });

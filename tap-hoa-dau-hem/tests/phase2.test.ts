@@ -66,7 +66,7 @@ describe('dữ liệu giai đoạn 2', () => {
     // Katalog đã có thêm mặt hàng từ phase 4; giữ kiểm tra số món tối thiểu của phase 2.
     expect(fresh.length).toBeGreaterThanOrEqual(45);
     expect(DATA.products.filter((p) => p.requiresCold === 'freezer').every((p) => p.unlockLevel >= 9)).toBe(true);
-    expect(DATA.levels.maxLevel).toBe(35);
+    expect(DATA.levels.maxLevel).toBe(50);
     expect(DATA.levels.levels.slice(0, 9).map((l) => l.exp)).toEqual([0, 80, 200, 360, 560, 800, 1080, 1400, 1780]);
   });
 

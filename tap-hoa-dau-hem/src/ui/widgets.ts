@@ -53,12 +53,15 @@ export class Button extends Phaser.GameObjects.Container {
   private strokeColor?: number;
   private strokeAlpha?: number;
   private isPressed = false;
+  private isHovered = false;
+  private readonly landscapeHover: boolean;
 
   constructor(scene: Phaser.Scene, x: number, y: number, private o: ButtonOpts) {
     super(scene, x, y);
     this.color = o.color ?? C.green;
     this.strokeColor = o.stroke;
     this.strokeAlpha = o.strokeAlpha;
+    this.landscapeHover = W > H;
     // NineSlice cần thân nút đủ lớn để chứa 4 góc; nút rất nhỏ vẫn vẽ bằng Graphics.
     const sliced = canNineSlice(scene) && o.w + 2 >= BTN_SLICE.left + BTN_SLICE.right && o.h + 4 >= BTN_SLICE.top + BTN_SLICE.bottom;
     this.bg = sliced
@@ -84,11 +87,18 @@ export class Button extends Phaser.GameObjects.Container {
       }
     });
     this.on('pointerout', () => {
-      if (this.isPressed) {
-        this.isPressed = false;
+      const changed = this.isPressed || this.isHovered;
+      this.isPressed = false;
+      this.isHovered = false;
+      if (changed) {
         this.label.y = 0;
         this.draw();
       }
+    });
+    this.on('pointerover', () => {
+      if (!this.enabled || !this.landscapeHover || this.isHovered) return;
+      this.isHovered = true;
+      this.draw();
     });
     this.on('pointerup', (p: Phaser.Input.Pointer) => {
       if (this.isPressed) {
@@ -107,7 +117,10 @@ export class Button extends Phaser.GameObjects.Container {
     const { w, h } = this.o;
     // Phong cách pixel art hoài cổ: góc bo nhỏ gọn 4-6px kiểu nút cơ thập niên 90
     const r = Math.min(this.o.radius ?? 5, 8);
-    const base = this.enabled ? this.color : C.grey;
+    const color = this.enabled ? this.color : C.grey;
+    const base = this.isHovered && !this.isPressed
+      ? Phaser.Display.Color.IntegerToColor(color).lighten(12).color
+      : color;
     const bg = this.bg;
     if (bg instanceof Phaser.GameObjects.NineSlice) {
       const key = `btn9:${r}:${base}:${this.strokeColor ?? ''}:${this.strokeAlpha ?? ''}:${this.isPressed ? 1 : 0}`;
@@ -198,9 +211,9 @@ export class Button extends Phaser.GameObjects.Container {
  * Chia đều một hàng nút theo bề ngang màn hình (W): trả về bề rộng mỗi nút và tâm nút thứ i.
  * Dùng thay cho tọa độ cứng để thêm/bớt nút (mối sỉ, tab...) không bị tràn ra ngoài mép.
  */
-export function rowLayout(count: number, o: { left?: number; right?: number; gap?: number; maxW?: number } = {}): { w: number; x: (i: number) => number } {
+export function rowLayout(count: number, o: { left?: number; right?: number; gap?: number; maxW?: number; width?: number } = {}): { w: number; x: (i: number) => number } {
   const left = o.left ?? 8;
-  const right = o.right ?? W - 8;
+  const right = o.right ?? (o.width !== undefined ? o.width - 8 : W - 8);
   const gap = o.gap ?? 6;
   const n = Math.max(1, count);
   const w = Math.min(o.maxW ?? Infinity, (right - left - gap * (n - 1)) / n);
@@ -316,7 +329,9 @@ export function dialog(
   scene: Phaser.Scene,
   o: { title?: string; body: string; icon?: string; buttons: DialogButton[]; width?: number; illustration?: 'open-browser'; portraitKey?: string },
 ): Phaser.GameObjects.Container {
-  const w = o.width ?? 300;
+  const landscape = W > H;
+  const requestedWidth = o.width ?? 300;
+  const w = landscape ? Math.min(W - 32, Math.max(requestedWidth, Math.round(W * 0.76))) : requestedWidth;
   const layer = scene.add.container(0, 0).setDepth(2000);
   scene.events.emit('thdh-hud-overlay', true);
   layer.once(Phaser.GameObjects.Events.DESTROY, () => scene.events.emit('thdh-hud-overlay', false));
@@ -324,14 +339,19 @@ export function dialog(
   layer.add(shade);
   const items: Phaser.GameObjects.GameObject[] = [];
   let y = 0;
-  if (o.icon) {
-    items.push(txt(scene, W / 2, y + 26, o.icon, { size: 40, emoji: true, origin: [0.5, 0.5] }));
-    y += 56;
-  }
   if (o.portraitKey && scene.textures.exists(o.portraitKey)) {
-    const portrait = scene.add.image(W / 2, y + 20, o.portraitKey).setDisplaySize(40, 40);
-    items.push(portrait);
-    y += 48;
+    const pSize = landscape ? 36 : 42;
+    const portrait = scene.add.image(W / 2, y + pSize / 2, o.portraitKey).setDisplaySize(pSize, pSize);
+    const mask = scene.make.graphics({}, false).setPosition(W / 2, y + pSize / 2);
+    mask.fillStyle(0xffffff, 1).fillCircle(0, 0, pSize / 2);
+    portrait.setMask(mask.createGeometryMask());
+    const ring = scene.add.graphics();
+    ring.lineStyle(1.8, 0xdfb475, 1).strokeCircle(W / 2, y + pSize / 2, pSize / 2);
+    items.push(portrait, ring);
+    y += pSize + 10;
+  } else if (o.icon) {
+    items.push(txt(scene, W / 2, y + 24, o.icon, { size: landscape ? 32 : 38, emoji: true, origin: [0.5, 0.5] }));
+    y += landscape ? 46 : 54;
   }
   if (o.illustration === 'open-browser') {
     const illustrationY = y + 31;
@@ -358,29 +378,33 @@ export function dialog(
     y += 72;
   }
   if (o.title) {
-    const t = txt(scene, W / 2, y + 12, o.title, { size: 19, bold: true, origin: [0.5, 0], align: 'center', wrap: w - 30 });
+    const t = txt(scene, W / 2, y + 10, o.title, { size: landscape ? 16 : 18, bold: true, origin: [0.5, 0], align: 'center', wrap: w - 30 });
     items.push(t);
-    y += t.height + 20;
+    y += t.height + (landscape ? 12 : 18);
   }
-  const body = txt(scene, W / 2, y + 6, o.body, { size: 15, origin: [0.5, 0], align: 'center', wrap: w - 36, color: HEX.ink });
+  const body = txt(scene, W / 2, y + 4, o.body, { size: landscape ? 11.5 : 14, origin: [0.5, 0], align: 'center', wrap: w - 36, color: HEX.ink });
   items.push(body);
-  y += body.height + 22;
-  const btnH = 46;
-  const gap = 10;
+  y += body.height + (landscape ? 10 : 18);
   const n = o.buttons.length;
-  const stack = n > 2;
-  const btnW = stack ? w - 40 : (w - 40 - gap * (n - 1)) / n;
+  const cols = landscape && n > 2 ? (n >= 6 ? 3 : 2) : (n <= 2 ? n : 1);
+  const rows = Math.ceil(n / cols);
+  const btnH = landscape ? (rows > 2 ? 30 : 34) : 44;
+  const gap = landscape ? 6 : 8;
+  const btnW = cols === 1 ? w - 40 : (w - 40 - gap * (cols - 1)) / cols;
   const close = () => {
     scene.tweens.add({ targets: layer, alpha: 0, duration: 120, onComplete: () => layer.destroy() });
   };
   o.buttons.forEach((b, i) => {
-    const bx = stack ? W / 2 : W / 2 - (w - 40) / 2 + btnW / 2 + i * (btnW + gap);
-    const by = y + btnH / 2 + (stack ? i * (btnH + gap) : 0);
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const bx = cols === 1 ? W / 2 : W / 2 - (w - 40) / 2 + btnW / 2 + col * (btnW + gap);
+    const by = y + btnH / 2 + row * (btnH + gap);
     items.push(
       new Button(scene, bx, by, {
         w: btnW,
         h: btnH,
         label: b.label,
+        size: landscape ? 12 : 14,
         color: b.color ?? C.green,
         onTap: () => {
           close();
@@ -389,9 +413,9 @@ export function dialog(
       }),
     );
   });
-  y += stack ? n * (btnH + gap) : btnH + gap;
-  const h = y + 14;
-  const top = Math.max(12, Math.round(H / 2 - h / 2));
+  y += rows * (btnH + gap);
+  const h = y + 12;
+  const top = Math.max(8, Math.round(H / 2 - h / 2));
   const bg = panel(scene, W / 2 - w / 2, top, w, h);
   layer.add(bg);
   for (const it of items) {

@@ -1,3 +1,4 @@
+import { TEA_PRODUCT_SPRITES } from './teaSprites';
 /**
  * Pixel art vẽ bằng ma trận ký tự: mỗi ký tự là một điểm ảnh theo bảng màu PALETTE, "." là trong suốt.
  * Thay đổi hình chỉ cần sửa chuỗi, không phải sửa code vẽ.
@@ -2497,3 +2498,9 @@ Object.assign(PRODUCT_SPRITES, {
 function groceryCarton8(body: string, label: string, top: string): Sprite {
   return drinkCarton8(body, label, top);
 }
+
+// Tiệm trà sữa: ly, túi trà, siro, topping vẽ riêng (teaSprites.ts); quầy pha trà/máy foam/kệ hoa dùng lại sprite quầy nước, máy xay, chậu cây.
+Object.assign(PRODUCT_SPRITES, TEA_PRODUCT_SPRITES);
+FURNITURE_SPRITES.tea_bar = FURNITURE_SPRITES.drink_counter;
+FURNITURE_SPRITES.foam_machine = FURNITURE_SPRITES.blender;
+FURNITURE_SPRITES.ke_hoa = FURNITURE_SPRITES.chau_cay;

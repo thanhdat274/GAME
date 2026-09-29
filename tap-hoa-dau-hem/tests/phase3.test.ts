@@ -122,7 +122,7 @@ describe('hàng đợi việc (TaskQueue)', () => {
 
 describe('dữ liệu giai đoạn 3', () => {
   it('level 10–20 và chỗ nhân viên L10: 1, L12: 2, L15: 4, L20: 6', () => {
-    expect(DATA.levels.maxLevel).toBe(35);
+    expect(DATA.levels.maxLevel).toBe(50);
     expect(levelForExp(2200)).toBe(10);
     expect(levelForExp(10550)).toBe(20);
     expect([9, 10, 11, 12, 14, 15, 19, 20].map((level) => staffSlots(level))).toEqual([0, 1, 1, 2, 2, 4, 4, 6]);
@@ -808,9 +808,20 @@ describe('chế độ quản lý', () => {
 describe('thu nhập offline', () => {
   function managerShop(): GameState {
     const s = shop(20);
+    s.manager.enabled = true;
     s.managerStats = [{ day: 1, revenue: 0, profit: 0, sold: { mi_goi: 20 } }];
     return s;
   }
+
+  it('không vận hành khi đã tắt chế độ quản lý', () => {
+    const s = managerShop();
+    s.manager.enabled = false;
+    const day = s.day;
+    const money = s.money;
+    expect(applyOfflineIncome(s, 2 * 3_600_000)).toBeNull();
+    expect(s.day).toBe(day);
+    expect(s.money).toBe(money);
+  });
 
   it('vắng 2 giờ: 2 ngày trôi qua, bán 60% nhu cầu, cộng tiền và trừ lương, điện', () => {
     const s = managerShop();

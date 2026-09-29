@@ -1,4 +1,4 @@
-import { DATA, product, type RecipeDef } from './data';
+import { DATA, product, recipeByOutput, type RecipeDef } from './data';
 import { shopTypeOf } from './shopTypes';
 import {
   formatMoney, storeView, warehouseQty, type GameState, type InternalOrder, type RecurringOrder, type StoreData, type StoreSnapshot,
@@ -39,7 +39,7 @@ export function internalFee(qty: number): number {
 }
 
 function recipeFor(output: string): RecipeDef | undefined {
-  return DATA.recipes.find((r) => r.output === output);
+  return recipeByOutput(output);
 }
 
 /** Số phần tiệm `store` làm được cho một món từ nguyên liệu hiện có (tính cả nếp đang ngâm và nếp sống trong kho). */

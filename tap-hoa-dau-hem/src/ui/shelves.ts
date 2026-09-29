@@ -5,17 +5,19 @@ import { MAX_SHELVES, fixtureOfShelf, shelfKind, shelfUsable, shelfCount, type G
 import { canRefill, slotFreshness, zoneFill, zoneOf } from '../core/stock';
 import { productIcon, productName } from './art';
 import { KineticScroll, clipInteractive, snap } from './scroll';
-import { C, H, HEX, ZOOM, txt } from './theme';
+import { C, H, HEX, W, ZOOM, txt } from './theme';
 
-export const SLOT_W = 52;
+const LANDSCAPE = W > H;
+const GAP = LANDSCAPE ? 6 : 4;
+/** Wide shelves use the available width as real merchandising space instead of leaving half the shop empty. */
+export const SLOT_W = LANDSCAPE ? 68 : 52;
 export const SLOT_H = 54;
-const GAP = 4;
-const X0 = 14;
+const X0 = 10;
 export const ROW_PITCH = 64;
 /** Số hàng kệ hiện cùng lúc (bán hàng, buổi sáng, nhập hàng): màn hình đủ cao (≥ 640 + 1 hàng) thì thêm 1 hàng. */
-export const SHELF_VIEW_ROWS = H >= 640 + ROW_PITCH ? MAX_SHELVES + 1 : MAX_SHELVES;
-/** Số ô trên một tầng hiển thị; kệ nhiều ô hơn xuống tầng dưới. */
-const SLOTS_PER_LINE = 6;
+export const SHELF_VIEW_ROWS = LANDSCAPE ? 3 : H >= 640 + ROW_PITCH ? MAX_SHELVES + 1 : MAX_SHELVES;
+/** Số ô trên một tầng hiển thị; kệ nhiều ô hơn xuống tầng dưới. Màn ngang card rộng ~310px nên tối đa 4 ô một hàng. */
+const SLOTS_PER_LINE = LANDSCAPE ? 4 : 6;
 
 function ensureShelfButtonTextures(scene: Phaser.Scene): void {
   for (const [key, color, symbol] of [
@@ -151,7 +153,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
   private scrollTween: Phaser.Tweens.Tween | null = null;
   private kinetic: KineticScroll | null = null;
 
-  constructor(scene: Phaser.Scene, readonly top: number, private cb: ShelfCallbacks, state: GameState, viewRows = MAX_SHELVES) {
+  constructor(scene: Phaser.Scene, readonly top: number, private cb: ShelfCallbacks, state: GameState, viewRows = MAX_SHELVES, readonly left = 0) {
     super(scene, 0, 0);
     ensureShelfButtonTextures(scene);
     this.viewH = viewRows * ROW_PITCH;
@@ -176,23 +178,23 @@ export class ShelfView extends Phaser.GameObjects.Container {
       if (kind === 'shelf') {
         for (let l = 0; l < lines; l++) {
           const ly = y + l * ROW_PITCH;
-          planks.fillStyle(C.woodDark, 1).fillRect(6, ly + SLOT_H + 1, width, 6);
-          planks.fillStyle(C.woodLight, 1).fillRect(6, ly + SLOT_H, width, 2);
+          planks.fillStyle(C.woodDark, 1).fillRect(this.left + 4, ly + SLOT_H + 1, width, 6);
+          planks.fillStyle(C.woodLight, 1).fillRect(this.left + 4, ly + SLOT_H, width, 2);
         }
       } else {
         // Tủ lạnh / tủ đông: khung kim loại màu lạnh.
-        planks.fillStyle(kind === 'fridge' ? 0xcfe8f7 : 0xb9d7f0, 1).fillRoundedRect(6, y - 3, width, bodyH + 9, 8);
-        planks.lineStyle(2, 0x7fa9c9, 1).strokeRoundedRect(6, y - 3, width, bodyH + 9, 8);
+        planks.fillStyle(kind === 'fridge' ? 0xcfe8f7 : 0xb9d7f0, 1).fillRoundedRect(this.left + 4, y - 3, width, bodyH + 9, 8);
+        planks.lineStyle(2, 0x7fa9c9, 1).strokeRoundedRect(this.left + 4, y - 3, width, bodyH + 9, 8);
       }
       const rowTop = y;
       const slots: SlotView[] = [];
       for (let c = 0; c < count; c++) slots.push(this.makeSlot(shelf, rowTop, c));
-      const lock = scene.add.container(180, y + bodyH / 2, [
-        scene.add.rectangle(0, 0, 340, bodyH + 4, 0x3b2618, 0.75),
+      const lock = scene.add.container(this.left + width / 2, y + bodyH / 2, [
+        scene.add.rectangle(0, 0, width, bodyH + 4, 0x3b2618, 0.75),
         txt(scene, 0, 0, '🔒 Kệ mở ở level 3', { size: 14, bold: true, color: HEX.cream, origin: [0.5, 0.5] }),
       ]);
       this.content.add(lock);
-      const label = txt(scene, 12, y - 8, '', { size: 9, bold: true, color: HEX.ink });
+      const label = txt(scene, this.left + 12, y - 8, '', { size: 9, bold: true, color: HEX.ink });
       label.setBackgroundColor(kind === 'shelf' ? '#f3dfbd' : '#d9eefb').setPadding(3, 1, 3, 1);
       this.content.add(label);
       const row: RowView = {
@@ -210,9 +212,10 @@ export class ShelfView extends Phaser.GameObjects.Container {
     this.content.add(this.progressLayer);
     if (this.maxScroll > 0) {
       this.enableScroll();
-      // Chỉ báo còn kệ phía trên / dưới khung nhìn.
-      this.moreUp = txt(scene, 352, this.top - 6, '▲ kệ khác', { size: 9, bold: true, color: HEX.white, origin: [1, 0.5] });
-      this.moreDown = txt(scene, 352, this.top + this.viewH - 6, '▼ phía quầy', { size: 9, bold: true, color: HEX.white, origin: [1, 0.5] });
+      // Chỉ báo còn kệ phía trên / dưới khung nhìn (nằm ở thanh tiêu đề và đáy khung, không đè lên ô).
+      const moreX = LANDSCAPE ? this.left + 300 : 352;
+      this.moreUp = txt(scene, moreX, this.top - 22, '▲ kệ khác', { size: 9, bold: true, color: HEX.cream, origin: [1, 0.5] });
+      this.moreDown = txt(scene, moreX, this.top + this.viewH - 4, '▼ phía quầy', { size: 9, bold: true, color: HEX.cream, origin: [1, 0.5] });
       for (const t of [this.moreUp, this.moreDown]) t.setBackgroundColor('#3b2618cc').setPadding(4, 1, 4, 1);
       this.add([this.moreUp, this.moreDown]);
     }
@@ -225,17 +228,21 @@ export class ShelfView extends Phaser.GameObjects.Container {
     return this.maxScroll > 0;
   }
 
-  private inView(worldY: number): boolean {
-    return worldY >= this.top - 12 && worldY <= this.top + this.viewH;
+  private inView(worldY: number, worldX?: number): boolean {
+    const yOk = worldY >= this.top - 8 && worldY <= this.top + this.viewH;
+    const xOk = LANDSCAPE && worldX !== undefined ? (worldX >= this.left && worldX <= this.left + 320) : true;
+    return yOk && xOk;
   }
 
   private enableScroll(): void {
     const s = this.scene;
-    // Khung nhìn kết thúc trước nhãn của hàng kế tiếp để nhãn không lòi ra dưới khung.
-    const maskG = s.make.graphics({}, false).fillRect(0, this.top - 14, 360, this.viewH + 4);
+    // Khung nhìn bắt đầu ngay mép dưới header (top - 2) để không lòi lên header khi cuộn.
+    const maskX = LANDSCAPE ? this.left : 0;
+    const maskW = LANDSCAPE ? 320 : 360;
+    const maskG = s.make.graphics({}, false).fillRect(maskX, this.top - 2, maskW, this.viewH + 4);
     this.content.setMask(maskG.createGeometryMask());
     this.kinetic = new KineticScroll(s, {
-      inView: (y) => this.inView(y),
+      inView: (y, x) => this.inView(y, x),
       enabled: () => this.visible,
       get: () => this.scrollY,
       set: (v) => { this.scrollTween?.remove(); this.setScroll(v); },
@@ -246,7 +253,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
 
   /** Chỉ nhận chạm trong khung nhìn kệ (ô đã cuộn ra ngoài không che nút phía trên / kho phía dưới). */
   private clipInput(obj: Phaser.GameObjects.Container): void {
-    clipInteractive(obj, (y) => y >= this.top - 6 && y <= this.top + this.viewH);
+    clipInteractive(obj, (y, x) => this.inView(y, x));
   }
 
   /** Chạm hiện tại là để cuộn / dừng trôi, không phải bấm ô. */
@@ -266,8 +273,8 @@ export class ShelfView extends Phaser.GameObjects.Container {
   /** Ẩn nội dung kệ nằm hoàn toàn ngoài khung cuộn để Phaser bỏ qua khi vẽ. */
   private updateViewportVisibility(): void {
     const contentY = this.content.y;
-    const viewTop = this.top - 14;
-    const viewBottom = this.top + this.viewH + 4;
+    const viewTop = this.top - 8;
+    const viewBottom = this.top + this.viewH + 8;
     for (const row of this.rows) {
       const rowTop = row.top + contentY;
       row.viewportVisible = rowTop + row.height >= viewTop && rowTop <= viewBottom;
@@ -298,10 +305,8 @@ export class ShelfView extends Phaser.GameObjects.Container {
     this.animateTo(this.maxScroll);
   }
 
-
-
   private slotPos(rowTop: number, c: number): { x: number; y: number } {
-    return { x: X0 + (c % SLOTS_PER_LINE) * (SLOT_W + GAP) + SLOT_W / 2, y: rowTop + Math.floor(c / SLOTS_PER_LINE) * ROW_PITCH + SLOT_H / 2 };
+    return { x: this.left + X0 + (c % SLOTS_PER_LINE) * (SLOT_W + GAP) + SLOT_W / 2, y: rowTop + Math.floor(c / SLOTS_PER_LINE) * ROW_PITCH + SLOT_H / 2 };
   }
 
   /** Tọa độ màn hình của ô (đã tính cuộn). */
@@ -348,7 +353,7 @@ export class ShelfView extends Phaser.GameObjects.Container {
 
   /** Ô kệ tại tọa độ (dùng khi thả hàng kéo từ kho). */
   slotAt(x: number, y: number): { shelf: number; slot: number } | null {
-    if (!this.inView(y)) return null;
+    if (!this.inView(y, x)) return null;
     for (const row of this.rows) {
       for (let c = 0; c < row.slots.length; c++) {
         const { x: cx, y: cy } = this.slotPos(row.top, c);

@@ -10,18 +10,23 @@ import { takeLots } from './stock';
 
 export type OpenBranchResult = { ok: true; store: StoreSnapshot } | { ok: false; reason: 'locked' | 'money' | 'exists' | 'limit' };
 
+/** Chi nhánh trong phạm vi phát triển hiện tại; loại cũ được giữ trong dữ liệu để tương thích hệ thống. */
+export const ACTIVE_BRANCH_IDS = ['market', 'school', 'industrial'] as const;
+
 export function branchDefinition(id: string): BranchDef | undefined {
-  return DATA.branches.find((branch) => branch.id === id);
+  return ACTIVE_BRANCH_IDS.includes(id as (typeof ACTIVE_BRANCH_IDS)[number])
+    ? DATA.branches.find((branch) => branch.id === id)
+    : undefined;
 }
 
 /** Số cửa hàng tối đa trong chuỗi, tính cả tiệm chính (balance.json › chain.maxStores). */
 export function maxStores(): number {
-  return DATA.balance.chain.maxStores;
+  return Math.min(DATA.balance.chain.maxStores, ACTIVE_BRANCH_IDS.length + 1);
 }
 
 /** Khu hiện trên Bản đồ: đã tới level mở và (nếu cần) đã có tính năng riêng, vd. `shop_xoi`. */
 export function branchAvailable(state: GameState, branch: BranchDef): boolean {
-  return state.level >= branch.unlockLevel && (!branch.feature || hasFeature(state.level, branch.feature));
+  return branchDefinition(branch.id) !== undefined && state.level >= branch.unlockLevel && (!branch.feature || hasFeature(state.level, branch.feature));
 }
 
 export function openBranch(state: GameState, id: string): OpenBranchResult {

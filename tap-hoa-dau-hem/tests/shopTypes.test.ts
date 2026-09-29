@@ -66,9 +66,9 @@ describe('storeView: đọc/ghi tiệm không đứng', () => {
 });
 
 describe('shopTypes.json', () => {
-  it('dữ liệu hiện tại hợp lệ, có grocery và xoi', () => {
+  it('dữ liệu hiện tại hợp lệ, có đủ các loại cửa hàng', () => {
     expect(validateShopTypes()).toEqual([]);
-    expect(DATA.shopTypes.map((t) => t.id)).toEqual(['grocery', 'xoi']);
+    expect(DATA.shopTypes.map((t) => t.id)).toEqual(['grocery', 'xoi', 'greengrocer', 'drink_kiosk', 'household', 'tea_shop', 'bakery', 'supermarket']);
   });
 
   it('báo lỗi tham chiếu sai, nêu rõ loại tiệm và id', () => {
@@ -95,10 +95,12 @@ describe('shopTypes.json', () => {
     expect(grocery.def.sim).toBe('profit_average');
     expect(grocery.densityAt(500)).toBeNull();
     const xoiOnly = ['thung_ngam', 'xung_hap', 'quay_xoi'];
-    expect(DATA.furniture.filter((f) => !xoiOnly.includes(f.id)).every((f) => grocery.allowsFixture(f.id))).toBe(true);
+    const teaOnly = ['tea_bar', 'foam_machine'];
+    expect(DATA.furniture.filter((f) => !xoiOnly.includes(f.id) && !teaOnly.includes(f.id)).every((f) => grocery.allowsFixture(f.id))).toBe(true);
     expect(xoiOnly.some((id) => grocery.allowsFixture(id))).toBe(false);
+    expect(teaOnly.some((id) => grocery.allowsFixture(id))).toBe(false);
     const all = unlockedProducts(40, state).map((p) => p.id);
-    const unfiltered = DATA.products.filter((p) => !p.recipeOnly && !p.eventOnly && p.unlockLevel <= 40).map((p) => p.id);
+    const unfiltered = DATA.products.filter((p) => !p.recipeOnly && !p.eventOnly && !p.shopOnly && p.unlockLevel <= 40).map((p) => p.id);
     expect(all).toEqual(unfiltered);
   });
 
@@ -146,8 +148,8 @@ describe('mở tiệm theo loại, giới hạn chuỗi', () => {
     expect(unlockedProducts(state.level, state).length).toBeGreaterThan(20);
   });
 
-  it('giới hạn số tiệm đọc từ balance.json › chain.maxStores (mặc định 6)', () => {
-    expect(DATA.balance.chain.maxStores).toBe(6);
+  it('giới hạn số tiệm đọc từ balance.json › chain.maxStores (mặc định 11)', () => {
+    expect(DATA.balance.chain.maxStores).toBe(11);
     const before = DATA.balance.chain.maxStores;
     DATA.balance.chain.maxStores = 2;
     try {

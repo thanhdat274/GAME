@@ -1,5 +1,5 @@
 import { DATA, type FurnitureDef, type StaffRole } from './data';
-import { openBranch, visitStore } from './branches';
+import { ACTIVE_BRANCH_IDS, openBranch, visitStore } from './branches';
 import { createNewGame, emptySlots, syncActiveStore, type GameState, type ShelfZone, type Staff } from './state';
 import { ensureDiningTables } from './dining';
 import { ensureDailyQuests } from './quests';
@@ -33,7 +33,7 @@ export function createMaxLevelSimulation(): GameState {
   state.tax.invoiceMachine = true;
 
   // Mở tất cả địa điểm có trong dữ liệu. Tiền và cấp độ dùng chung trong toàn chuỗi.
-  for (const branch of DATA.branches) {
+  for (const branch of DATA.branches.filter((item) => ACTIVE_BRANCH_IDS.includes(item.id as (typeof ACTIVE_BRANCH_IDS)[number]))) {
     const result = openBranch(state, branch.id);
     if (!result.ok) throw new Error(`Không mở được chi nhánh ${branch.id} trong hồ sơ max: ${result.reason}`);
   }
@@ -87,6 +87,18 @@ export function createMaxLevelSimulation(): GameState {
     ensureDiningTables(state);
   }
 
+  // Tiệm bán ở quầy khác tiệm xôi (trà sữa...) có đủ các trạm pha chế trong mặt bằng nhỏ của nó.
+  for (const store of state.stores) {
+    if (store.id === xoiStore?.id || shopTypeOf(store).def.service !== 'counter') continue;
+    visitStore(state, store.id);
+    for (const type of shopTypeOf(store).def.fixtures.filter((id) => DATA.furniture.find((f) => f.id === id)?.kind === 'drink')) {
+      if (!state.fixtures.some((fixture) => fixture.type === type)) placeAnywhere(state, type);
+    }
+    ensureDiningTables(state);
+    syncActiveStore(state);
+  }
+  visitStore(state, 'main');
+
   // Nâng kho tối đa cho từng tiệm và bật toàn bộ công thức của đúng loại tiệm.
   for (const id of shopStores) {
     visitStore(state, id);
@@ -118,6 +130,20 @@ export function createMaxLevelSimulation(): GameState {
     visitStore(state, id);
     if (id === 'main') seedFullShelves(state);
     else seedBranchShelves(state);
+    seedCounter(state);
+    syncActiveStore(state);
+  }
+  // Tiệm bán theo kệ của loại khác (rau củ, giải khát, gia dụng...) cũng bày đủ hàng theo nhóm hàng của loại đó.
+  for (const store of state.stores) {
+    if (groceryStores.includes(store.id) || shopTypeOf(store).def.service !== 'shelves') continue;
+    visitStore(state, store.id);
+    seedBranchShelves(state);
+    syncActiveStore(state);
+  }
+  // Tiệm bán ở quầy khác tiệm xôi (trà sữa...) bày sẵn thành phẩm của thực đơn lên quầy.
+  for (const store of state.stores) {
+    if (store.id === xoiStore?.id || shopTypeOf(store).def.service !== 'counter') continue;
+    visitStore(state, store.id);
     seedCounter(state);
     syncActiveStore(state);
   }
@@ -198,8 +224,8 @@ function placeGroceryFurniture(state: GameState, stores: string[]): void {
 function createFullRoster(state: GameState, storeId: string): Staff[] {
   const shopType = activeShopType(state).def.id;
   const roles: StaffRole[] = shopType === 'xoi'
-    ? ['xoi_cook', 'cashier', 'stocker', 'delivery', 'branch_manager', 'chef', 'barista', 'refill']
-    : ['cashier', 'refill', 'stocker', 'delivery', 'chef', 'barista', 'branch_manager', 'xoi_cook'];
+    ? ['xoi_cook', 'cashier', 'stocker', 'delivery', 'branch_manager', 'chef', 'barista', 'tea_barista', 'foam_specialist', 'refill']
+    : ['cashier', 'refill', 'stocker', 'delivery', 'chef', 'barista', 'tea_barista', 'foam_specialist', 'branch_manager', 'xoi_cook'];
   const count = staffSlots(state.level);
   return Array.from({ length: count }, (_, index) => {
     const role = roles[index % roles.length];
@@ -293,7 +319,8 @@ function seedFullShelves(state: GameState): void {
 
 function seedBranchShelves(state: GameState): void {
   const shop = activeShopType(state);
-  const categories: ShelfZone[] = ['dry', 'snack', 'drink'];
+  // Tạp hóa giữ bộ nhóm cũ; loại tiệm khác dùng chính nhóm hàng của nó để kệ khớp loại tiệm.
+  const categories: ShelfZone[] = shop.def.id === 'grocery' ? ['dry', 'snack', 'drink'] : shop.def.categories.filter((c): c is Exclude<typeof c, 'counter'> => c !== 'counter');
   for (let row = 0; row < state.shelves.length; row++) {
     if (!state.fixtures.some((fixture) => fixture.shelf === row)) continue;
     const candidates = DATA.products.filter((item) => shop.allowsProduct(item.id)

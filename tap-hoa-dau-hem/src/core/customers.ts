@@ -1,4 +1,5 @@
-import { DATA, type Category, type CustomerType } from './data';
+import { isMadeToOrder, orderVariantFor } from './customCups';
+import { DATA, recipeById, type Category, type CustomerType } from './data';
 import type { Rng } from './rng';
 import { priceOf, unlockedCategories, unlockedProducts, usableShelves, type GameState } from './state';
 import { EffectStack } from './effects';
@@ -21,6 +22,10 @@ export interface OrderLine {
   declined?: 'price' | 'cold';
   /** Đã hỏi ở quầy về phần hết trên kệ (nhân viên đã kiểm kho). */
   asked?: boolean;
+  /** Tùy chọn khách gọi ở món trà (khóa tùy chọn; rỗng/thiếu = ly thường). */
+  variantId?: string;
+  /** Tùy chọn của ly thực sự đã đưa (để trả lại đúng loại nếu khách bỏ về). */
+  servedVariant?: string;
 }
 
 export type CustomerStatus = 'entering' | 'browsing' | 'waiting' | 'scanning' | 'bargain' | 'credit' | 'paying' | 'fleeing' | 'done';
@@ -114,7 +119,8 @@ export function densityAt(minute: number): number {
 
 /** Mật độ khách của tiệm đang đứng: loại tiệm có đường cong riêng (tiệm xôi đông buổi sáng). */
 export function shopDensityAt(state: GameState, minute: number): number {
-  return activeShopType(state).densityAt(minute) ?? densityAt(minute);
+  const shop = activeShopType(state);
+  return (shop.densityAt(minute) ?? densityAt(minute)) * shop.trafficMul;
 }
 
 /** Thời gian trung bình (giây thật) giữa hai khách. */
@@ -146,8 +152,11 @@ export function generateCounterOrder(type: CustomerType, rng: Rng, state: GameSt
   for (let i = 0; i < count; i++) {
     const pool = dishes.filter((r) => !lines.some((l) => l.productId === r.output));
     const inStock = (id: string) => state.counter.some((slot) => slot.productId === id && slot.qty > 0);
-    const pick = pool[rng.weightedIndex(pool.map((r) => (inStock(r.output) ? 3 : 1)))];
-    lines.push({ productId: pick.output, qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [] });
+    // Món pha theo đơn coi như luôn có sẵn (pha khi khách gọi).
+    const pick = pool[rng.weightedIndex(pool.map((r) => (inStock(r.output) || isMadeToOrder(r) ? 3 : 1)))];
+    // Món trà: khách gọi một tùy chọn (Size L, thêm topping...) theo trọng số trong dữ liệu.
+    const variantId = orderVariantFor(pick, () => rng.next());
+    lines.push({ productId: pick.output, qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [], ...(variantId ? { variantId } : {}) });
   }
   return lines;
 }
@@ -172,15 +181,21 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
   // Nhờ vậy danh mục lớn hơn chỗ bày không làm phần lớn khách bỏ về vì "hết hàng".
   const carried = state ? carriedProducts(state) : null;
   const effects = state ? EffectStack.forDay(state.day, state.calendarStartMonth, state.calendarStartYear, state.activeEvents) : null;
+  const orderShop = state ? activeShopType(state) : null;
+  // Nhu cầu mùa/sự kiện, qua cơ chế riêng của loại tiệm (nhạy mùa, chuộng nhóm hàng).
+  const demandOf = (category: string, id?: string): number => {
+    const raw = effects?.demand(category, id) ?? 1;
+    return orderShop ? orderShop.demand(category, raw) : raw;
+  };
   const pickWeight = (id: string, price: number, category: string) => (1 / Math.sqrt(price))
-    * (clearance.has(id) ? DATA.balance.clearance.pickWeightMul : 1) * (effects?.demand(category, id) ?? 1);
+    * (clearance.has(id) ? DATA.balance.clearance.pickWeightMul : 1) * demandOf(category, id);
   const countWeights = DATA.balance.orderLineWeights.slice(0, type.maxItems);
   const count = cartUnits > 0 ? cartUnits : rng.weightedIndex(countWeights) + 1;
   const lines: OrderLine[] = [];
   const units = () => lines.reduce((n, l) => n + l.qty, 0);
   for (let i = 0; i < count; i++) {
     if (cartUnits > 0 && units() >= cartUnits) break;
-    const catWeights = cats.map((c: Category) => (type.prefs[c] ?? 0) * (effects?.demand(c) ?? 1));
+    const catWeights = cats.map((c: Category) => (type.prefs[c] ?? 0) * demandOf(c));
     const ci = rng.weightedIndex(catWeights);
     if (ci < 0) break;
     const all = products.filter((p) => p.category === cats[ci] && !lines.some((l) => l.productId === p.id));
@@ -191,17 +206,17 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
     const p = pool[rng.weightedIndex(pool.map((x) => pickWeight(x.id, x.price, x.category)))];
     // Món rẻ thì hay mua nhiều hơn.
     const maxQty = DATA.balance.qtyByPrice.find((q) => p.price <= q.maxPrice)?.maxQty ?? 1;
-    const qty = cartUnits > 0 ? Math.min(rng.int(1, maxQty), cartUnits - units()) : rng.int(1, maxQty);
+    const qty = cartUnits > 0 ? Math.min(rng.int(1, maxQty), cartUnits - units()) : Math.max(1, Math.round(rng.int(1, maxQty) * (orderShop?.qtyMul ?? 1)));
     lines.push({ productId: p.id, qty, picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
   }
-  if (lines.length === 0) lines.push({ productId: rng.pick(products).id, qty: 1, picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
+  if (lines.length === 0) lines.push({ productId: rng.pick(products).id, qty: Math.max(1, Math.round(orderShop?.qtyMul ?? 1)), picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
   const counterUnlockLevel = DATA.levels.levels.find((item) => item.counterUnlock)?.level ?? Number.POSITIVE_INFINITY;
   if (level >= counterUnlockLevel && type.counterRequestChance > 0 && rng.next() < type.counterRequestChance) {
     const counterProducts = unlockedProducts(level, state).filter((p) => p.behindCounter);
     if (state) {
       // Món chế biến đang có ở quầy: tự nấu (món đang mở bán) hoặc nhận từ tiệm khác trong chuỗi (xôi gói).
       const prepared = DATA.products.filter((p) => p.recipeOnly && p.unlockLevel <= level
-        && (state.activeRecipes.some((id) => DATA.recipes.find((r) => r.id === id)?.output === p.id) || activeShopType(state).def.sourcesFrom.includes(p.id))
+        && (state.activeRecipes.some((id) => recipeById(id)?.output === p.id) || activeShopType(state).def.sourcesFrom.includes(p.id))
         && state.counter.some((slot) => slot.productId === p.id && slot.qty > 0));
       counterProducts.push(...prepared);
     }

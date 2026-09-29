@@ -21,5 +21,7 @@
   { "id": "generator", "name": "Máy phát điện", "icon": "⚡", "kind": "generator", "w": 2, "h": 1, "slots": 0, "cost": 360000, "unlockLevel": 21, "power": 0, "limit": 1 },
   { "id": "thung_ngam", "name": "Thùng ngâm nếp", "icon": "🪣", "kind": "food", "w": 1, "h": 1, "slots": 0, "cost": 120000, "unlockLevel": 29, "power": 0, "limit": 3 },
   { "id": "xung_hap", "name": "Xửng hấp xôi", "icon": "♨️", "kind": "food", "w": 1, "h": 1, "slots": 0, "cost": 320000, "unlockLevel": 29, "power": 4000, "limit": 2 },
-  { "id": "quay_xoi", "name": "Quầy trưng bày xôi", "icon": "🍙", "kind": "food", "w": 1, "h": 1, "slots": 0, "cost": 180000, "unlockLevel": 29, "power": 1000, "limit": 1 }
+  { "id": "quay_xoi", "name": "Quầy trưng bày xôi", "icon": "🍙", "kind": "food", "w": 1, "h": 1, "slots": 0, "cost": 180000, "unlockLevel": 29, "power": 1000, "limit": 1 },
+  { "id": "tea_bar", "name": "Quầy pha trà", "icon": "🧋", "kind": "drink", "w": 2, "h": 1, "slots": 0, "cost": 350000, "unlockLevel": 36, "power": 3000, "limit": 1 },
+  { "id": "foam_machine", "name": "Máy đánh foam", "icon": "🫧", "kind": "drink", "w": 1, "h": 1, "slots": 0, "cost": 260000, "unlockLevel": 41, "power": 3500, "limit": 1 }
 ]

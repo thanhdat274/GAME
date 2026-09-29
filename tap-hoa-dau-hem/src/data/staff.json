@@ -6,6 +6,8 @@
     { "id": "delivery", "name": "Giao hàng", "icon": "🛵", "unlockFeature": "delivery", "mainStat": "speed" },
     { "id": "chef", "name": "Đầu bếp", "icon": "👩‍🍳", "unlockFeature": "chef", "mainStat": "speed" },
     { "id": "barista", "name": "Pha chế", "icon": "🧋", "unlockFeature": "barista", "mainStat": "accuracy" },
+    { "id": "tea_barista", "name": "Nhân viên trà sữa", "icon": "🧋", "unlockFeature": "shop_tea", "mainStat": "accuracy" },
+    { "id": "foam_specialist", "name": "Chuyên foam", "icon": "🫧", "unlockFeature": "foam_specialist", "mainStat": "accuracy" },
     { "id": "xoi_cook", "name": "Thợ nấu xôi", "icon": "🍙", "unlockFeature": "shop_xoi", "mainStat": "speed" },
     { "id": "branch_manager", "name": "Quản lý chi nhánh", "icon": "🏪", "unlockFeature": "branch_manager", "mainStat": "stamina" },
     { "id": "guard", "name": "Bảo vệ", "icon": "💂", "unlockFeature": "thief", "mainStat": "stamina" }

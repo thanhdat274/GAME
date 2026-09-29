@@ -20,6 +20,8 @@ export const ROLE_TASKS: Record<StaffRole, TaskKind[]> = {
   delivery: ['deliver'],
   chef: [],
   barista: [],
+  tea_barista: [],
+  foam_specialist: [],
   branch_manager: [],
   xoi_cook: [],
   guard: [],

@@ -43,6 +43,10 @@ export interface Product {
   eventOnly?: string;
   /** Thành phẩm do bếp/quầy nước chế biến, không nhập từ mối sỉ. */
   recipeOnly?: boolean;
+  /** Chỉ các loại tiệm liệt kê mặt hàng này trong `ingredients` mới nhập/bán; tạp hóa và tiệm khác không thấy nó. */
+  shopOnly?: boolean;
+  /** Nhóm quầy pha chế (`cup`, `tea`, `syrup`, `topping`, `foam`, `mix`) của nguyên liệu, dùng để xếp ô trong mini-game pha ly. */
+  barGroup?: string;
 }
 
 export interface LevelDef {
@@ -107,6 +111,7 @@ export interface Balance {
     playerTilesPerSecond: number;
     /** Hệ số mất kiên nhẫn của khách ở quầy người chơi khi người chơi đang đi nạp kệ. */
     awayPatienceRate: number;
+    carry: { carryStacks: number; carryUnitsPerStack: number };
   };
   zoneWalkSeconds: number;
   pickSeconds: number;
@@ -125,6 +130,8 @@ export interface Balance {
   counterSlots: number;
   counterCapacity: number;
   counterRequestSeconds: number;
+  /** Món pha theo đơn: thời gian yêu cầu quầy dài thêm bấy nhiêu giây (kịp bấm Pha ngay); khi ly đang được pha, kiên nhẫn của khách giảm chậm còn bấy nhiêu lần tốc độ thường (khách biết phải chờ). `autoQuality`: chất lượng ly bấm Pha ngay (không qua mini-game); pha tay và pha chế viên có thể cao hơn. */
+  madeToOrder: { waitSeconds: number; brewPatienceRate: number; autoQuality: number };
   counterWrongPenalty: number;
   refillSeconds: number;
   fastChangeSeconds: number;
@@ -223,10 +230,12 @@ export interface Balance {
 
 export type TaxKind = 'goods' | 'food' | 'service';
 
-/** Thuế hộ kinh doanh: miễn dưới ngưỡng doanh thu năm, vượt ngưỡng thì nộp VAT + TNCN theo % doanh thu. */
+/** Thuế hộ kinh doanh và doanh nghiệp theo chính sách Việt Nam đang áp dụng năm 2026. */
 export interface TaxBalance {
-  /** Ngưỡng doanh thu mỗi năm game được miễn thuế. */
+  /** Ngưỡng doanh thu năm dưới đó hộ/cá nhân kinh doanh không chịu VAT và TNCN. */
   yearlyThreshold: number;
+  householdPitMethodThreshold: number;
+  householdPitProfitRate: number;
   rates: Record<TaxKind, { vat: number; pit: number }>;
   /** Hạn nộp: số ngày tính từ ngày đầu tháng mới. */
   dueDays: number;
@@ -234,7 +243,7 @@ export interface TaxBalance {
   remindDays: number;
   /** Tiền chậm nộp mỗi ngày quá hạn (tỉ lệ trên số thuế còn nợ). */
   lateInterestPerDay: number;
-  /** Quá hạn bấy nhiêu ngày thì bị cưỡng chế trừ thẳng vào tiền mặt. */
+  /** Quy tắc cưỡng chế là gameplay, không đại diện mốc pháp luật thực tế. */
   enforceAfterDays: number;
   /** Tiền phạt khi bị cưỡng chế (tỉ lệ trên số thuế). */
   enforceFine: number;
@@ -261,7 +270,7 @@ export interface TaxBalance {
   invoiceCustomer: { type: string; chance: number; companyChance: number; bonusExp: number; noInvoiceMaxStars: number };
   /** Khấu trừ thuế TNCN của nhân viên có lương ngày vượt mức. */
   staffPit: { dailyThreshold: number; rate: number };
-  company: { setupCost: number; vatRate: number; citRate: number; supplierDiscount: number; partyRewardMul: number };
+  company: { setupCost: number; vatRate: number; citRate: number; citRateSmall: number; citRateMedium: number; citRevenueSmall: number; citRevenueMedium: number; supplierDiscount: number; partyRewardMul: number };
   /** EXP thưởng khi quyết toán năm không trễ hạn, không bị truy thu. */
   settlementExp: number;
 }
@@ -309,7 +318,7 @@ export interface StaffBalance {
   shifts: { name: string; from: number; to: number }[];
 }
 
-export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'branch_manager' | 'xoi_cook' | 'guard';
+export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'tea_barista' | 'foam_specialist' | 'branch_manager' | 'xoi_cook' | 'guard';
 export type StatKey = 'speed' | 'accuracy' | 'friendly' | 'stamina';
 export type StaffStats = Record<StatKey, number>;
 export interface Look { shirt: string; pants: string; hair: string; skin: string }
@@ -477,8 +486,27 @@ export interface StoryChapter {
 export interface DensitySegment { from: number; to: number; mul: number }
 
 /** Loại cửa hàng (shopTypes.json): quyết định hàng, nội thất, khách, giờ cao điểm và mô phỏng khi vắng chủ. */
+/**
+ * Cơ chế riêng của một loại cửa hàng (tất cả tùy chọn; thiếu = 1, tức không đổi so với tạp hóa).
+ */
+export interface ShopMechanics {
+  /** Nhân hạn dùng của hàng nhập vào theo nhóm hàng (vd. hàng tươi hỏng nhanh hơn). */
+  shelfLifeMul?: Partial<Record<Category, number>>;
+  /** Nhân nhu cầu của khách theo nhóm hàng. */
+  demandMul?: Partial<Record<Category, number>>;
+  /** Số mũ áp lên nhu cầu theo mùa/sự kiện: >1 nhạy mùa hơn, <1 ít nhạy hơn. */
+  seasonSensitivity?: number;
+  /** Nhân số lượng mỗi dòng hàng khách mua (bán sỉ). */
+  qtyMul?: number;
+  /** Nhân lượng khách chung của tiệm. */
+  trafficMul?: number;
+}
+
+/** Id loại cửa hàng (khóa trong shopTypes.json); `validateContent` kiểm tra mọi tham chiếu. */
+export type ShopTypeId = string;
+
 export interface ShopTypeDef {
-  id: 'grocery' | 'xoi';
+  id: ShopTypeId;
   name: string;
   icon: string;
   /** Nhóm hàng được bày bán trên kệ/quầy. */
@@ -506,14 +534,17 @@ export interface ShopTypeDef {
   service: 'shelves' | 'counter';
   /** Có dùng các mảnh đất mở rộng (land.json) và điều kiện `requiresPlot` của nội thất không. */
   landPlots: boolean;
+  /** Cơ chế riêng của loại tiệm (xem `ShopMechanics`). */
+  mechanics?: ShopMechanics;
 }
 
 export interface BranchDef {
   id: string;
   name: string;
-  kind: 'market' | 'school' | 'industrial' | 'xoi';
+  /** Kiểu khu/địa điểm (quyết định ngoại hình tòa nhà trên bản đồ phố). */
+  kind: string;
   /** Loại cửa hàng khi mở (mặc định grocery). */
-  shopType?: 'grocery' | 'xoi';
+  shopType?: ShopTypeId;
   /** Tính năng level cần có để thấy và mở khu này (ngoài unlockLevel). */
   feature?: string;
   icon: string;
@@ -540,6 +571,10 @@ export interface RecipeDef {
   variants?: RecipeVariant[];
   /** Đầu ra đóng gói để bán qua tiệm khác (xôi gói); khách tại tiệm không gọi món này. */
   packaged?: boolean;
+  /** Mini-game pha chế riêng (`tea`: pha ly trà sữa nhiều quầy); thiếu = mini-game mặc định của màn Cook. */
+  minigame?: 'tea';
+  /** Kiểu phục vụ món trà: `ready` (pha sẵn để trên quầy, mặc định) hoặc `order` (pha theo đơn khi khách gọi, không pha sẵn được). */
+  serve?: 'ready' | 'order';
 }
 
 export interface RecipeVariant {
@@ -549,6 +584,8 @@ export interface RecipeVariant {
   qualityDelta: number;
   /** Nguyên liệu tốn thêm khi chọn biến thể (vd. "Thêm topping"). */
   extraIngredients?: Record<string, number>;
+  /** Trọng số khách gọi tùy chọn này ở món `minigame: 'tea'` (ly thường có trọng số riêng trong `customCups.ts`); thiếu = 0.2. */
+  orderWeight?: number;
 }
 
 const CATEGORIES: Category[] = ['dry', 'snack', 'household', 'drink', 'fresh', 'frozen', 'counter'];
@@ -642,8 +679,29 @@ export function decor(id: string): DecorDef {
   return d;
 }
 
+const supplierIndex = new Map(DATA.suppliers.map((s) => [s.id, s]));
+const recipeIndex = new Map(DATA.recipes.map((r) => [r.id, r]));
+// Giữ công thức đầu tiên cho mỗi đầu ra, đúng như `find` trước đây.
+const recipeByOutputIndex = new Map<string, RecipeDef>();
+for (const r of DATA.recipes) if (!recipeByOutputIndex.has(r.output)) recipeByOutputIndex.set(r.output, r);
+const shopTypeIndex = new Map<string, ShopTypeDef>(DATA.shopTypes.map((t) => [t.id, t]));
+
+/** Công thức theo id (O(1)); undefined nếu không có. */
+export function recipeById(id: string): RecipeDef | undefined {
+  return recipeIndex.get(id);
+}
+
+/** Công thức làm ra mặt hàng `output` (O(1)); undefined nếu không có. */
+export function recipeByOutput(output: string): RecipeDef | undefined {
+  return recipeByOutputIndex.get(output);
+}
+
+export function shopTypeById(id: string): ShopTypeDef | undefined {
+  return shopTypeIndex.get(id);
+}
+
 export function supplier(id: string): SupplierDef {
-  const s = DATA.suppliers.find((item) => item.id === id);
+  const s = supplierIndex.get(id);
   if (!s) throw new Error(`Không có mối sỉ ${id}`);
   return s;
 }

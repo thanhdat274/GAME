@@ -1,5 +1,5 @@
 import {
-  DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type StaffRole, type StaffStats, type TaxKind,
+  DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type ShopTypeId, type StaffRole, type StaffStats, type TaxKind,
 } from './data';
 import type { Review } from './reviews';
 import { activeShopType } from './shopTypes';
@@ -19,6 +19,8 @@ export interface Slot {
   lots?: SlotLot[];
   /** Bán xả: phần trăm giảm giá (30/50) cho hàng hết hạn hôm nay. */
   clearance?: number;
+  /** Ô quầy của món trà: số ly theo tùy chọn (khóa rỗng = ly thường). Thông tin phụ, luôn được khớp lại theo `qty` khi đọc (`customCups.ts`). */
+  variants?: Record<string, number>;
 }
 
 /** Lô hàng trong kho. */
@@ -311,6 +313,8 @@ export interface Settings {
   idleAutoPlay?: number;
   /** Góc nhìn lúc bán: 'side' = nhìn ngang (mặc định), 'topdown' = sơ đồ trên xuống, tự đi lại. */
   viewMode?: 'side' | 'topdown';
+  carryStock?: boolean;
+  orderAtPhone?: boolean;
   /** Thợ nấu xôi làm đơn nội bộ trước hàng bán lẻ (mặc định bật). */
   xoiOrderPriority?: boolean;
   /** Báo công an khi bị trộm đột nhập / phát hiện tiền giả (mặc định bật). Tắt: tự xử, trả lại tờ giả. */
@@ -345,12 +349,12 @@ export interface PartyOrder {
 }
 
 /** Loại cửa hàng (id trong shopTypes.json), tách khỏi `kind` là khu vực. */
-export type ShopTypeId = 'grocery' | 'xoi';
+export type { ShopTypeId };
 
 export interface StoreSnapshot {
   id: string;
   name: string;
-  kind: 'main' | 'market' | 'school' | 'industrial' | 'xoi';
+  kind: string;
   shopType: ShopTypeId;
   /** Per-store operational state. Shared money/level remain on GameState. */
   data: Record<string, unknown>;
@@ -533,7 +537,7 @@ export interface ActiveEvent {
 }
 
 export interface GameState {
-  version: 7;
+  version: 8;
   day: number;
   phase: Phase;
   /** Phút trong ngày (480 = 08:00) khi đang mở cửa. */
@@ -676,7 +680,7 @@ export function createNewGame(): GameState {
   const b = DATA.balance;
   const fixtures = defaultFixtures();
   const state: GameState = {
-    version: 7,
+    version: 8,
     day: 1,
     phase: 'morning',
     clock: b.openMinute,
@@ -864,7 +868,7 @@ function baseUnlocked(level: number, shop: ReturnType<typeof activeShopType> | n
   let list = baseUnlockedCache.get(key);
   if (!list) {
     const cats = unlockedCategories(level);
-    list = DATA.products.filter((p) => !p.recipeOnly && !p.eventOnly && (!shop || shop.allowsProduct(p.id))
+    list = DATA.products.filter((p) => !p.recipeOnly && !p.eventOnly && (shop ? shop.allowsProduct(p.id) : !p.shopOnly)
       && p.unlockLevel <= level && (p.behindCounter ? level >= 3 : cats.includes(p.category)));
     baseUnlockedCache.set(key, list);
   }

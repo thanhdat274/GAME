@@ -75,7 +75,9 @@ export function staffGoal(state: GameState, task: string | null, lane: number | 
     return station ? { kind: 'fixture', uid: station.uid } : { kind: 'stay' };
   }
   if (task === 'receive') {
-    return rack ? { kind: 'fixture', uid: rack.uid } : { kind: 'door' };
+    if (rack) return { kind: 'fixture', uid: rack.uid };
+    const counter = state.fixtures.find((f) => DATA.furniture.find((d) => d.id === f.type)?.kind === 'counter');
+    return counter ? { kind: 'fixture', uid: counter.uid } : { kind: 'door' };
   }
   const parts = task.split(':');
   const shelf = Number(parts[1]);

@@ -1,4 +1,4 @@
-import { DATA, product } from './data';
+import { DATA, product, recipeByOutput } from './data';
 import { addPlayerExperience } from './progression';
 import { fillOrder, orderRemaining, pendingOrdersFrom, productionCapacity } from './internalSupply';
 import { makeServing, qualityPrice } from './recipes';
@@ -74,7 +74,7 @@ export function simulateProductionDay(state: GameState, storeId: string, day: nu
   let capacity = productionCapacity(store, efficiency);
   /** Làm một phần; trả chất lượng món hoặc null nếu không làm được. */
   const cookOne = (output: string): number | null => {
-    const recipe = DATA.recipes.find((r) => r.output === output);
+    const recipe = recipeByOutput(output);
     if (!recipe || capacity <= 0 || !store.fixtures.some((f) => f.type === recipe.station)) return null;
     const q = makeServing(store, recipe, day, SIM_STEAM_MINUTE + 60, quality);
     if (q === null) return null;
@@ -92,7 +92,7 @@ export function simulateProductionDay(state: GameState, storeId: string, day: nu
         report.delivered++;
       }
       if (orderRemaining(order, id) > 0) {
-        const recipe = DATA.recipes.find((r) => r.output === id);
+        const recipe = recipeByOutput(id);
         const lack = recipe ? Object.keys(recipe.ingredients).find((ing) => (ing === COOKED_RICE_ID ? cookedPortions(store) : warehouseQty(store, ing)) < recipe.ingredients[ing]) : undefined;
         order.shortReason = capacity <= 0 ? 'thợ làm không kịp' : lack ? `thiếu ${lack === COOKED_RICE_ID ? 'nếp' : product(lack).name.toLowerCase()}` : 'không làm được';
       }

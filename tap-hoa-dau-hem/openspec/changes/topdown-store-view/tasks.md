@@ -31,6 +31,6 @@
 ## 5. Để lại cho change sau
 
 - [ ] 5.1 Sprite nội thất vẽ riêng cho góc trên xuống; sprite nhân vật nghiêng thật
-- [ ] 5.2 Mở rộng mặt bằng lớn hơn 8×8 kèm camera đi theo nhân vật (đổi `land.json` và màn Sắp xếp)
+- [ ] 5.2 Mở rộng mặt bằng lớn hơn 10×10 kèm camera đi theo nhân vật (đổi `land.json` và màn Sắp xếp)
 - [ ] 5.3 Tránh va chạm khi khách và nhân viên đi qua nhau
 - [ ] 5.4 Đồng bộ vị trí người chơi trong phiên chơi chung để dùng được góc trên xuống

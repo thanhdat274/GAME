@@ -3,11 +3,12 @@ import { DATA, product } from './data';
 import { applyLevelUps } from './progression';
 import { arrangeStorageRacks, stowMisplacedFixtures } from './layout';
 import { activeShopType, shopTypeOf } from './shopTypes';
+import { ACTIVE_BRANCH_IDS } from './branches';
 import { createNewGame, defaultFixtures, emptySlots, syncActiveStore, type GameState, type Lot, type Slot } from './state';
 
 export const SAVE_KEY = 'thdh.save.v1';
 export const BACKUP_KEY = 'thdh.save.v1.bak';
-export const CURRENT_VERSION = 7;
+export const CURRENT_VERSION = 8;
 /** Bản lưu trước khi migrate lên version mới, giữ 14 ngày để khôi phục. */
 export const PRE_MIGRATE_KEY = 'thdh.save.premigrate';
 const PRE_MIGRATE_DAYS = 14;
@@ -42,6 +43,19 @@ type Migration = (state: Record<string, unknown>) => Record<string, unknown>;
 
 /** migrations[n] chuyển bản lưu version n lên n+1. Giai đoạn sau thêm vào đây. */
 const migrations: Record<number, Migration> = {
+  7: (state) => {
+    const allowed = new Set<string>(['main', ...ACTIVE_BRANCH_IDS]);
+    const stores = Array.isArray(state.stores) ? state.stores as { id?: string }[] : [];
+    const kept = stores.filter((store) => allowed.has(String(store.id)));
+    return {
+      ...state,
+      stores: kept.length ? kept : stores.filter((store) => store.id === 'main'),
+      activeStoreId: allowed.has(String(state.activeStoreId)) ? state.activeStoreId : 'main',
+      branchShipments: Array.isArray(state.branchShipments)
+        ? (state.branchShipments as { fromStoreId?: string; toStoreId?: string }[]).filter((shipment) => allowed.has(String(shipment.fromStoreId)) && allowed.has(String(shipment.toStoreId)))
+        : [],
+    };
+  },
   1: (state) => {
     const shelves = Array.isArray(state.shelves) ? (state.shelves as { productId: string | null; qty: number }[][]) : [];
     const warehouse: Record<string, number> = state.warehouse && !Array.isArray(state.warehouse) ? { ...(state.warehouse as Record<string, number>) } : {};
