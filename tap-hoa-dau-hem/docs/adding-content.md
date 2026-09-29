@@ -75,3 +75,4 @@ Chỉ là lớp hiển thị, không đổi tiền, kho hay save. Giờ chạy t
 - **`minigame: "tea"`** trên công thức: mở màn pha ly (`TeaScene`) thay vì màn Cook mặc định; thứ tự chạm lấy từ `src/core/teaBar.ts`.
 - **Level:** `levels.json` là dữ liệu; `maxLevel` phải bằng số dòng. Danh hiệu (`prestige`) bắt đầu ở level tối đa và giao diện đọc `maxLevel` từ dữ liệu, nên thêm level mới chỉ cần thêm dòng và dời tính năng `prestige` xuống dòng cuối.
 - **Tiệm mới:** thêm loại tiệm (`shopTypes.json`), chi nhánh (`branches.json`), tính năng ở level (`levels.json`), lô đất (`make-city-map.ts`) như các mục trên.
+- **Kiểu phục vụ món trà:** `serve: "order"` trên công thức nghĩa là pha theo đơn (không pha sẵn được; khách gọi thì bấm Pha ngay, ly mất `prepSeconds`); thiếu `serve` là pha sẵn để trên quầy. Thời gian chờ thêm và tốc độ mất kiên nhẫn khi đang pha chỉnh ở `balance.json › madeToOrder`. `orderWeight` trên tùy chọn là trọng số khách gọi tùy chọn đó.

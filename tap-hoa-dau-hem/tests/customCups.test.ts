@@ -180,12 +180,14 @@ describe('nhãn hiển thị', () => {
 
 /** Chạy một ngày bán ở quầy với ly `cups` (loại → số ly mỗi món) và đếm kết quả phục vụ. */
 function runDay(seed: number, cups: string[]): { served: number; fits: Record<string, number>; revenue: number; stars: number } {
+  // Pha sẵn xong thì bỏ trạm pha: kiểm tra riêng cách phục vụ từ quầy (không pha ngay được).
   const state = teaShop(40);
   stockTea(state);
   state.counter = state.counter.map(() => ({ productId: null, qty: 0, lots: [] } as never));
   const menu = state.activeRecipes.slice(0, state.counter.length);
   state.activeRecipes = menu;
   for (const id of menu) for (const key of cups) for (let i = 0; i < 8; i++) prepareRecipe(state, id, 1, key === BASE_VARIANT ? undefined : key);
+  state.fixtures = state.fixtures.filter((f) => f.type !== 'tea_bar' && f.type !== 'foam_machine');
   openShop(state);
   const session = new DaySession(state, seed);
   const fits: Record<string, number> = {};

@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 /** Nhóm quầy trong mini-game pha ly: quyết định ô nằm ở khu nào và thứ tự thêm vào ly. */
 type Bar = 'cup' | 'tea' | 'syrup' | 'topping' | 'foam' | 'mix';
 interface Ingredient { id: string; name: string; icon: string; category: 'dry' | 'fresh'; cost: number; price: number; unlock: number; life: number; cold?: 'fridge'; bar: Bar }
-interface Drink { id: string; name: string; icon: string; unlock: number; station: 'tea_bar' | 'foam_machine'; ingredients: Record<string, number>; prep: number }
+interface Drink { id: string; name: string; icon: string; unlock: number; station: 'tea_bar' | 'foam_machine'; ingredients: Record<string, number>; prep: number; serve?: 'order' }
 
 /** Nguyên liệu riêng của tiệm trà sữa (shopOnly). Sữa tươi và nước đá dùng lại mặt hàng có sẵn. */
 const INGREDIENTS: Ingredient[] = [
@@ -49,14 +49,14 @@ const DRINKS: Drink[] = [
   { id: 'tra_thai_do', name: 'Trà thái đỏ', icon: '🧋', unlock: 38, station: 'tea_bar', prep: 9, ingredients: { ...BASE, tra_thai: 1, sua_tuoi: 1, nuoc_duong: 1 } },
   { id: 'hong_tra_dao', name: 'Hồng trà đào', icon: '🍑', unlock: 38, station: 'tea_bar', prep: 8, ingredients: { ...BASE, hong_tra: 1, siro_dao: 1 } },
   { id: 'olong_sua', name: 'Ô long sữa', icon: '🧋', unlock: 39, station: 'tea_bar', prep: 9, ingredients: { ...BASE, olong: 1, sua_tuoi: 1 } },
-  { id: 'matcha_latte', name: 'Matcha latte', icon: '🍵', unlock: 39, station: 'tea_bar', prep: 10, ingredients: { ...BASE, matcha_bot: 1, sua_tuoi: 1, nuoc_duong: 1 } },
+  { id: 'matcha_latte', name: 'Matcha latte', icon: '🍵', unlock: 39, station: 'tea_bar', prep: 10, serve: 'order', ingredients: { ...BASE, matcha_bot: 1, sua_tuoi: 1, nuoc_duong: 1 } },
   { id: 'tra_dau', name: 'Trà dâu thạch', icon: '🍓', unlock: 40, station: 'tea_bar', prep: 9, ingredients: { ...BASE, luc_tra: 1, siro_dau: 1, thach_trai_cay: 1 } },
-  { id: 'hong_tra_macchiato', name: 'Hồng trà macchiato', icon: '🧀', unlock: 41, station: 'foam_machine', prep: 11, ingredients: { ...BASE, hong_tra: 1, foam_cheese: 1, nuoc_duong: 1 } },
-  { id: 'matcha_foam', name: 'Matcha foam', icon: '🍵', unlock: 43, station: 'foam_machine', prep: 12, ingredients: { ...BASE, matcha_bot: 1, sua_tuoi: 1, foam_matcha: 1 } },
+  { id: 'hong_tra_macchiato', name: 'Hồng trà macchiato', icon: '🧀', unlock: 41, station: 'foam_machine', prep: 11, serve: 'order', ingredients: { ...BASE, hong_tra: 1, foam_cheese: 1, nuoc_duong: 1 } },
+  { id: 'matcha_foam', name: 'Matcha foam', icon: '🍵', unlock: 43, station: 'foam_machine', prep: 12, serve: 'order', ingredients: { ...BASE, matcha_bot: 1, sua_tuoi: 1, foam_matcha: 1 } },
   { id: 'tra_nho', name: 'Trà nho sương sáo', icon: '🍇', unlock: 44, station: 'tea_bar', prep: 9, ingredients: { ...BASE, luc_tra: 1, siro_nho: 1, suong_sao: 1 } },
-  { id: 'olong_foam_muoi', name: 'Ô long foam muối', icon: '🧂', unlock: 45, station: 'foam_machine', prep: 11, ingredients: { ...BASE, olong: 1, foam_muoi: 1 } },
-  { id: 'tra_chanh_day', name: 'Trà chanh dây', icon: '🥭', unlock: 46, station: 'tea_bar', prep: 9, ingredients: { ...BASE, luc_tra: 1, siro_chanh_day: 1, tran_chau_trang: 1 } },
-  { id: 'tra_ube', name: 'Trà sữa khoai môn', icon: '🟣', unlock: 47, station: 'foam_machine', prep: 13, ingredients: { ...BASE, tra_sua_base: 1, sua_tuoi: 1, foam_ube: 1, pudding: 1 } },
+  { id: 'olong_foam_muoi', name: 'Ô long foam muối', icon: '🧂', unlock: 45, station: 'foam_machine', prep: 11, serve: 'order', ingredients: { ...BASE, olong: 1, foam_muoi: 1 } },
+  { id: 'tra_chanh_day', name: 'Trà chanh dây', icon: '🥭', unlock: 46, station: 'tea_bar', prep: 9, serve: 'order', ingredients: { ...BASE, luc_tra: 1, siro_chanh_day: 1, tran_chau_trang: 1 } },
+  { id: 'tra_ube', name: 'Trà sữa khoai môn', icon: '🟣', unlock: 47, station: 'foam_machine', prep: 13, serve: 'order', ingredients: { ...BASE, tra_sua_base: 1, sua_tuoi: 1, foam_ube: 1, pudding: 1 } },
 ];
 
 const COST: Record<string, number> = { ...EXISTING_COST, ...Object.fromEntries(INGREDIENTS.map((i) => [i.id, i.cost])) };
@@ -111,7 +111,7 @@ const outputProducts = DRINKS.map((d) => {
 });
 const recipes = DRINKS.map((d) => ({
   id: d.id, name: d.name, category: 'beverage', output: `${d.id}_tp`, ingredients: d.ingredients, station: d.station, unlockLevel: d.unlock,
-  prepSeconds: d.prep, shelfLifeDays: 1, steps: stepsOf(d), variants: variantsOf(d), minigame: 'tea',
+  prepSeconds: d.prep, shelfLifeDays: 1, steps: stepsOf(d), variants: variantsOf(d), minigame: 'tea', ...(d.serve ? { serve: d.serve } : {}),
 }));
 
 const productIds = new Set([...ingredientProducts, ...outputProducts].map((p) => p.id));

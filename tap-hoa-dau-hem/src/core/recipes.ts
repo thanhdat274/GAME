@@ -1,10 +1,10 @@
-import { addCup, BASE_VARIANT, isCustomRecipe } from './customCups';
+import { addCup, BASE_VARIANT, isCustomRecipe, isMadeToOrder } from './customCups';
 import { DATA, product, recipeById, type RecipeDef, type RecipeVariant } from './data';
 import { activeShopType, shopTypeOf } from './shopTypes';
 import { COOKED_RICE_ID, cookedPortions, riceDishQuality, takeCookedRice } from './stickyRice';
 import { formatMoney, type GameState, type StoreData } from './state';
 
-export type CookResult = { ok: true; cost: number; output: string; quality: number } | { ok: false; reason: 'locked' | 'shop' | 'station' | 'ingredients' | 'space' | 'menu' };
+export type CookResult = { ok: true; cost: number; output: string; quality: number } | { ok: false; reason: 'locked' | 'shop' | 'station' | 'ingredients' | 'space' | 'menu' | 'order' };
 
 export function validateRecipes(recipes: RecipeDef[] = DATA.recipes): string[] {
   const errors: string[] = [];
@@ -83,6 +83,37 @@ export function missingIngredients(store: StoreData, recipe: RecipeDef, variant?
     : store.warehouse.reduce((n, l) => n + (l.productId === id ? l.qty : 0), 0)) < qty).map(([id]) => id);
 }
 
+export type BrewFail = { ok: false; reason: 'locked' | 'shop' | 'station' | 'menu' | 'ingredients' };
+export type BrewCheck = { ok: true; recipe: RecipeDef; variant?: RecipeVariant } | BrewFail;
+
+/** Có pha được một ly `variantId` của `recipeId` ở tiệm `store` ngay bây giờ không (đủ level, đúng loại tiệm, có trạm, món đang bán, đủ nguyên liệu). */
+export function checkBrew(state: GameState, recipeId: string, variantId?: string, store: StoreData = state): BrewCheck {
+  const recipe = recipeById(recipeId);
+  if (!recipe || recipe.unlockLevel > state.level) return { ok: false, reason: 'locked' };
+  if (!shopOfStore(state, store).allowsRecipe(recipeId)) return { ok: false, reason: 'shop' };
+  if (!hasStation(store, recipe.station)) return { ok: false, reason: 'station' };
+  if (!store.activeRecipes.includes(recipeId)) return { ok: false, reason: 'menu' };
+  const variant = variantId ? recipe.variants?.find((item) => item.id === variantId) : undefined;
+  if (variantId && !variant) return { ok: false, reason: 'menu' };
+  if (missingIngredients(store, recipe, variant).length) return { ok: false, reason: 'ingredients' };
+  return { ok: true, recipe, variant };
+}
+
+/**
+ * Pha một ly cho khách đang chờ: trừ nguyên liệu (kể cả tùy chọn) và ghi nhật ký, không đặt lên quầy.
+ * Trả giá vốn nguyên liệu, hoặc lý do không pha được.
+ */
+export function brewCup(state: GameState, recipeId: string, variantId?: string, store: StoreData = state): { ok: true; cost: number } | BrewFail {
+  const check = checkBrew(state, recipeId, variantId, store);
+  if (!check.ok) return check;
+  const requirements = recipeRequirements(check.recipe, check.variant);
+  consumeWarehouse(store, requirements);
+  const cost = Object.entries(requirements).reduce((sum, [item, qty]) => sum + product(item).cost * qty, 0);
+  const variantNote = check.variant ? ` (${check.variant.name})` : '';
+  store.today.journal.push({ m: state.clock, t: `Pha theo đơn ${check.recipe.name}${variantNote}; nguyên liệu ${formatMoney(cost)}` });
+  return { ok: true, cost };
+}
+
 /** Giá bán món chế biến theo chất lượng (0.75–1.25 × giá gợi ý, làm tròn 500đ, không dưới giá vốn). */
 export function qualityPrice(outputId: string, quality: number, priceDelta = 0): number {
   const output = product(outputId);
@@ -115,6 +146,8 @@ export function prepareRecipe(state: GameState, id: string, quality = 1, variant
   if (!store.activeRecipes.includes(id)) return { ok: false, reason: 'menu' };
   const variant = variantId ? recipe.variants?.find((item) => item.id === variantId) : undefined;
   if (variantId && !variant) return { ok: false, reason: 'menu' };
+  // Món pha theo đơn chỉ pha khi khách gọi (`brewCup`), không pha sẵn lên quầy.
+  if (isMadeToOrder(recipe)) return { ok: false, reason: 'order' };
   const requirements = recipeRequirements(recipe, variant);
   const slots = store.counter;
   let outputSlot = slots.find((s) => s.productId === recipe.output);

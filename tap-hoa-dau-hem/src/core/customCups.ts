@@ -6,6 +6,11 @@ import { product, recipeByOutput, type RecipeDef } from './data';
 import type { OrderLine } from './customers';
 import type { Slot } from './state';
 
+/** Món pha theo đơn (`serve: 'order'`): không pha sẵn được, khách gọi thì pha ngay. */
+export function isMadeToOrder(recipe: RecipeDef | undefined): boolean {
+  return !!recipe && recipe.serve === 'order';
+}
+
 /** Khóa của ly thường (không tùy chọn). */
 export const BASE_VARIANT = '';
 /** Trọng số khách gọi ly thường so với `orderWeight` của các tùy chọn. */

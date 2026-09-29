@@ -29,6 +29,10 @@
   "counterSlots": 4,
   "counterCapacity": 5,
   "counterRequestSeconds": 6,
+  "madeToOrder": {
+    "waitSeconds": 8,
+    "brewPatienceRate": 0.35
+  },
   "counterWrongPenalty": 2,
   "refillSeconds": 1,
   "fastChangeSeconds": 4,

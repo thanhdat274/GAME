@@ -199,7 +199,7 @@ export class TeaScene extends Phaser.Scene {
       this.prompt.setColor(HEX.green).setText(`${product(made.output).icon} ${perfect ? 'Pha chuẩn · Ngon' : 'Pha chưa chuẩn · Tạm được'}. Đã đưa vào quầy${priceDelta ? ` (giá +${formatMoney(priceDelta)})` : ''}.`);
       persist();
     } else {
-      this.prompt.setColor(HEX.red).setText(made.reason === 'space' ? 'Quầy đã đầy.' : made.reason === 'station' ? 'Cần có quầy pha trà / máy foam trong tiệm.' : 'Thiếu nguyên liệu hoặc thiết bị.');
+      this.prompt.setColor(HEX.red).setText(made.reason === 'order' ? 'Món này pha theo đơn khi khách gọi, không pha sẵn.' : made.reason === 'space' ? 'Quầy đã đầy.' : made.reason === 'station' ? 'Cần có quầy pha trà / máy foam trong tiệm.' : 'Thiếu nguyên liệu hoặc thiết bị.');
     }
     this.refresh();
     new Button(this, W / 2 - 84, H - 32, { w: 150, h: 42, label: 'Pha tiếp', size: 13, color: C.green, onTap: () => this.scene.restart(this.data0) });

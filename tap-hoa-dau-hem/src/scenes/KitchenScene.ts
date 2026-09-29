@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { isMadeToOrder } from '../core/customCups';
 import { DATA, product, type RecipeDef } from '../core/data';
 import { missingIngredients, prepareRecipe, recipeIngredients, setRecipeActive } from '../core/recipes';
 import { assignCounterToOrders, orderRemaining, pendingOrdersFrom } from '../core/internalSupply';
@@ -95,6 +96,8 @@ export class KitchenScene extends Phaser.Scene {
     const reqs = recipeIngredients(recipe);
     const missing = missingIngredients(s, recipe);
     const enough = !missing.length;
+    // Món pha theo đơn: không pha sẵn, khách gọi thì pha ngay lúc bán.
+    const orderOnly = isMadeToOrder(recipe);
     const active = s.activeRecipes.includes(recipe.id);
     const internalOrders = recipe.packaged && activeShopType(s).def.id === 'xoi'
       ? pendingOrdersFrom(s, s.activeStoreId).filter((order) => orderRemaining(order, output.id) > 0)
@@ -107,17 +110,18 @@ export class KitchenScene extends Phaser.Scene {
     this.list.add(txt(this, 18, y + 28, Object.entries(reqs).map(([id, qty]) => ingredientLabel(id, qty)).join(' · '), { size: 9, color: HEX.muted, wrap: W - 118 }));
     const missingText = missing.includes(COOKED_RICE_ID) ? 'Chưa có nếp chín · hấp một mẻ trước' : 'Thiếu nguyên liệu trong kho';
     const stockLabel = activeShopType(s).def.id === 'xoi' ? 'phần ở quầy xôi riêng' : 'phần sau quầy';
-    const status = locked ? `Mở ở L${recipe.unlockLevel}` : !station ? `Cần ${DATA.furniture.find((f) => f.id === recipe.station)?.name ?? recipe.station}` : !enough ? missingText : active ? `${output.icon} Có ${ready} ${stockLabel}` : 'Sẵn sàng mở bán';
+    const status = locked ? `Mở ở L${recipe.unlockLevel}` : !station ? `Cần ${DATA.furniture.find((f) => f.id === recipe.station)?.name ?? recipe.station}` : !enough ? missingText : active ? (orderOnly ? `${output.icon} Pha theo đơn khi khách gọi` : `${output.icon} Có ${ready} ${stockLabel}`) : 'Sẵn sàng mở bán';
     this.list.add(txt(this, 18, y + 62, status, { size: 10, color: locked || !station || !enough ? HEX.red : HEX.green, wrap: W - 118 }));
     this.list.add(new Button(this, W - 57, y + 30, { w: 78, h: 31, label: active ? 'Tắt món' : 'Mở bán', size: 10, color: active ? C.wood : C.green, onTap: this.list.guard(() => {
       if (locked || !station) return;
       setRecipeActive(s, recipe.id, !active); persist(); this.render();
     }) }).setEnabled(!locked && station));
-    this.list.add(new Button(this, W - 57, y + 65, { w: 78, h: 27, label: 'Chế biến', size: 10, color: C.blue, onTap: this.list.guard(() => {
+    this.list.add(new Button(this, W - 57, y + 65, { w: 78, h: 27, label: orderOnly ? 'Theo đơn' : 'Chế biến', size: 10, color: C.blue, onTap: this.list.guard(() => {
+      if (orderOnly) { toast(this, 'Món này pha theo đơn khi khách gọi, không pha sẵn'); return; }
       if (locked || !station || !enough || !active) { toast(this, 'Mở bán món và chuẩn bị đủ nguyên liệu trước'); return; }
       if (!s.counter.some((slot) => slot.productId === output.id || slot.productId === null || slot.qty <= 0)) { toast(this, 'Quầy đã đầy · bán bớt hoặc dọn một ô quầy trước'); return; }
       this.scene.start(recipe.minigame === 'tea' ? 'Tea' : 'Cook', { recipeId: recipe.id, fromKitchen: true, kitchenFromShop: this.fromShop });
-    }) }).setEnabled(!locked && station && enough && active));
+    }) }).setEnabled(!locked && station && enough && active && !orderOnly));
     if (internalOrders.length) {
       const transferable = Math.min(ready, needed);
       this.list.add(txt(this, 18, y + 91, `Đơn chờ ${needed} · quầy có ${ready}`, { size: 9, color: HEX.muted, wrap: W - 152 }));

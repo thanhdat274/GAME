@@ -88,6 +88,8 @@ export class ShopScene extends Phaser.Scene {
   private trayText: Phaser.GameObjects.Text | null = null;
   private trayBills: Phaser.GameObjects.Container | null = null;
   private counterTimerText: Phaser.GameObjects.Text | null = null;
+  /** Nút Pha ngay của bảng phục vụ hiện tại (để cập nhật số giây còn lại mỗi khung). */
+  private brewButton: Button | null = null;
   private counterPulseTween: Phaser.Tweens.Tween | null = null;
   private counterRequestBar: Bar | null = null;
   private pauseLayer: Phaser.GameObjects.Container | null = null;
@@ -525,6 +527,13 @@ export class ShopScene extends Phaser.Scene {
       const v = this.views.get(customer.id);
       if (!v || fit === 'exact') return;
       this.sideFloat(v.sprite.x, v.sprite.y - 70, fit === 'worse' ? 'Ly chưa đúng ý · −1 sao' : 'Được ly xịn hơn', fit === 'worse' ? HEX.red : HEX.green, 12);
+    });
+    e.on('brewStarted', () => { play('pick'); this.queuePanel(); });
+    e.on('brewDone', () => { play('pick'); this.queuePanel(); });
+    e.on('brewCancelled', ({ customer }) => {
+      const v = this.views.get(customer.id);
+      if (v) this.sideFloat(v.sprite.x, v.sprite.y - 70, 'Khách bỏ đi · mẻ bị bỏ', HEX.red, 12);
+      this.queuePanel();
     });
     e.on('counterExpired', () => this.queuePanel());
     e.on('paymentStarted', () => this.queuePanel());
@@ -985,6 +994,15 @@ export class ShopScene extends Phaser.Scene {
   }
 
   /** Gom nhiều sự kiện trong cùng một khung (quét món, khách rời, đổi quầy...) thành một lần dựng lại bảng dưới. */
+  /** Nút Pha ngay (hoặc trạng thái Đang pha) trong bảng phục vụ ở quầy. */
+  private addBrewButton(L: Phaser.GameObjects.Container, x: number, y: number, w: number, h: number, offer: { seconds: number } | null, brewing: { left: number } | null): void {
+    const label = brewing ? `🧋 Đang pha\n${Math.ceil(brewing.left)}s` : `🧋 Pha ngay\n${offer?.seconds ?? 0}s`;
+    const button = new Button(this, x, y, { w, h, label, size: 9, color: brewing ? C.grey : C.blue, onTap: () => { if (!brewing) this.session.startBrew(); } });
+    button.setEnabled(!brewing);
+    this.brewButton = button;
+    L.add(button);
+  }
+
   private queuePanel(): void {
     this.panelQueued = true;
   }
@@ -1010,6 +1028,7 @@ export class ShopScene extends Phaser.Scene {
     this.trayText = null;
     this.trayBills = null;
     this.counterTimerText = null;
+    this.brewButton = null;
     this.counterRequestBar = null;
     this.panelLayer.add(panel(this, 6, PANEL_Y + 4, W - 12, H - PANEL_Y - 10));
     this.managerStatus = null;
@@ -1240,11 +1259,15 @@ export class ShopScene extends Phaser.Scene {
     const request = c.order.find((l) => l.counterLine && c.counterRequestLeft !== null);
     if (request) {
       const slots = G.state.counter;
+      // Món trà: hết đúng ly thì có nút Pha ngay (không dùng trong phiên chia sẻ trực tuyến).
+      const offer = G.liveSnapshot ? null : this.session.brewOffer();
+      const brewing = G.liveSnapshot ? null : this.session.brewProgress();
+      const compact = !!(offer || brewing);
       slots.forEach((slot, i) => {
-        const x = 46 + i * 78;
+        const x = (compact ? 38 : 46) + i * (compact ? 68 : 78);
         const label = counterSlotLabel(slot);
         const counterButton = new Button(this, x, PANEL_Y + 174, {
-          w: 70,
+          w: compact ? 62 : 70,
           h: 44,
           label,
           color: slotMatch(slot, request) === 'exact' ? C.green : slotMatch(slot, request) === 'product' ? C.yellow : C.grey,
@@ -1258,6 +1281,7 @@ export class ShopScene extends Phaser.Scene {
         if (slot.productId === request.productId) this.counterPulseTween = this.tweens.add({ targets: counterButton, scale: 1.04, yoyo: true, repeat: -1, duration: 380 });
         L.add(counterButton);
       });
+      if (compact) this.addBrewButton(L, 38 + slots.length * 68, PANEL_Y + 174, 62, 44, offer, brewing);
     }
     const cartValue = c.order.reduce((sum, line) => sum + (line.value ?? line.picked * product(line.productId).price), 0);
     L.add(this.panelText(18, PANEL_Y + 142, `Giỏ: ${formatMoney(cartValue)}`, { size: 12, color: HEX.muted }));
@@ -1389,7 +1413,12 @@ export class ShopScene extends Phaser.Scene {
     }
     this.renderCustomerBars(side);
     const requestLeft = this.session.front?.counterRequestLeft;
-    if (this.counterTimerText?.active && requestLeft != null) {
+    const brewingNow = this.session.brewProgress();
+    if (brewingNow && this.counterTimerText?.active) {
+      this.counterTimerText.setText(`🧋 ${Math.ceil(brewingNow.left)}s`);
+      this.counterRequestBar?.set(brewingNow.progress, C.blue);
+      if (this.brewButton?.active) this.brewButton.label.setText(`🧋 Đang pha\n${Math.ceil(brewingNow.left)}s`);
+    } else if (this.counterTimerText?.active && requestLeft != null) {
       this.counterTimerText.setText(`⏱ ${Math.ceil(requestLeft)}s`);
       this.counterRequestBar?.set(requestLeft / Math.max(1, this.session.front?.counterRequestSeconds ?? 1), requestLeft <= 2 ? C.red : C.green);
     }

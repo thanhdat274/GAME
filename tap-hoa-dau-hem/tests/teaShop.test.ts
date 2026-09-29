@@ -4,7 +4,7 @@ import { DATA, validateLevels, type Product } from '../src/core/data';
 import { DaySession, endDay, openShop, runDayHeadless } from '../src/core/day';
 import { checkPaths } from '../src/core/layout';
 import { PRESTIGE_EXP_PER_STAR, currentTitle, prestigeStars } from '../src/core/prestige';
-import { prepareRecipe, recipeRequirements, validateRecipes } from '../src/core/recipes';
+import { checkBrew, prepareRecipe, recipeRequirements, validateRecipes } from '../src/core/recipes';
 import { shopTypeDef, shopTypeOf, validateShopTypes } from '../src/core/shopTypes';
 import { staffSlots } from '../src/core/staff';
 import { createMaxLevelSimulation } from '../src/core/simulation';
@@ -210,7 +210,11 @@ describe('hồ sơ max', () => {
     for (const id of ['nuoc_da', 'sua_tuoi', ...TEA_INGREDIENTS.map((p) => p.id)]) addLot(state, id, 100, state.day + 30);
     for (const r of TEA_RECIPES) {
       state.counter = state.counter.map(() => ({ productId: null, qty: 0, lots: [] } as never));
-      expect(prepareRecipe(state, r.id, 1).ok, r.id).toBe(true);
+      // Món pha sẵn được thì lên quầy; món pha theo đơn bị từ chối pha sẵn nhưng đủ nguyên liệu và trạm để pha khi khách gọi.
+      if (r.serve === 'order') {
+        expect(prepareRecipe(state, r.id, 1), r.id).toEqual({ ok: false, reason: 'order' });
+        expect(checkBrew(state, r.id).ok, r.id).toBe(true);
+      } else expect(prepareRecipe(state, r.id, 1).ok, r.id).toBe(true);
     }
   });
 });

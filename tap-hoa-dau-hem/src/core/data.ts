@@ -129,6 +129,8 @@ export interface Balance {
   counterSlots: number;
   counterCapacity: number;
   counterRequestSeconds: number;
+  /** Món pha theo đơn: thời gian yêu cầu quầy dài thêm bấy nhiêu giây (kịp bấm Pha ngay); khi ly đang được pha, kiên nhẫn của khách giảm chậm còn bấy nhiêu lần tốc độ thường (khách biết phải chờ). */
+  madeToOrder: { waitSeconds: number; brewPatienceRate: number };
   counterWrongPenalty: number;
   refillSeconds: number;
   fastChangeSeconds: number;
@@ -568,6 +570,8 @@ export interface RecipeDef {
   packaged?: boolean;
   /** Mini-game pha chế riêng (`tea`: pha ly trà sữa nhiều quầy); thiếu = mini-game mặc định của màn Cook. */
   minigame?: 'tea';
+  /** Kiểu phục vụ món trà: `ready` (pha sẵn để trên quầy, mặc định) hoặc `order` (pha theo đơn khi khách gọi, không pha sẵn được). */
+  serve?: 'ready' | 'order';
 }
 
 export interface RecipeVariant {
