@@ -1,4 +1,4 @@
-import { DATA, product, type RecipeDef, type RecipeVariant } from './data';
+import { DATA, product, recipeById, type RecipeDef, type RecipeVariant } from './data';
 import { activeShopType, shopTypeOf } from './shopTypes';
 import { COOKED_RICE_ID, cookedPortions, riceDishQuality, takeCookedRice } from './stickyRice';
 import { formatMoney, type GameState, type StoreData } from './state';
@@ -107,7 +107,7 @@ export function makeServing(store: StoreData, recipe: RecipeDef, day: number, mi
  * (level, ngày, giờ vẫn lấy từ phần chung của `state`). Món chỉ làm được ở loại tiệm có công thức đó.
  */
 export function prepareRecipe(state: GameState, id: string, quality = 1, variantId?: string, store: StoreData = state): CookResult {
-  const recipe = DATA.recipes.find((r) => r.id === id);
+  const recipe = recipeById(id);
   if (!recipe || recipe.unlockLevel > state.level) return { ok: false, reason: 'locked' };
   if (!shopOfStore(state, store).allowsRecipe(id)) return { ok: false, reason: 'shop' };
   if (!hasStation(store, recipe.station)) return { ok: false, reason: 'station' };
@@ -137,7 +137,7 @@ export function prepareRecipe(state: GameState, id: string, quality = 1, variant
 }
 
 export function setRecipeActive(state: GameState, id: string, active: boolean): boolean {
-  const recipe = DATA.recipes.find((r) => r.id === id);
+  const recipe = recipeById(id);
   if (!recipe || recipe.unlockLevel > state.level) return false;
   if (active && !activeShopType(state).allowsRecipe(id)) return false;
   state.activeRecipes = active

@@ -642,8 +642,29 @@ export function decor(id: string): DecorDef {
   return d;
 }
 
+const supplierIndex = new Map(DATA.suppliers.map((s) => [s.id, s]));
+const recipeIndex = new Map(DATA.recipes.map((r) => [r.id, r]));
+// Giữ công thức đầu tiên cho mỗi đầu ra, đúng như `find` trước đây.
+const recipeByOutputIndex = new Map<string, RecipeDef>();
+for (const r of DATA.recipes) if (!recipeByOutputIndex.has(r.output)) recipeByOutputIndex.set(r.output, r);
+const shopTypeIndex = new Map<string, ShopTypeDef>(DATA.shopTypes.map((t) => [t.id, t]));
+
+/** Công thức theo id (O(1)); undefined nếu không có. */
+export function recipeById(id: string): RecipeDef | undefined {
+  return recipeIndex.get(id);
+}
+
+/** Công thức làm ra mặt hàng `output` (O(1)); undefined nếu không có. */
+export function recipeByOutput(output: string): RecipeDef | undefined {
+  return recipeByOutputIndex.get(output);
+}
+
+export function shopTypeById(id: string): ShopTypeDef | undefined {
+  return shopTypeIndex.get(id);
+}
+
 export function supplier(id: string): SupplierDef {
-  const s = DATA.suppliers.find((item) => item.id === id);
+  const s = supplierIndex.get(id);
   if (!s) throw new Error(`Không có mối sỉ ${id}`);
   return s;
 }

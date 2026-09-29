@@ -1,4 +1,4 @@
-import { DATA, product } from './data';
+import { DATA, product, recipeByOutput } from './data';
 import { addPlayerExperience } from './progression';
 import type { Rng } from './rng';
 import { activeShopType } from './shopTypes';
@@ -26,7 +26,7 @@ export function ensureDiningTables(state: GameState): DiningTableState[] {
 
 /** Seat a customer after a prepared food or drink sale if a clean table is available. */
 export function seatDiner(state: GameState, customerId: number, productId: string): DiningTableState | null {
-  const recipe = DATA.recipes.find((item) => item.output === productId);
+  const recipe = recipeByOutput(productId);
   if (!recipe) return null;
   const table = ensureDiningTables(state).find((item) => item.status === 'clean');
   if (!table) return null;

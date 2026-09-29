@@ -2,7 +2,7 @@ import { computeTip, customerPayment, judgeChange, type ChangeResult } from './c
 import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, shopDensityAt, type Customer, type OrderLine, type PaymentMethod } from './customers';
 import { recordDay } from './analytics';
 import { applyPlanogram, planogramProduct, runRestockRules } from './autorestock';
-import { DATA, hasFeature, product, type Category, type RecipeDef } from './data';
+import { DATA, hasFeature, product, recipeByOutput, recipeById, type Category, type RecipeDef } from './data';
 import { attractionMultiplier, hasCat } from './decor';
 import { createPhoneOrder, deliveryUnlocked, orderShortfall, orderUnits, reserveItems, tripSeconds, type PhoneOrder } from './delivery';
 import { Emitter } from './events';
@@ -1724,7 +1724,7 @@ export class DaySession {
       for (const order of pendingOrdersFrom(st, st.activeStoreId)) {
         if (order.dueDay > st.day + 1) continue;
         for (const id of Object.keys(order.items)) {
-          const recipe = DATA.recipes.find((r) => r.output === id);
+          const recipe = recipeByOutput(id);
           if (recipe && orderRemaining(order, id) > 0 && canMake(recipe)) return { key: `xoi:${recipe.id}:${order.id}`, seconds: recipe.prepSeconds };
         }
       }
@@ -1746,7 +1746,7 @@ export class DaySession {
     }
     if (key.startsWith('xoi:')) {
       const [, recipeId, orderId] = key.split(':');
-      const recipe = DATA.recipes.find((r) => r.id === recipeId);
+      const recipe = recipeById(recipeId);
       const order = this.state.internalOrders.find((o) => o.id === orderId);
       if (!recipe || !order || orderRemaining(order, recipe.output) <= 0) return;
       if (makeServing(this.state, recipe, this.state.day, this.state.clock, quality) === null) return;

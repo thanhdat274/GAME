@@ -1,4 +1,4 @@
-import { DATA, type BranchDef, type Category, type Product, type ShopTypeDef } from './data';
+import { DATA, recipeById, shopTypeById, type BranchDef, type Category, type Product, type ShopTypeDef } from './data';
 import type { GameState, ShopTypeId, StoreSnapshot } from './state';
 
 const PRODUCT_CATEGORIES: Category[] = ['dry', 'snack', 'household', 'drink', 'fresh', 'frozen', 'counter'];
@@ -18,7 +18,7 @@ export interface ShopTypeBehavior {
 }
 
 export function shopTypeDef(id: ShopTypeId): ShopTypeDef {
-  const def = DATA.shopTypes.find((item) => item.id === id);
+  const def = shopTypeById(id);
   if (!def) throw new Error(`Không có loại cửa hàng ${id}`);
   return def;
 }
@@ -41,7 +41,7 @@ export function activeShopType(state: Pick<GameState, 'stores' | 'activeStoreId'
 function behavior(def: ShopTypeDef): ShopTypeBehavior {
   const fixtures = new Set(def.fixtures);
   const recipes = new Set(def.recipes);
-  const outputs = new Set(def.recipes.map((id) => DATA.recipes.find((r) => r.id === id)?.output).filter(Boolean));
+  const outputs = new Set(def.recipes.map((id) => recipeById(id)?.output).filter(Boolean));
   const extras = new Set([...def.ingredients, ...def.addOns.map((a) => a.productId)]);
   return {
     def,

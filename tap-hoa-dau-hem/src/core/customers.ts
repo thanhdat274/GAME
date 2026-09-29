@@ -1,4 +1,4 @@
-import { DATA, type Category, type CustomerType } from './data';
+import { DATA, recipeById, type Category, type CustomerType } from './data';
 import type { Rng } from './rng';
 import { priceOf, unlockedCategories, unlockedProducts, usableShelves, type GameState } from './state';
 import { EffectStack } from './effects';
@@ -201,7 +201,7 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
     if (state) {
       // Món chế biến đang có ở quầy: tự nấu (món đang mở bán) hoặc nhận từ tiệm khác trong chuỗi (xôi gói).
       const prepared = DATA.products.filter((p) => p.recipeOnly && p.unlockLevel <= level
-        && (state.activeRecipes.some((id) => DATA.recipes.find((r) => r.id === id)?.output === p.id) || activeShopType(state).def.sourcesFrom.includes(p.id))
+        && (state.activeRecipes.some((id) => recipeById(id)?.output === p.id) || activeShopType(state).def.sourcesFrom.includes(p.id))
         && state.counter.some((slot) => slot.productId === p.id && slot.qty > 0));
       counterProducts.push(...prepared);
     }
