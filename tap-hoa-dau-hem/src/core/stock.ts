@@ -21,10 +21,14 @@ export function cellsFor(productId: string, qty: number): number {
 
 /** Số ô kho đã dùng; nhận kho dạng lô hoặc tổng theo món. */
 export function warehouseCellsUsed(warehouse: Lot[] | Record<string, number>): number {
-  const totals: Record<string, number> = {};
-  if (Array.isArray(warehouse)) for (const lot of warehouse) totals[lot.productId] = (totals[lot.productId] ?? 0) + lot.qty;
-  else Object.assign(totals, warehouse);
-  return Object.entries(totals).reduce((sum, [id, qty]) => sum + cellsFor(id, qty), 0);
+  let totals: Record<string, number> = warehouse as Record<string, number>;
+  if (Array.isArray(warehouse)) {
+    totals = {};
+    for (const lot of warehouse) totals[lot.productId] = (totals[lot.productId] ?? 0) + lot.qty;
+  }
+  let sum = 0;
+  for (const id in totals) sum += cellsFor(id, totals[id]);
+  return sum;
 }
 
 /** Sức chứa kho: bậc kho + ô của kệ kho đặt trên mặt bằng. */
@@ -57,9 +61,15 @@ export function isPerishable(p: Product): boolean {
 }
 
 /** Hạn dùng cho hàng nhập vào ngày `day`. */
-export function expiryFor(productId: string, day: number): number | null {
+export function expiryFor(productId: string, day: number, lifeMul = 1): number | null {
   const life = product(productId).shelfLifeDays;
-  return life ? day + life : null;
+  if (!life) return null;
+  return day + (lifeMul === 1 ? life : Math.max(1, Math.round(life * lifeMul)));
+}
+
+/** Hạn dùng của hàng nhập vào tiệm đang đứng (loại tiệm có thể làm hàng hỏng nhanh/chậm hơn). */
+function expiryInShop(state: GameState, productId: string, day: number): number | null {
+  return expiryFor(productId, day, activeShopType(state).shelfLifeMul(product(productId).category));
 }
 
 export function addLot(state: StoreData, productId: string, qty: number, exp: number | null, into: Lot[] = state.warehouse): void {
@@ -168,9 +178,10 @@ export function checkCart(state: GameState, cart: Cart, supplierId = 'co_tu'): B
   const total = cartTotal(cart, state, supplierId);
   const s = supplier(supplierId);
   const cells = warehouseCellsUsed(warehouseAfter(state, cart));
-  const unlocked = new Set(unlockedProducts(state.level, state).map((p) => p.id));
   const items = Object.entries(cart).filter(([, q]) => q > 0);
   if (items.length === 0) return { ok: false, reason: 'empty', total, cells, missing: 0 };
+  // Chỉ dựng danh sách mở khóa khi có món cần kiểm.
+  const unlocked = new Set(unlockedProducts(state.level, state).map((p) => p.id));
   if (!supplierUnlocked(state, supplierId) || items.some(([id]) => !unlocked.has(id))) return { ok: false, reason: 'locked', total, cells, missing: 0 };
   if (total < s.minOrder) return { ok: false, reason: 'min-order', total, cells, missing: s.minOrder - total };
   // Hàng giao ngay phải vừa kho; hàng giao sau để dư ra "hàng chờ".
@@ -192,7 +203,7 @@ export function buyStock(state: GameState, cart: Cart, supplierId = 'co_tu'): Bu
     const id = state.deliveries.reduce((max, d) => Math.max(max, d.id), 0) + 1;
     state.deliveries.push({ id, supplierId, arriveDay: state.day + s.delayDays, arriveMinute: s.deliverMinute, items });
   } else {
-    for (const [id, qty] of Object.entries(items)) addLot(state, id, qty, expiryFor(id, state.day));
+    for (const [id, qty] of Object.entries(items)) addLot(state, id, qty, expiryInShop(state, id, state.day));
   }
   return check;
 }
@@ -208,7 +219,7 @@ export function receiveDeliveries(state: GameState, day: number, minute: number)
     let stored = 0;
     let held = 0;
     for (const [id, qty] of Object.entries(d.items)) {
-      const exp = expiryFor(id, day);
+      const exp = expiryInShop(state, id, day);
       const fit = storeWithinCapacity(state, id, qty, exp);
       stored += fit;
       if (qty > fit) {
@@ -780,12 +791,30 @@ export function sellFixture(state: GameState, uid: number): SellFixtureResult {
 /** Số lượng nên có của một món: bán + thiếu hôm qua (có dự phòng); món chưa có số liệu dùng mức ước tính. */
 export function suggestedTarget(state: GameState, p: Product): number {
   const cfg = DATA.balance.suggest;
-  const demand = (state.yesterdaySold[p.id] ?? 0) + (state.yesterdayMissed[p.id] ?? 0);
+  const demand = Math.max((state.yesterdaySold[p.id] ?? 0) + (state.yesterdayMissed[p.id] ?? 0), Math.ceil(demandSignals(state)[p.id] ?? 0));
   // Hàng mau hỏng: nhập sát nhu cầu (không dự phòng). Món chưa ai hỏi thì không nhập thử (newFresh = 0): khách
   // thỉnh thoảng hỏi món tiệm chưa bán, số "hỏi mà không có" đó thành nhu cầu cho ngày sau. Hàng HSD dài nhập như hàng khô.
   if (isPerishable(p)) return demand > 0 ? Math.max(1, Math.ceil(demand * cfg.freshFactor)) : cfg.newFresh;
   const base = demand > 0 ? demand : p.price <= cfg.cheapPrice ? cfg.newCheap : cfg.newPricey;
   return Math.ceil(base * cfg.buffer) + 1;
+}
+
+/** Nhu cầu gần đây: bán thực tế, khách hỏi thiếu hàng và đánh giá chê hết món. */
+export function demandSignals(state: GameState): Record<string, number> {
+  const daily = recentDailySales(state);
+  const recent = state.analytics.slice(-3);
+  const previous = state.analytics.slice(-6, -3);
+  const out: Record<string, number> = { ...daily };
+  const ids = new Set([...Object.keys(daily), ...Object.keys(state.today.missed), ...Object.keys(state.yesterdayMissed)]);
+  for (const r of state.reviews) if (r.productId && r.issue === 'missing' && r.day >= state.day - 7) ids.add(r.productId);
+  for (const id of ids) {
+    const now = recent.length ? recent.reduce((sum, r) => sum + (r.sold[id] ?? 0), 0) / recent.length : 0;
+    const before = previous.length ? previous.reduce((sum, r) => sum + (r.sold[id] ?? 0), 0) / previous.length : 0;
+    const trend = before > 0 && now > before ? Math.min(now * 1.25, now + (now - before) * 0.5) : now;
+    const reviews = state.reviews.filter((r) => r.productId === id && r.issue === 'missing' && r.day >= state.day - 7).length;
+    out[id] = Math.max(daily[id] ?? 0, trend) + (state.today.missed[id] ?? 0) + (state.yesterdayMissed[id] ?? 0) + reviews * 2;
+  }
+  return out;
 }
 
 /** Gợi ý hàng cho tiệm xôi dựa trên nguyên liệu các món đã bán hôm qua. */
@@ -860,19 +889,28 @@ function xoiSuggestionTargets(state: GameState): { p: Product; target: number }[
  * theo món đã bán, vì nguyên liệu được giữ trong kho chứ không bày trên kệ.
  */
 export function suggestCart(state: GameState, supplierId = 'co_tu'): Cart {
+  const signals = demandSignals(state);
   const targets = activeShopType(state).def.id === 'xoi'
     ? xoiSuggestionTargets(state)
     : unlockedProducts(state.level, state)
       .filter((p) => !p.behindCounter && hasPlaceFor(state, p))
-      .map((p) => ({ p, target: suggestedTarget(state, p) }));
-  const items = targets.map(({ p, target }) => ({ p, target, want: Math.max(0, target - totalQty(state, p.id)), blocked: false }));
+      .map((p) => {
+        const known = (signals[p.id] ?? 0) > 0 || totalQty(state, p.id) > 0;
+        return { p, target: known ? suggestedTarget(state, p) : isPerishable(p) ? 0 : 3 };
+      });
+  const items = targets.map(({ p, target }) => {
+    const have = totalQty(state, p.id);
+    const known = (state.yesterdaySold[p.id] ?? 0) + (state.yesterdayMissed[p.id] ?? 0) + (state.today.sold[p.id] ?? 0) > 0
+      || state.reviews.some((r) => r.productId === p.id && r.issue === 'missing' && r.day >= state.day - 7);
+    return { p, target, want: Math.max(0, target - have), priority: have < 5 && (have > 0 || known) ? 2 : known ? 1 : 0, blocked: false };
+  });
   const cart: Cart = {};
   for (;;) {
     let best: (typeof items)[number] | null = null;
     for (const it of items) {
       if (it.blocked || it.want <= (cart[it.p.id] ?? 0)) continue;
       const missing = (it.want - (cart[it.p.id] ?? 0)) / it.target;
-      if (!best || missing > (best.want - (cart[best.p.id] ?? 0)) / best.target) best = it;
+      if (!best || it.priority > best.priority || (it.priority === best.priority && missing > (best.want - (cart[best.p.id] ?? 0)) / best.target)) best = it;
     }
     if (!best) break;
     cart[best.p.id] = (cart[best.p.id] ?? 0) + 1;
@@ -915,7 +953,7 @@ export interface RestockSuggestion {
  */
 export function suggestRestockCart(state: GameState, supplierId = 'co_tu', topN = 5): RestockSuggestion {
   const cfg = DATA.balance.suggest;
-  const daily = recentDailySales(state);
+  const daily = demandSignals(state);
   const candidates = unlockedProducts(state.level, state).filter((p) => !p.behindCounter && hasPlaceFor(state, p));
   const slotCap = new Map<string, number>();
   for (const r of usableShelves(state)) {
@@ -929,9 +967,9 @@ export function suggestRestockCart(state: GameState, supplierId = 'co_tu', topN 
     const have = totalQty(state, p.id);
     const missed = state.today.missed[p.id] ?? 0;
     // Sắp hết: tổng trên kệ + kho chưa tới nửa ô.
-    const low = cap !== undefined && have < DATA.balance.slotCapacity / 2;
+    const low = (cap !== undefined || have > 0) && have < 5;
     if (!low && missed === 0) continue;
-    const target = isPerishable(p) ? freshTarget(p, missed) : Math.max(cap ?? DATA.balance.slotCapacity, missed * 2);
+    const target = isPerishable(p) ? Math.max(5, freshTarget(p, missed)) : Math.max(cap ?? DATA.balance.slotCapacity, Math.ceil((daily[p.id] ?? 0) * cfg.buffer), 5);
     if (target > have) out.push({ p, target });
   }
   const outIds = new Set(out.map((it) => it.p.id));
@@ -942,8 +980,14 @@ export function suggestRestockCart(state: GameState, supplierId = 'co_tu', topN 
     .map((p) => ({ p, target: isPerishable(p) ? freshTarget(p) : Math.max(DATA.balance.slotCapacity, Math.ceil(daily[p.id] * cfg.buffer)) }))
     .filter((it) => it.target > totalQty(state, it.p.id));
 
+  // Thử vài món mới với lượng nhỏ; không dồn vốn vào món chưa có tín hiệu.
+  const trials = candidates
+    .filter((p) => !outIds.has(p.id) && !best.some((it) => it.p.id === p.id) && totalQty(state, p.id) === 0 && !isPerishable(p))
+    .slice(0, 2)
+    .map((p) => ({ p, target: Math.min(3, cfg.newPricey) }));
+
   const cart: Cart = {};
-  for (const group of [out, best]) {
+  for (const group of [out, best, trials]) {
     const items = group.map(({ p, target }) => {
       const have = totalQty(state, p.id);
       // Món chưa có số liệu bán coi như bán chậm, để món bán chạy được mua trước khi thiếu tiền.

@@ -239,7 +239,15 @@
     "dineInChance": 0,
     "addOns": [],
     "landPlots": true,
-    "service": "shelves"
+    "service": "shelves",
+    "mechanics": {
+      "shelfLifeMul": {
+        "fresh": 0.6
+      },
+      "demandMul": {
+        "fresh": 1.4
+      }
+    }
   },
   {
     "id": "drink_kiosk",
@@ -315,7 +323,10 @@
     "dineInChance": 0.5,
     "addOns": [],
     "landPlots": true,
-    "service": "shelves"
+    "service": "shelves",
+    "mechanics": {
+      "seasonSensitivity": 1.6
+    }
   },
   {
     "id": "household",
@@ -368,6 +379,10 @@
     "dineInChance": 0,
     "addOns": [],
     "landPlots": true,
-    "service": "shelves"
+    "service": "shelves",
+    "mechanics": {
+      "qtyMul": 2,
+      "trafficMul": 0.65
+    }
   }
 ]

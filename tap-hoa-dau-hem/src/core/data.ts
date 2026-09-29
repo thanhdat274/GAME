@@ -477,6 +477,22 @@ export interface StoryChapter {
 export interface DensitySegment { from: number; to: number; mul: number }
 
 /** Loại cửa hàng (shopTypes.json): quyết định hàng, nội thất, khách, giờ cao điểm và mô phỏng khi vắng chủ. */
+/**
+ * Cơ chế riêng của một loại cửa hàng (tất cả tùy chọn; thiếu = 1, tức không đổi so với tạp hóa).
+ */
+export interface ShopMechanics {
+  /** Nhân hạn dùng của hàng nhập vào theo nhóm hàng (vd. hàng tươi hỏng nhanh hơn). */
+  shelfLifeMul?: Partial<Record<Category, number>>;
+  /** Nhân nhu cầu của khách theo nhóm hàng. */
+  demandMul?: Partial<Record<Category, number>>;
+  /** Số mũ áp lên nhu cầu theo mùa/sự kiện: >1 nhạy mùa hơn, <1 ít nhạy hơn. */
+  seasonSensitivity?: number;
+  /** Nhân số lượng mỗi dòng hàng khách mua (bán sỉ). */
+  qtyMul?: number;
+  /** Nhân lượng khách chung của tiệm. */
+  trafficMul?: number;
+}
+
 /** Id loại cửa hàng (khóa trong shopTypes.json); `validateContent` kiểm tra mọi tham chiếu. */
 export type ShopTypeId = string;
 
@@ -509,6 +525,8 @@ export interface ShopTypeDef {
   service: 'shelves' | 'counter';
   /** Có dùng các mảnh đất mở rộng (land.json) và điều kiện `requiresPlot` của nội thất không. */
   landPlots: boolean;
+  /** Cơ chế riêng của loại tiệm (xem `ShopMechanics`). */
+  mechanics?: ShopMechanics;
 }
 
 export interface BranchDef {

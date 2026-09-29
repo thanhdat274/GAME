@@ -114,7 +114,8 @@ export function densityAt(minute: number): number {
 
 /** Mật độ khách của tiệm đang đứng: loại tiệm có đường cong riêng (tiệm xôi đông buổi sáng). */
 export function shopDensityAt(state: GameState, minute: number): number {
-  return activeShopType(state).densityAt(minute) ?? densityAt(minute);
+  const shop = activeShopType(state);
+  return (shop.densityAt(minute) ?? densityAt(minute)) * shop.trafficMul;
 }
 
 /** Thời gian trung bình (giây thật) giữa hai khách. */
@@ -172,15 +173,21 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
   // Nhờ vậy danh mục lớn hơn chỗ bày không làm phần lớn khách bỏ về vì "hết hàng".
   const carried = state ? carriedProducts(state) : null;
   const effects = state ? EffectStack.forDay(state.day, state.calendarStartMonth, state.calendarStartYear, state.activeEvents) : null;
+  const orderShop = state ? activeShopType(state) : null;
+  // Nhu cầu mùa/sự kiện, qua cơ chế riêng của loại tiệm (nhạy mùa, chuộng nhóm hàng).
+  const demandOf = (category: string, id?: string): number => {
+    const raw = effects?.demand(category, id) ?? 1;
+    return orderShop ? orderShop.demand(category, raw) : raw;
+  };
   const pickWeight = (id: string, price: number, category: string) => (1 / Math.sqrt(price))
-    * (clearance.has(id) ? DATA.balance.clearance.pickWeightMul : 1) * (effects?.demand(category, id) ?? 1);
+    * (clearance.has(id) ? DATA.balance.clearance.pickWeightMul : 1) * demandOf(category, id);
   const countWeights = DATA.balance.orderLineWeights.slice(0, type.maxItems);
   const count = cartUnits > 0 ? cartUnits : rng.weightedIndex(countWeights) + 1;
   const lines: OrderLine[] = [];
   const units = () => lines.reduce((n, l) => n + l.qty, 0);
   for (let i = 0; i < count; i++) {
     if (cartUnits > 0 && units() >= cartUnits) break;
-    const catWeights = cats.map((c: Category) => (type.prefs[c] ?? 0) * (effects?.demand(c) ?? 1));
+    const catWeights = cats.map((c: Category) => (type.prefs[c] ?? 0) * demandOf(c));
     const ci = rng.weightedIndex(catWeights);
     if (ci < 0) break;
     const all = products.filter((p) => p.category === cats[ci] && !lines.some((l) => l.productId === p.id));
@@ -191,10 +198,10 @@ export function generateOrder(type: CustomerType, level: number, rng: Rng, state
     const p = pool[rng.weightedIndex(pool.map((x) => pickWeight(x.id, x.price, x.category)))];
     // Món rẻ thì hay mua nhiều hơn.
     const maxQty = DATA.balance.qtyByPrice.find((q) => p.price <= q.maxPrice)?.maxQty ?? 1;
-    const qty = cartUnits > 0 ? Math.min(rng.int(1, maxQty), cartUnits - units()) : rng.int(1, maxQty);
+    const qty = cartUnits > 0 ? Math.min(rng.int(1, maxQty), cartUnits - units()) : Math.max(1, Math.round(rng.int(1, maxQty) * (orderShop?.qtyMul ?? 1)));
     lines.push({ productId: p.id, qty, picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
   }
-  if (lines.length === 0) lines.push({ productId: rng.pick(products).id, qty: 1, picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
+  if (lines.length === 0) lines.push({ productId: rng.pick(products).id, qty: Math.max(1, Math.round(orderShop?.qtyMul ?? 1)), picked: 0, scanned: 0, missing: 0, pickedFrom: [] });
   const counterUnlockLevel = DATA.levels.levels.find((item) => item.counterUnlock)?.level ?? Number.POSITIVE_INFINITY;
   if (level >= counterUnlockLevel && type.counterRequestChance > 0 && rng.next() < type.counterRequestChance) {
     const counterProducts = unlockedProducts(level, state).filter((p) => p.behindCounter);

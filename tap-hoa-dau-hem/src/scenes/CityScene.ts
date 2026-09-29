@@ -10,6 +10,7 @@ import { formatMoney } from '../core/state';
 import cityMapJson from '../data/cityMap.json';
 import { G, persist } from '../game';
 import { customerTexture, staffType } from '../ui/art';
+import { describeMechanics, shopTypeDef } from '../core/shopTypes';
 import { cityShops, pickShop, shopIsOpen, type ShopTarget } from '../core/cityShopping';
 import { ambientAt, formatClock, multiplyColor, normalizeMinute, phaseIcon, presenceAt } from '../core/timeOfDay';
 import { buildingDoor, buildingTexture, buildingWindows, ensureCityTileset, ensureGlowTexture, CITY_TILESET_KEY, type BuildingKind } from '../ui/cityTiles';
@@ -84,6 +85,8 @@ export class CityScene extends Phaser.Scene {
   private pinchStart = 0;
   private pinchIndex = 0;
   private childCount = -1;
+  /** Chiều cao bảng thông tin đang mở (đổi theo số dòng đặc điểm loại tiệm). */
+  private sheetH = SHEET_H;
   private grid: boolean[] = [];
   private promenade: Cell[] = [];
   private player!: Actor;
@@ -613,7 +616,7 @@ export class CityScene extends Phaser.Scene {
   private revealAboveSheet(lot: CityLot): void {
     this.follow = false;
     const regionTop = 58;
-    const regionBottom = H - SHEET_H - 16;
+    const regionBottom = H - this.sheetH - 16;
     const k = ZOOM / this.zoomScale;
     this.pan = {
       x: (lot.x + lot.w / 2) * this.map.tile - (W / 2) * k,
@@ -626,7 +629,10 @@ export class CityScene extends Phaser.Scene {
     const s = G.state;
     const { lot, def } = view;
     const store = s.stores.find((st) => st.id === lot.storeId);
-    const h = SHEET_H;
+    // Đặc điểm riêng của loại tiệm (từ shopTypes.json › mechanics) làm bảng cao thêm.
+    const traits = lot.storeId ? describeMechanics(shopTypeDef(def?.shopType ?? 'grocery')) : [];
+    const h = SHEET_H + traits.length * 13;
+    this.sheetH = h;
     const top = H - h - 8;
     const sheet = this.add.container(0, 0).setDepth(200);
     this.sheet = sheet;
@@ -638,6 +644,7 @@ export class CityScene extends Phaser.Scene {
     sheet.add(new Button(this, W - 30, top + 20, { w: 32, h: 28, label: '✕', size: 12, color: C.grey, onTap: () => this.select(null) }));
     const desc = !lot.storeId ? 'Lô đất chờ khu mới. Sẽ mở khi thành phố mở rộng.' : def?.description ?? 'Cửa hàng gốc của bạn.';
     sheet.add(txt(this, 18, top + 34, desc, { size: 10, color: HEX.muted, wrap: W - 48 }));
+    if (traits.length) sheet.add(txt(this, 18, top + 78, traits.map((line) => `✦ ${line}`).join('\n'), { size: 9, color: HEX.accentGreen, wrap: W - 48 }));
 
     const btnY = top + h - 30;
     if (!lot.storeId) return;

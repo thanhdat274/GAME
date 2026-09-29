@@ -1,4 +1,4 @@
-import { DATA, recipeById, shopTypeById, type BranchDef, type Category, type Product, type ShopTypeDef } from './data';
+import { DATA, recipeById, shopTypeById, type BranchDef, type Category, type Product, type ShopMechanics, type ShopTypeDef } from './data';
 import type { GameState, ShopTypeId, StoreSnapshot } from './state';
 
 const PRODUCT_CATEGORIES: Category[] = ['dry', 'snack', 'household', 'drink', 'fresh', 'frozen', 'counter'];
@@ -15,6 +15,14 @@ export interface ShopTypeBehavior {
   allowsRecipe(recipeId: string): boolean;
   /** Hệ số mật độ khách theo giờ; null nghĩa là dùng `balance.density` mặc định. */
   densityAt(minute: number): number | null;
+  /** Hệ số hạn dùng cho hàng nhóm này khi nhập vào tiệm (1 = không đổi). */
+  shelfLifeMul(category: Category): number;
+  /** Nhu cầu cuối của khách với nhóm hàng, từ nhu cầu mùa/sự kiện `seasonal` (1 = bình thường). */
+  demand(category: string, seasonal: number): number;
+  /** Hệ số số lượng mỗi dòng hàng. */
+  readonly qtyMul: number;
+  /** Hệ số lượng khách chung. */
+  readonly trafficMul: number;
 }
 
 export function shopTypeDef(id: ShopTypeId): ShopTypeDef {
@@ -39,6 +47,8 @@ export function activeShopType(state: Pick<GameState, 'stores' | 'activeStoreId'
 }
 
 function behavior(def: ShopTypeDef): ShopTypeBehavior {
+  const mechanics = def.mechanics ?? {};
+  const sensitivity = mechanics.seasonSensitivity ?? 1;
   const fixtures = new Set(def.fixtures);
   const recipes = new Set(def.recipes);
   const outputs = new Set(def.recipes.map((id) => recipeById(id)?.output).filter(Boolean));
@@ -59,7 +69,51 @@ function behavior(def: ShopTypeDef): ShopTypeBehavior {
       if (!def.densityCurve) return null;
       return def.densityCurve.find((seg) => minute >= seg.from && minute < seg.to)?.mul ?? 1;
     },
+    shelfLifeMul: (category) => mechanics.shelfLifeMul?.[category] ?? 1,
+    demand: (category, seasonal) => ((mechanics.demandMul as Record<string, number | undefined> | undefined)?.[category] ?? 1) * (sensitivity === 1 ? seasonal : seasonal ** sensitivity),
+    qtyMul: mechanics.qtyMul ?? 1,
+    trafficMul: mechanics.trafficMul ?? 1,
   };
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  dry: 'hàng khô', snack: 'đồ ăn vặt', household: 'đồ gia dụng', drink: 'đồ uống', fresh: 'hàng tươi', frozen: 'đồ đông lạnh',
+  counter: 'hàng sau quầy', food: 'đồ ăn', beverage: 'đồ pha chế',
+};
+const fmt = (n: number): string => String(Math.round(n * 100) / 100);
+
+/** Mô tả cơ chế riêng của loại tiệm cho người chơi, sinh từ số liệu để không lệch với dữ liệu thật. Rỗng nếu không có cơ chế riêng. */
+export function describeMechanics(def: ShopTypeDef): string[] {
+  const m = def.mechanics;
+  if (!m) return [];
+  const lines: string[] = [];
+  for (const [c, v] of Object.entries(m.shelfLifeMul ?? {})) {
+    lines.push(v < 1 ? `${CATEGORY_LABELS[c] ?? c} hỏng nhanh hơn (hạn ×${fmt(v)})` : `${CATEGORY_LABELS[c] ?? c} để được lâu hơn (hạn ×${fmt(v)})`);
+  }
+  for (const [c, v] of Object.entries(m.demandMul ?? {})) {
+    lines.push(v >= 1 ? `khách chuộng ${CATEGORY_LABELS[c] ?? c} (×${fmt(v)})` : `khách ít mua ${CATEGORY_LABELS[c] ?? c} (×${fmt(v)})`);
+  }
+  if (m.seasonSensitivity !== undefined && m.seasonSensitivity !== 1) {
+    lines.push(m.seasonSensitivity > 1 ? `nhu cầu theo mùa mạnh hơn (×${fmt(m.seasonSensitivity)}): mùa nóng bùng nổ, mùa lạnh vắng` : 'ít bị ảnh hưởng bởi mùa');
+  }
+  if (m.qtyMul !== undefined && m.qtyMul !== 1) lines.push(`khách mua số lượng ×${fmt(m.qtyMul)} mỗi món`);
+  if (m.trafficMul !== undefined && m.trafficMul !== 1) lines.push(`lượng khách ×${fmt(m.trafficMul)}`);
+  return lines.map((line) => line.charAt(0).toUpperCase() + line.slice(1));
+}
+
+/** Kiểm tra khối `mechanics` của một loại tiệm; trả danh sách lỗi (thêm vào `errors`). */
+function validateMechanics(at: string, m: ShopMechanics | undefined, errors: string[]): void {
+  if (m === undefined) return;
+  const positive = (key: string, v: unknown): void => {
+    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) errors.push(`${at}: mechanics.${key} phải là số > 0`);
+  };
+  for (const key of ['shelfLifeMul', 'demandMul'] as const) {
+    for (const [c, v] of Object.entries(m[key] ?? {})) {
+      if (!PRODUCT_CATEGORIES.includes(c as Category) && c !== 'food' && c !== 'beverage') errors.push(`${at}: mechanics.${key} có nhóm hàng "${c}" không tồn tại`);
+      positive(`${key}.${c}`, v);
+    }
+  }
+  for (const key of ['seasonSensitivity', 'qtyMul', 'trafficMul'] as const) if (m[key] !== undefined) positive(key, m[key]);
 }
 
 /** Lọc danh sách mặt hàng theo loại tiệm (dùng ở màn Nhập hàng, Kệ). */
@@ -99,6 +153,7 @@ export function validateShopTypes(types: ShopTypeDef[] = DATA.shopTypes, branche
     }
     if (t.sim !== 'profit_average' && t.sim !== 'production') errors.push(`${at}: sim phải là profit_average hoặc production`);
     if (!(t.dineInChance >= 0 && t.dineInChance <= 1)) errors.push(`${at}: dineInChance phải trong 0..1`);
+    validateMechanics(at, t.mechanics, errors);
     if (t.sourcedRequestChance !== undefined && !(t.sourcedRequestChance >= 0 && t.sourcedRequestChance <= 1)) errors.push(`${at}: sourcedRequestChance phải trong 0..1`);
     if (t.densityCurve !== null) {
       if (!Array.isArray(t.densityCurve) || !t.densityCurve.length) errors.push(`${at}: densityCurve phải là null hoặc danh sách khoảng giờ`);
