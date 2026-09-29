@@ -67,3 +67,11 @@ Mô tả hiển thị cho người chơi (bảng thông tin ở bản đồ ph�
 ### Bản đồ phố: giờ, mưa, dân phố
 
 Chỉ là lớp hiển thị, không đổi tiền, kho hay save. Giờ chạy từ đồng hồ game (`timeOfDay.ts`); mưa tất định theo ngày và mùa, và có mưa lớn khi sự kiện `heavy_rain` diễn ra (`cityWeather.ts`); dân phố chọn tiệm theo sở thích, độ đông và hàng còn trên kệ (`cityShopping.ts`); bấm vào một người để xem danh sách định mua.
+
+### Tiệm trà sữa và level 36–50
+
+- **Nội dung trà sữa sinh bằng script:** sửa bảng nguyên liệu/món trong `scripts/make-tea-content.ts` rồi chạy `npm run tea-content` (ghi lại `products.json`, `recipes.json`; giá vốn thành phẩm luôn khớp nguyên liệu, giá bán = giá vốn × 1.9, giá biến thể theo chi phí thêm).
+- **`shopOnly: true`** trên sản phẩm: chỉ loại tiệm liệt kê nó trong `ingredients` mới nhập/bán (không lẫn vào tạp hóa). `barGroup` (`cup`, `tea`, `syrup`, `topping`, `foam`, `mix`) xếp ô trong mini-game pha ly.
+- **`minigame: "tea"`** trên công thức: mở màn pha ly (`TeaScene`) thay vì màn Cook mặc định; thứ tự chạm lấy từ `src/core/teaBar.ts`.
+- **Level:** `levels.json` là dữ liệu; `maxLevel` phải bằng số dòng. Danh hiệu (`prestige`) bắt đầu ở level tối đa và giao diện đọc `maxLevel` từ dữ liệu, nên thêm level mới chỉ cần thêm dòng và dời tính năng `prestige` xuống dòng cuối.
+- **Tiệm mới:** thêm loại tiệm (`shopTypes.json`), chi nhánh (`branches.json`), tính năng ở level (`levels.json`), lô đất (`make-city-map.ts`) như các mục trên.

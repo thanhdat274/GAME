@@ -45,6 +45,8 @@ export interface Product {
   recipeOnly?: boolean;
   /** Chỉ các loại tiệm liệt kê mặt hàng này trong `ingredients` mới nhập/bán; tạp hóa và tiệm khác không thấy nó. */
   shopOnly?: boolean;
+  /** Nhóm quầy pha chế (`cup`, `tea`, `syrup`, `topping`, `foam`, `mix`) của nguyên liệu, dùng để xếp ô trong mini-game pha ly. */
+  barGroup?: string;
 }
 
 export interface LevelDef {
@@ -564,6 +566,8 @@ export interface RecipeDef {
   variants?: RecipeVariant[];
   /** Đầu ra đóng gói để bán qua tiệm khác (xôi gói); khách tại tiệm không gọi món này. */
   packaged?: boolean;
+  /** Mini-game pha chế riêng (`tea`: pha ly trà sữa nhiều quầy); thiếu = mini-game mặc định của màn Cook. */
+  minigame?: 'tea';
 }
 
 export interface RecipeVariant {

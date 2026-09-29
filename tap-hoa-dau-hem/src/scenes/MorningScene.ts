@@ -370,7 +370,7 @@ export class MorningScene extends Phaser.Scene {
     if (hasFeature(s.level, 'calendar')) items.push({ label: '🗓️ Lịch', color: C.blue, onTap: go('Calendar') });
     const xoiShop = s.stores.find((store) => store.id === s.activeStoreId)?.shopType === 'xoi';
     if (hasFeature(s.level, 'food_corner') || xoiShop) items.push({ label: xoiShop ? '🍙 Bếp xôi' : '🍳 Bếp & quầy nước', color: C.green, onTap: go('Kitchen') });
-    if (hasFeature(s.level, 'branches') || hasFeature(s.level, 'shop_xoi')) items.push({ label: '🗺️ Bản đồ thành phố', color: C.blue, onTap: go('Branches') });
+    if (hasFeature(s.level, 'branches') || hasFeature(s.level, 'shop_xoi')) items.push({ label: '🗺️ Bản đồ thành phố', color: C.blue, onTap: go('City') });
     items.push({ label: '📖 Hành trình', color: C.blue, onTap: go('Story') });
     if (hasFeature(s.level, 'prestige')) items.push({ label: '🏆 Danh hiệu', color: C.yellow, onTap: go('Prestige') });
     const L = this.add.container(0, 0).setDepth(2000);

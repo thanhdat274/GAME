@@ -116,7 +116,7 @@ export class KitchenScene extends Phaser.Scene {
     this.list.add(new Button(this, W - 57, y + 65, { w: 78, h: 27, label: 'Chế biến', size: 10, color: C.blue, onTap: this.list.guard(() => {
       if (locked || !station || !enough || !active) { toast(this, 'Mở bán món và chuẩn bị đủ nguyên liệu trước'); return; }
       if (!s.counter.some((slot) => slot.productId === output.id || slot.productId === null || slot.qty <= 0)) { toast(this, 'Quầy đã đầy · bán bớt hoặc dọn một ô quầy trước'); return; }
-      this.scene.start('Cook', { recipeId: recipe.id, fromKitchen: true, kitchenFromShop: this.fromShop });
+      this.scene.start(recipe.minigame === 'tea' ? 'Tea' : 'Cook', { recipeId: recipe.id, fromKitchen: true, kitchenFromShop: this.fromShop });
     }) }).setEnabled(!locked && station && enough && active));
     if (internalOrders.length) {
       const transferable = Math.min(ready, needed);

@@ -87,6 +87,18 @@ export function createMaxLevelSimulation(): GameState {
     ensureDiningTables(state);
   }
 
+  // Tiệm bán ở quầy khác tiệm xôi (trà sữa...) có đủ các trạm pha chế trong mặt bằng nhỏ của nó.
+  for (const store of state.stores) {
+    if (store.id === xoiStore?.id || shopTypeOf(store).def.service !== 'counter') continue;
+    visitStore(state, store.id);
+    for (const type of shopTypeOf(store).def.fixtures.filter((id) => DATA.furniture.find((f) => f.id === id)?.kind === 'drink')) {
+      if (!state.fixtures.some((fixture) => fixture.type === type)) placeAnywhere(state, type);
+    }
+    ensureDiningTables(state);
+    syncActiveStore(state);
+  }
+  visitStore(state, 'main');
+
   // Nâng kho tối đa cho từng tiệm và bật toàn bộ công thức của đúng loại tiệm.
   for (const id of shopStores) {
     visitStore(state, id);
