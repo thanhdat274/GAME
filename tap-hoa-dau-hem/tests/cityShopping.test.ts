@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { openBranch } from '../src/core/branches';
 import { parseCityMap, type TiledMap } from '../src/core/cityMap';
-import { cityShops, MIN_STOCK_FACTOR, pickShop, preferenceFit, shopIsOpen, shopWeight, stockRatio, type ShopTarget } from '../src/core/cityShopping';
+import { cityShops, MIN_STOCK_FACTOR, pickShop, planPurchase, planTotal, preferenceFit, shopIsOpen, shopWeight, stockRatio, type ShopTarget } from '../src/core/cityShopping';
 import cityMapJson from '../src/data/cityMap.json';
 import { DATA } from '../src/core/data';
 import { createNewGame, type GameState, type Slot } from '../src/core/state';
@@ -13,7 +13,7 @@ const map = parseCityMap(structuredClone(cityMapJson) as unknown as TiledMap);
 const customer = (id: string) => DATA.customers.find((c) => c.id === id)!;
 
 function shop(over: Partial<ShopTarget> & { id: string }): ShopTarget {
-  return { door: { x: 0, y: 0 }, traffic: 1, stock: 1, categories: [], ...over };
+  return { door: { x: 0, y: 0 }, traffic: 1, stock: 1, categories: [], items: [], qtyMul: 1, ...over };
 }
 
 function chain(level: number): GameState {
@@ -102,11 +102,91 @@ describe('pickShop', () => {
   });
 });
 
+function seeded(seed: number): () => number {
+  let s = seed;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; };
+}
+
+/** Kệ giả có mọi mặt hàng mở khóa thuộc các nhóm cho trước, mỗi món `qty` cái. */
+function stocked(categories: string[], qty: number, qtyMul = 1): ShopTarget {
+  const items = DATA.products
+    .filter((p) => categories.includes(p.category) && !p.recipeOnly && !p.eventOnly && !p.behindCounter)
+    .map((p) => ({ productId: p.id, qty, price: p.price }));
+  return shop({ id: 'x', items, qtyMul });
+}
+
+describe('planPurchase', () => {
+  const categoryOf = (id: string) => DATA.products.find((p) => p.id === id)!.category;
+
+  it('chỉ chọn hàng đang có, không vượt tồn, không lặp món, tối đa maxItems dòng', () => {
+    const target = stocked(['dry', 'snack', 'drink'], 3);
+    const type = customer('hoc_sinh');
+    for (let seed = 1; seed <= 200; seed++) {
+      const plan = planPurchase(type, target, seeded(seed));
+      expect(plan.length).toBeGreaterThan(0);
+      expect(plan.length).toBeLessThanOrEqual(type.maxItems);
+      expect(new Set(plan.map((p) => p.productId)).size).toBe(plan.length);
+      for (const line of plan) {
+        const item = target.items.find((i) => i.productId === line.productId)!;
+        expect(item).toBeDefined();
+        expect(line.qty).toBeGreaterThanOrEqual(1);
+        expect(line.qty).toBeLessThanOrEqual(item.qty);
+        expect(line.price).toBe(item.price);
+      }
+    }
+  });
+
+  it('chỉ có vài món còn thì chỉ chọn trong số đó', () => {
+    const only = shop({ id: 'x', items: [{ productId: 'mi_goi', qty: 2, price: 5000 }, { productId: 'gao', qty: 1, price: 20000 }] });
+    for (let seed = 1; seed <= 50; seed++) {
+      for (const line of planPurchase(customer('noi_tro'), only, seeded(seed))) expect(['mi_goi', 'gao']).toContain(line.productId);
+    }
+  });
+
+  it('kệ trống hoặc mọi ô hết hàng thì danh sách rỗng', () => {
+    expect(planPurchase(customer('hoc_sinh'), shop({ id: 'x', items: [] }), seeded(1))).toEqual([]);
+    expect(planPurchase(customer('hoc_sinh'), shop({ id: 'x', items: [{ productId: 'mi_goi', qty: 0, price: 5000 }] }), seeded(1))).toEqual([]);
+  });
+
+  it('theo sở thích: học sinh chọn ăn vặt/đồ uống nhiều hơn nội trợ; nội trợ chọn hàng khô/tươi nhiều hơn', () => {
+    const target = stocked(['dry', 'snack', 'drink', 'fresh', 'household'], 5);
+    const share = (typeId: string, cats: string[]): number => {
+      let hit = 0;
+      let all = 0;
+      for (let seed = 1; seed <= 600; seed++) for (const line of planPurchase(customer(typeId), target, seeded(seed))) { all++; if (cats.includes(categoryOf(line.productId))) hit++; }
+      return hit / all;
+    };
+    expect(share('hoc_sinh', ['snack', 'drink'])).toBeGreaterThan(share('noi_tro', ['snack', 'drink']) + 0.15);
+    expect(share('noi_tro', ['dry', 'fresh'])).toBeGreaterThan(share('hoc_sinh', ['dry', 'fresh']) + 0.15);
+  });
+
+  it('bán sỉ nhân số lượng nhưng không vượt tồn; tất định theo seed', () => {
+    const bulk = stocked(['household', 'dry'], 100, 2);
+    const single = stocked(['household', 'dry'], 100, 1);
+    const avg = (t: ShopTarget): number => {
+      let total = 0;
+      let n = 0;
+      for (let seed = 1; seed <= 400; seed++) for (const l of planPurchase(customer('noi_tro'), t, seeded(seed))) { total += l.qty; n++; }
+      return total / n;
+    };
+    expect(avg(bulk) / avg(single)).toBeGreaterThan(1.6);
+    const scarce = stocked(['household'], 1, 2);
+    for (const l of planPurchase(customer('noi_tro'), scarce, seeded(3))) expect(l.qty).toBe(1);
+    expect(planPurchase(customer('noi_tro'), bulk, seeded(9))).toEqual(planPurchase(customer('noi_tro'), bulk, seeded(9)));
+  });
+
+  it('planTotal cộng đúng số lượng × giá', () => {
+    expect(planTotal([{ productId: 'a', qty: 2, price: 5000 }, { productId: 'b', qty: 1, price: 20000 }])).toBe(30000);
+    expect(planTotal([])).toBe(0);
+  });
+});
+
 describe('hồ sơ max', () => {
   it('mọi tiệm đều bày hàng, kể cả các loại tiệm bán theo kệ mới', () => {
     const shops = cityShops(createMaxLevelSimulation(), map);
     expect(shops.map((s) => s.id).sort()).toEqual(['main', ...DATA.branches.map((b) => b.id)].sort());
     for (const s of shops) expect(s.stock, s.id).toBeGreaterThan(0.5);
+    for (const s of shops) expect(s.items.length, s.id).toBeGreaterThan(0);
   });
 });
 

@@ -5,15 +5,15 @@ import {
   cellCenter, cellOf, createWalker, doorCell, isWalkable, nearestWalkable, pickWanderTarget, promenadeCells, stepWalker, walkTo, walkableGrid,
   type Cell, type Walker,
 } from '../core/cityWalk';
-import { DATA, type BranchDef, type CustomerType } from '../core/data';
+import { DATA, product, type BranchDef, type CustomerType } from '../core/data';
 import { formatMoney } from '../core/state';
 import cityMapJson from '../data/cityMap.json';
 import { G, persist } from '../game';
 import { customerTexture, staffType } from '../ui/art';
 import { calendarDate } from '../core/calendar';
 import { rainTint, weatherAt, weatherIcon, type WeatherContext } from '../core/cityWeather';
-import { describeMechanics, shopTypeDef } from '../core/shopTypes';
-import { cityShops, pickShop, shopIsOpen, type ShopTarget } from '../core/cityShopping';
+import { CATEGORY_LABELS, describeMechanics, shopTypeDef } from '../core/shopTypes';
+import { cityShops, pickShop, planPurchase, planTotal, shopIsOpen, type PlannedItem, type ShopTarget } from '../core/cityShopping';
 import { ambientAt, formatClock, multiplyColor, normalizeMinute, phaseIcon, presenceAt } from '../core/timeOfDay';
 import { buildingDoor, buildingTexture, buildingWindows, ensureCityTileset, ensureGlowTexture, ensureRainTexture, CITY_TILESET_KEY, type BuildingKind } from '../ui/cityTiles';
 import { card, pageFrame } from '../ui/page';
@@ -56,6 +56,12 @@ interface Actor {
   shop: ShopTarget | null;
   /** Thời gian còn ở trong tiệm (giây); > 0 nghĩa là đang ở trong, sprite ẩn. */
   inside: number;
+  name: string;
+  /** Danh sách định mua ở tiệm đang đi tới (chỉ để hiển thị, không trừ kho). */
+  plan: PlannedItem[] | null;
+  /** Món vừa mua ở lần ghé gần nhất; [] nghĩa là tiệm hết hàng nên về tay không; null nếu chưa ghé lần nào. */
+  bought: PlannedItem[] | null;
+  lastShop: string | null;
 }
 
 interface LotView {
@@ -113,6 +119,11 @@ export class CityScene extends Phaser.Scene {
   private rainA!: Phaser.GameObjects.TileSprite;
   private rainB!: Phaser.GameObjects.TileSprite;
   private shops: ShopTarget[] = [];
+  /** Người dân đang được xem thông tin (bảng mở). */
+  private watched: Actor | null = null;
+  private personUi: { status: Phaser.GameObjects.Text; plan: Phaser.GameObjects.Text } | null = null;
+  private personTimer = 0;
+  private watchGfx!: Phaser.GameObjects.Graphics;
   /** Độ sáng còn lại của cửa (0..1) theo id lô đất, tăng khi có người vào/ra. */
   private pulse = new Map<number, number>();
   private pulseGfx!: Phaser.GameObjects.Graphics;
@@ -138,6 +149,8 @@ export class CityScene extends Phaser.Scene {
     this.litLots = [];
     this.lastDark = -1;
     this.pulse.clear();
+    this.watched = null;
+    this.personUi = null;
     this.rain = 0;
     const s = G.state;
     this.weatherCtx = {
@@ -170,6 +183,7 @@ export class CityScene extends Phaser.Scene {
     const dt = Math.min(delta / 1000, 0.05);
     this.updateClock(dt);
     this.updateActors(dt);
+    this.updatePerson(dt);
     // Đối tượng UI thêm sau (bảng thông tin, toast...) phải bị camera thế giới bỏ qua.
     if (this.children.length !== this.childCount) {
       this.childCount = this.children.length;
@@ -319,7 +333,10 @@ export class CityScene extends Phaser.Scene {
       npc.sprite.setVisible(active);
       npc.walker.path = [];
       npc.shop = null;
+      npc.plan = null;
+      npc.bought = null;
       npc.inside = 0;
+      if (this.watched === npc) this.select(null);
       if (active) {
         const at = pickWanderTarget(this.promenade, () => Math.random());
         if (at) { const c = cellCenter(this.map, at); npc.walker.x = c.x; npc.walker.y = c.y; }
@@ -352,7 +369,7 @@ export class CityScene extends Phaser.Scene {
     const walker = createWalker(this.map, at);
     const sprite = this.add.image(walker.x, walker.y + 6, customerTexture(this, type)).setOrigin(0.5, 1).setScale(CHAR_SCALE);
     this.worldObjects.add(sprite);
-    return { walker, sprite, type, frame: 0, frameTimer: 0, rest: 0, speed, active: true, shop: null, inside: 0 };
+    return { walker, sprite, type, frame: 0, frameTimer: 0, rest: 0, speed, active: true, shop: null, inside: 0, name: '', plan: null, bought: null, lastShop: null };
   }
 
   private buildActors(): void {
@@ -370,10 +387,13 @@ export class CityScene extends Phaser.Scene {
       const at = pickWanderTarget(this.promenade, () => Math.random())!;
       const npc = this.makeActor(type, at, Phaser.Math.Between(18, 30));
       npc.rest = Math.random() * 3;
+      npc.name = DATA.staff.names[i % DATA.staff.names.length];
       this.npcs.push(npc);
     }
     this.marker = this.add.graphics().setDepth(9);
     this.worldObjects.add(this.marker);
+    this.watchGfx = this.add.graphics().setDepth(8);
+    this.worldObjects.add(this.watchGfx);
   }
 
   private updateActors(dt: number): void {
@@ -408,11 +428,13 @@ export class CityScene extends Phaser.Scene {
   /** Người rảnh: đi mua ở một tiệm đang mở (theo sở thích, độ đông và hàng còn) hoặc dạo tiếp. */
   private chooseErrand(npc: Actor): void {
     npc.rest = Phaser.Math.FloatBetween(1, 4);
+    npc.bought = null;
     // Trời mưa thì ghé tiệm để trú nhiều hơn.
     if (Math.random() < SHOP_CHANCE + 0.25 * this.rain) {
       const shop = pickShop(npc.type, this.shops, this.minute, () => Math.random());
       if (shop && walkTo(this.map, this.grid, npc.walker, shop.door)) {
         npc.shop = shop;
+        npc.plan = planPurchase(npc.type, shop, () => Math.random());
         if (npc.walker.path.length === 0) this.enterShop(npc);
         return;
       }
@@ -424,7 +446,7 @@ export class CityScene extends Phaser.Scene {
   /** Tới cửa: vào tiệm nếu còn mở cửa, không thì đi tiếp. */
   private enterShop(npc: Actor): void {
     const shop = npc.shop;
-    if (!shop || !shopIsOpen(this.minute)) { npc.shop = null; npc.rest = 0.5; return; }
+    if (!shop || !shopIsOpen(this.minute)) { npc.shop = null; npc.plan = null; npc.rest = 0.5; return; }
     npc.inside = Phaser.Math.FloatBetween(2, 5);
     npc.sprite.setVisible(false);
     this.pulseDoor(shop.id);
@@ -437,8 +459,11 @@ export class CityScene extends Phaser.Scene {
     npc.shop = null;
     npc.rest = Phaser.Math.FloatBetween(1, 3);
     npc.sprite.setVisible(true);
-    if (shop) this.pulseDoor(shop.id);
-    this.floatIcon(npc.walker.x, npc.walker.y, '🛍️');
+    if (shop) { this.pulseDoor(shop.id); npc.lastShop = this.shopName(shop.id); }
+    // Kệ trống thì về tay không.
+    npc.bought = npc.plan ?? [];
+    npc.plan = null;
+    this.floatIcon(npc.walker.x, npc.walker.y, npc.bought.length ? '🛍️' : '😕');
   }
 
   private pulseDoor(storeId: string): void {
@@ -488,7 +513,10 @@ export class CityScene extends Phaser.Scene {
   private followPlayer(dt: number): void {
     if (!this.follow) return;
     const view = this.viewSize();
-    const goal = { x: this.player.walker.x - view.w / 2, y: this.player.walker.y - view.h / 2 };
+    // Đang xem một người: theo họ và đẩy họ lên vùng trống phía trên bảng thông tin.
+    const target = (this.watched ?? this.player).walker;
+    const lift = this.watched ? (this.sheetH / 2) * (ZOOM / this.zoomScale) : 0;
+    const goal = { x: target.x - view.w / 2, y: target.y - view.h / 2 + lift };
     const k = 1 - Math.exp(-6 * dt);
     this.pan = { x: this.pan.x + (goal.x - this.pan.x) * k, y: this.pan.y + (goal.y - this.pan.y) * k };
     this.applyCamera();
@@ -631,6 +659,9 @@ export class CityScene extends Phaser.Scene {
 
   private tapWorld(px: number, py: number): void {
     const w = this.toWorld(px, py);
+    // Bấm trúng một người thì xem thông tin họ, ưu tiên hơn tòa nhà và mặt đường.
+    const npc = this.npcAt(w.x, w.y);
+    if (npc) { this.watchNpc(npc); return; }
     const lot = lotAt(this.map, Math.floor(w.x / this.map.tile), Math.floor(w.y / this.map.tile));
     const view = lot ? this.views.find((v) => v.lot === lot) ?? null : null;
     if (view) { this.walkPlayerTo(doorCell(view.lot), view); return; }
@@ -639,10 +670,95 @@ export class CityScene extends Phaser.Scene {
     if (target) this.walkPlayerTo(target, null);
   }
 
+  // ---- Thông tin người dân --------------------------------------------------------------------
+
+  /** Người dân gần điểm bấm nhất (vùng bấm rộng hơn sprite vài điểm ảnh); người đang ở trong tiệm không bấm được. */
+  private npcAt(wx: number, wy: number): Actor | null {
+    let best: Actor | null = null;
+    let bestD = Infinity;
+    for (const npc of this.npcs) {
+      if (!npc.active || npc.inside > 0) continue;
+      const dx = Math.abs(wx - npc.walker.x);
+      const dy = Math.abs(wy - (npc.walker.y - 4));
+      if (dx > 10 || dy > 14) continue;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = npc; }
+    }
+    return best;
+  }
+
+  private shopName(storeId: string): string {
+    return this.views.find((v) => v.lot.storeId === storeId)?.lot.name ?? storeId;
+  }
+
+  private watchNpc(npc: Actor): void {
+    this.select(null);
+    this.pendingLot = null;
+    this.watched = npc;
+    this.follow = true;
+    this.openPersonSheet(npc);
+  }
+
+  private describePlan(items: readonly PlannedItem[]): string {
+    return items.map((line) => `${product(line.productId).icon} ${product(line.productId).name} ×${line.qty}`).join(', ');
+  }
+
+  /** Ba dòng của bảng người dân: trạng thái, định mua/vừa mua, sở thích. */
+  private personLines(npc: Actor): { status: string; plan: string; likes: string } {
+    const target = npc.shop ? this.shopName(npc.shop.id) : '';
+    let status = '🚶 Đang dạo phố';
+    if (npc.inside > 0) status = `🛍️ Đang mua sắm trong ${target}`;
+    else if (npc.shop) status = `🚶 Đang đi tới ${target}`;
+    else if (npc.bought) status = npc.bought.length ? `✅ Vừa ghé ${npc.lastShop ?? 'tiệm'}` : `😕 Vừa ghé ${npc.lastShop ?? 'tiệm'}`;
+    let plan = 'Chưa có dự định mua gì.';
+    if (npc.plan?.length) plan = `Định mua: ${this.describePlan(npc.plan)} · ≈ ${formatMoney(planTotal(npc.plan))}`;
+    else if (npc.bought?.length) plan = `Đã mua: ${this.describePlan(npc.bought)} · ${formatMoney(planTotal(npc.bought))}`;
+    else if (npc.bought) plan = 'Tiệm hết hàng nên ra về tay không.';
+    const likes = Object.entries(npc.type.prefs).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([c]) => CATEGORY_LABELS[c] ?? c).join(', ');
+    return { status, plan, likes: `Thích: ${likes}` };
+  }
+
+  private openPersonSheet(npc: Actor): void {
+    const h = SHEET_H;
+    this.sheetH = h;
+    const top = H - h - 8;
+    const sheet = this.add.container(0, 0).setDepth(200);
+    this.sheet = sheet;
+    const blocker = this.add.rectangle(W / 2, top + h / 2, W - 16, h, 0x000000, 0).setInteractive();
+    sheet.add([blocker, card(this, 8, top, W - 16, h, C.panel)]);
+    sheet.add(txt(this, 18, top + 10, `🧑 ${npc.name} · ${npc.type.name}`, { size: 14, bold: true, wrap: W - 80 }));
+    sheet.add(new Button(this, W - 30, top + 20, { w: 32, h: 28, label: '✕', size: 12, color: C.grey, onTap: () => this.select(null) }));
+    const lines = this.personLines(npc);
+    const status = txt(this, 18, top + 36, lines.status, { size: 11, bold: true, color: HEX.ink, wrap: W - 48 });
+    const plan = txt(this, 18, top + 56, lines.plan, { size: 10, color: HEX.ink, wrap: W - 48 });
+    sheet.add([status, plan, txt(this, 18, top + h - 66, lines.likes, { size: 9, color: HEX.muted, wrap: W - 48 })]);
+    sheet.add(new Button(this, W / 2, top + h - 30, { w: 150, h: 34, label: '📍 Theo dõi', size: 12, color: C.blue, onTap: () => { this.follow = true; } }));
+    this.personUi = { status, plan };
+    this.personTimer = 0;
+  }
+
+  /** Vòng sáng dưới chân người đang xem và cập nhật chữ trong bảng theo thời gian thực. */
+  private updatePerson(dt: number): void {
+    this.watchGfx.clear();
+    const npc = this.watched;
+    if (!npc) return;
+    if (!npc.active) { this.select(null); return; }
+    if (npc.inside <= 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.time.now / 200);
+      this.watchGfx.lineStyle(1.5, 0xffe08a, 0.6 + 0.4 * pulse).strokeEllipse(npc.walker.x, npc.walker.y + 6, 12, 5);
+    }
+    this.personTimer -= dt;
+    if (this.personTimer > 0 || !this.personUi) return;
+    this.personTimer = 0.35;
+    const lines = this.personLines(npc);
+    if (this.personUi.status.text !== lines.status) this.personUi.status.setText(lines.status);
+    if (this.personUi.plan.text !== lines.plan) this.personUi.plan.setText(lines.plan);
+  }
+
   private buildZoomButtons(): void {
     const x = W - 26;
     new Button(this, x, 86, { w: 36, h: 36, label: '+', size: 20, color: C.wood, onTap: () => this.setZoomIndex(this.zoomIndex + 1) });
-    new Button(this, x, 170, { w: 36, h: 36, label: '◎', size: 16, color: C.blue, onTap: () => { this.follow = true; } });
+    new Button(this, x, 170, { w: 36, h: 36, label: '◎', size: 16, color: C.blue, onTap: () => { this.select(null); this.follow = true; } });
     new Button(this, x, 128, { w: 36, h: 36, label: '−', size: 20, color: C.wood, onTap: () => this.setZoomIndex(this.zoomIndex - 1) });
   }
 
@@ -651,6 +767,8 @@ export class CityScene extends Phaser.Scene {
   private select(view: LotView | null): void {
     this.sheet?.destroy(true);
     this.sheet = null;
+    this.watched = null;
+    this.personUi = null;
     this.selected = view;
     if (view) {
       this.openSheet(view);

@@ -4,9 +4,15 @@
  */
 import type { CityMap } from './cityMap';
 import type { Cell } from './cityWalk';
-import { DATA, type Category, type CustomerType } from './data';
+import { DATA, product, type Category, type CustomerType } from './data';
 import { shopTypeOf } from './shopTypes';
 import { storeView, type GameState, type Slot } from './state';
+
+/** Một mặt hàng đang có trên kệ của tiệm, với giá tiệm đang bán. */
+export interface StockedItem { productId: string; qty: number; price: number }
+
+/** Một dòng trong danh sách định mua. */
+export type PlannedItem = StockedItem;
 
 /** Một tiệm mà dân phố có thể ghé. */
 export interface ShopTarget {
@@ -20,6 +26,10 @@ export interface ShopTarget {
   stock: number;
   /** Nhóm hàng loại tiệm này bán; rỗng với loại chỉ bán ở quầy (tiệm xôi). */
   categories: Category[];
+  /** Hàng đang có (gộp theo mặt hàng); dùng để sinh danh sách định mua. */
+  items: StockedItem[];
+  /** Hệ số số lượng mỗi dòng của loại tiệm (bán sỉ). */
+  qtyMul: number;
 }
 
 /** Khách còn ghé tiệm hết hàng với xác suất tối thiểu này, để tiệm không "chết hẳn" trên bản đồ. */
@@ -50,12 +60,17 @@ export function cityShops(state: GameState, map: CityMap): ShopTarget[] {
     const view = storeView(state, store.id);
     const def = shopTypeOf(store).def;
     const slots = def.service === 'counter' ? view.counter : view.shelves.flat();
+    const prices = (view as { prices?: Record<string, number> }).prices ?? {};
+    const totals = new Map<string, number>();
+    for (const slot of slots) if (slot.productId && slot.qty > 0) totals.set(slot.productId, (totals.get(slot.productId) ?? 0) + slot.qty);
     shops.push({
       id: store.id,
       door: { x: lot.door.x, y: lot.door.y },
       traffic: DATA.branches.find((b) => b.id === store.id)?.traffic ?? 1,
       stock: stockRatio(slots),
       categories: def.categories,
+      items: [...totals].map(([productId, qty]) => ({ productId, qty, price: prices[productId] ?? product(productId).price })),
+      qtyMul: shopTypeOf(store).qtyMul,
     });
   }
   return shops;
@@ -85,4 +100,48 @@ export function pickShop(type: CustomerType, shops: readonly ShopTarget[], minut
     if (roll < 0) return shops[i];
   }
   return shops[shops.length - 1];
+}
+
+/** Chọn một chỉ số theo trọng số; -1 nếu tổng bằng 0. `next` trả số trong [0, 1). */
+function weightedIndex(weights: readonly number[], next: () => number): number {
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return -1;
+  let roll = next() * total;
+  for (let i = 0; i < weights.length; i++) {
+    roll -= weights[i];
+    if (roll < 0) return i;
+  }
+  return weights.length - 1;
+}
+
+/** Khách không nói tới nhóm hàng vẫn có chút khả năng chọn món của nhóm đó. */
+const PREF_EPSILON = 0.05;
+
+/**
+ * Danh sách định mua của một người ở một tiệm, từ hàng đang có trên kệ (không vượt tồn), theo sở thích nhóm hàng,
+ * giá (món rẻ hay được chọn hơn), số dòng theo `orderLineWeights` (tối đa `maxItems`) và số lượng theo `qtyByPrice`
+ * nhân `qtyMul` của loại tiệm. Chỉ để hiển thị: không trừ kho. Rỗng nếu tiệm hết hàng.
+ */
+export function planPurchase(type: CustomerType, shop: ShopTarget, next: () => number): PlannedItem[] {
+  const pool = shop.items.filter((item) => item.qty > 0);
+  if (!pool.length) return [];
+  const lineWeights = DATA.balance.orderLineWeights.slice(0, Math.max(1, type.maxItems));
+  const lines = Math.min(pool.length, Math.max(1, weightedIndex(lineWeights, next) + 1));
+  const plan: PlannedItem[] = [];
+  for (let i = 0; i < lines; i++) {
+    const weights = pool.map((item) => (plan.some((p) => p.productId === item.productId) ? 0
+      : ((type.prefs[product(item.productId).category] ?? 0) + PREF_EPSILON) / Math.sqrt(Math.max(1, item.price))));
+    const at = weightedIndex(weights, next);
+    if (at < 0) break;
+    const item = pool[at];
+    const maxQty = DATA.balance.qtyByPrice.find((q) => item.price <= q.maxPrice)?.maxQty ?? 1;
+    const qty = Math.min(item.qty, Math.max(1, Math.round((1 + Math.floor(next() * maxQty)) * shop.qtyMul)));
+    plan.push({ productId: item.productId, qty, price: item.price });
+  }
+  return plan;
+}
+
+/** Tổng tiền ước tính của danh sách định mua. */
+export function planTotal(plan: readonly PlannedItem[]): number {
+  return plan.reduce((sum, item) => sum + item.qty * item.price, 0);
 }

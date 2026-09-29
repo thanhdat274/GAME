@@ -76,7 +76,7 @@ function behavior(def: ShopTypeDef): ShopTypeBehavior {
   };
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
+export const CATEGORY_LABELS: Record<string, string> = {
   dry: 'hàng khô', snack: 'đồ ăn vặt', household: 'đồ gia dụng', drink: 'đồ uống', fresh: 'hàng tươi', frozen: 'đồ đông lạnh',
   counter: 'hàng sau quầy', food: 'đồ ăn', beverage: 'đồ pha chế',
 };

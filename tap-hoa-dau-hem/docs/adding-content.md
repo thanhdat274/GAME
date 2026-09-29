@@ -51,3 +51,19 @@ Dùng `product(id)`, `furniture(id)`, `supplier(id)`, `recipeById(id)`, `recipeB
 ## Bản đồ phố (`src/data/cityMap.json`)
 
 Định dạng Tiled JSON (mở/sửa được bằng Tiled; tileset "city" 16×16 do `src/ui/cityTiles.ts` vẽ lúc chạy). Lớp `ground` và `objects` là ô; lớp đối tượng `lots` là các lô đất với thuộc tính `storeId` (`main`, id chi nhánh trong `branches.json`, hoặc rỗng = đất trống), `doorX`, `doorY`. Thêm chi nhánh mới: thêm bản ghi vào `branches.json` **và** một lô có `storeId` tương ứng, nếu không `npm run validate:data` báo lỗi. Bản đồ khởi đầu sinh bằng `npm run city-map` (ghi đè file, dùng khi chưa sửa tay).
+
+### Cơ chế riêng của loại tiệm (`mechanics`)
+
+Khối tùy chọn trong `shopTypes.json`; tham số nào thiếu thì bằng 1, nên tạp hóa và tiệm xôi không đổi. Không cần sửa code:
+
+- `shelfLifeMul: { "fresh": 0.6 }` nhân hạn dùng hàng nhập vào theo nhóm (chỉ lô nhập sau đó).
+- `demandMul: { "fresh": 1.4 }` nhân nhu cầu của khách theo nhóm hàng.
+- `seasonSensitivity: 1.6` lũy thừa nhu cầu theo mùa/sự kiện (>1: mùa nóng bùng nổ, mùa lạnh vắng).
+- `qtyMul: 2` nhân số lượng mỗi dòng hàng khách mua (bán sỉ).
+- `trafficMul: 0.65` nhân lượng khách chung.
+
+Mô tả hiển thị cho người chơi (bảng thông tin ở bản đồ phố) tự sinh từ các số này (`describeMechanics`). Hiện có: rau củ (`shelfLifeMul` + `demandMul`), giải khát (`seasonSensitivity`), gia dụng (`qtyMul` + `trafficMul`).
+
+### Bản đồ phố: giờ, mưa, dân phố
+
+Chỉ là lớp hiển thị, không đổi tiền, kho hay save. Giờ chạy từ đồng hồ game (`timeOfDay.ts`); mưa tất định theo ngày và mùa, và có mưa lớn khi sự kiện `heavy_rain` diễn ra (`cityWeather.ts`); dân phố chọn tiệm theo sở thích, độ đông và hàng còn trên kệ (`cityShopping.ts`); bấm vào một người để xem danh sách định mua.
