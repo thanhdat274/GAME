@@ -14,6 +14,7 @@
     "sprites": "vite-node scripts/sprite-sheet.ts",
     "playtest": "vite-node scripts/playtest.ts",
     "sim:staff": "vite-node scripts/simulate-staff.ts",
+    "bench:sim": "vite-node scripts/bench-sim.ts",
     "validate:data": "vite-node scripts/validate-data.ts",
     "validate:events": "vite-node scripts/validate-events.ts",
     "validate:recipes": "vite-node scripts/validate-recipes.ts",
