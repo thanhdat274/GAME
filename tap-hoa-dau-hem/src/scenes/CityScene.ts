@@ -10,11 +10,12 @@ import { formatMoney } from '../core/state';
 import cityMapJson from '../data/cityMap.json';
 import { G, persist } from '../game';
 import { customerTexture, staffType } from '../ui/art';
+import { cityShops, pickShop, shopIsOpen, type ShopTarget } from '../core/cityShopping';
 import { ambientAt, formatClock, multiplyColor, normalizeMinute, phaseIcon, presenceAt } from '../core/timeOfDay';
 import { buildingDoor, buildingTexture, buildingWindows, ensureCityTileset, ensureGlowTexture, CITY_TILESET_KEY, type BuildingKind } from '../ui/cityTiles';
 import { card, pageFrame } from '../ui/page';
 import { Button, toast } from '../ui/widgets';
-import { C, H, HEX, W, ZOOM, txt } from '../ui/theme';
+import { C, H, HEX, W, ZOOM, emoji, txt } from '../ui/theme';
 
 /** Mức thu phóng của camera thế giới (tỉ lệ so với ZOOM); chỉ dùng bước nguyên/nửa để pixel art không nhòe. */
 const ZOOM_STEPS = [1, 1.5, 2];
@@ -31,6 +32,8 @@ const MINUTES_PER_SECOND = 4;
 /** Màu nền cỏ của camera thế giới ban ngày (nhân với màu môi trường để vùng ngoài bản đồ khớp). */
 const GROUND_BG = 0x5fae3d;
 const LAMP_GLOW_SIZE = 46;
+/** Xác suất một người rảnh đi mua ở tiệm thay vì dạo tiếp. */
+const SHOP_CHANCE = 0.55;
 const PLAYER_LOOK = { shirt: '#d84a3a', pants: '#3b4a6b', hair: '#2a1b12', skin: '#f1c9a0' };
 /** Vị trí người chơi khi rời màn (trong phiên chơi), để quay lại vẫn đứng ở đó. */
 let lastPlayerCell: Cell | null = null;
@@ -46,6 +49,10 @@ interface Actor {
   speed: number;
   /** Dân phố ẩn khi vắng người (đêm); người chơi luôn hiện. */
   active: boolean;
+  /** Tiệm đang đi tới để mua. */
+  shop: ShopTarget | null;
+  /** Thời gian còn ở trong tiệm (giây); > 0 nghĩa là đang ở trong, sprite ẩn. */
+  inside: number;
 }
 
 interface LotView {
@@ -95,6 +102,10 @@ export class CityScene extends Phaser.Scene {
   private lampGlows: Phaser.GameObjects.Image[] = [];
   private litLots: LotView[] = [];
   private lastDark = -1;
+  private shops: ShopTarget[] = [];
+  /** Độ sáng còn lại của cửa (0..1) theo id lô đất, tăng khi có người vào/ra. */
+  private pulse = new Map<number, number>();
+  private pulseGfx!: Phaser.GameObjects.Graphics;
 
   constructor() { super('City'); }
 
@@ -116,6 +127,7 @@ export class CityScene extends Phaser.Scene {
     this.lampGlows = [];
     this.litLots = [];
     this.lastDark = -1;
+    this.pulse.clear();
 
     this.worldCam = this.cameras.main.setBackgroundColor(0x5fae3d);
     this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height, false, 'ui');
@@ -123,6 +135,7 @@ export class CityScene extends Phaser.Scene {
 
     this.buildWorld();
     this.buildActors();
+    this.shops = cityShops(G.state, this.map);
     this.uiCam.ignore([...this.worldObjects]);
 
     pageFrame(this, '🗺️ Bản đồ thành phố', () => { persist(); this.scene.start('Morning'); }, `Tiền chung · ${formatMoney(G.state.money)}`, 0);
@@ -200,6 +213,8 @@ export class CityScene extends Phaser.Scene {
     }
     this.lightGfx = this.add.graphics().setDepth(31).setBlendMode(Phaser.BlendModes.ADD);
     this.worldObjects.add(this.lightGfx);
+    this.pulseGfx = this.add.graphics().setDepth(32).setBlendMode(Phaser.BlendModes.ADD);
+    this.worldObjects.add(this.pulseGfx);
   }
 
   /** Áp dụng màu môi trường của giờ hiện tại: lớp phủ, nền camera, đèn đường, cửa sổ. */
@@ -256,6 +271,8 @@ export class CityScene extends Phaser.Scene {
       npc.active = active;
       npc.sprite.setVisible(active);
       npc.walker.path = [];
+      npc.shop = null;
+      npc.inside = 0;
       if (active) {
         const at = pickWanderTarget(this.promenade, () => Math.random());
         if (at) { const c = cellCenter(this.map, at); npc.walker.x = c.x; npc.walker.y = c.y; }
@@ -288,7 +305,7 @@ export class CityScene extends Phaser.Scene {
     const walker = createWalker(this.map, at);
     const sprite = this.add.image(walker.x, walker.y + 6, customerTexture(this, type)).setOrigin(0.5, 1).setScale(CHAR_SCALE);
     this.worldObjects.add(sprite);
-    return { walker, sprite, type, frame: 0, frameTimer: 0, rest: 0, speed, active: true };
+    return { walker, sprite, type, frame: 0, frameTimer: 0, rest: 0, speed, active: true, shop: null, inside: 0 };
   }
 
   private buildActors(): void {
@@ -322,19 +339,88 @@ export class CityScene extends Phaser.Scene {
     }
     for (const npc of this.npcs) {
       if (!npc.active) continue;
+      if (npc.inside > 0) {
+        npc.inside -= dt;
+        if (npc.inside <= 0) this.leaveShop(npc);
+        continue;
+      }
       if (npc.walker.path.length) {
-        stepWalker(this.map, npc.walker, npc.speed, dt);
+        if (stepWalker(this.map, npc.walker, npc.speed, dt) && npc.shop) this.enterShop(npc);
       } else {
         npc.rest -= dt;
-        if (npc.rest <= 0) {
-          const target = pickWanderTarget(this.promenade, () => Math.random());
-          if (target && walkTo(this.map, this.grid, npc.walker, target)) npc.rest = Phaser.Math.FloatBetween(1, 4);
-        }
+        if (npc.rest <= 0) this.chooseErrand(npc);
       }
       this.animate(npc, dt);
     }
     this.followPlayer(dt);
     this.drawMarker();
+    this.drawPulses(dt);
+  }
+
+  /** Người rảnh: đi mua ở một tiệm đang mở (theo sở thích, độ đông và hàng còn) hoặc dạo tiếp. */
+  private chooseErrand(npc: Actor): void {
+    npc.rest = Phaser.Math.FloatBetween(1, 4);
+    if (Math.random() < SHOP_CHANCE) {
+      const shop = pickShop(npc.type, this.shops, this.minute, () => Math.random());
+      if (shop && walkTo(this.map, this.grid, npc.walker, shop.door)) {
+        npc.shop = shop;
+        if (npc.walker.path.length === 0) this.enterShop(npc);
+        return;
+      }
+    }
+    const target = pickWanderTarget(this.promenade, () => Math.random());
+    if (target) walkTo(this.map, this.grid, npc.walker, target);
+  }
+
+  /** Tới cửa: vào tiệm nếu còn mở cửa, không thì đi tiếp. */
+  private enterShop(npc: Actor): void {
+    const shop = npc.shop;
+    if (!shop || !shopIsOpen(this.minute)) { npc.shop = null; npc.rest = 0.5; return; }
+    npc.inside = Phaser.Math.FloatBetween(2, 5);
+    npc.sprite.setVisible(false);
+    this.pulseDoor(shop.id);
+    this.floatIcon(npc.walker.x, npc.walker.y, '🛒');
+  }
+
+  private leaveShop(npc: Actor): void {
+    const shop = npc.shop;
+    npc.inside = 0;
+    npc.shop = null;
+    npc.rest = Phaser.Math.FloatBetween(1, 3);
+    npc.sprite.setVisible(true);
+    if (shop) this.pulseDoor(shop.id);
+    this.floatIcon(npc.walker.x, npc.walker.y, '🛍️');
+  }
+
+  private pulseDoor(storeId: string): void {
+    const view = this.views.find((v) => v.lot.storeId === storeId);
+    if (view) this.pulse.set(view.lot.id, 1);
+  }
+
+  /** Biểu tượng nhỏ nổi lên từ cửa rồi mờ dần. */
+  private floatIcon(x: number, y: number, icon: string): void {
+    const t = emoji(this, x, y - 8, icon, 9).setDepth(40);
+    this.worldObjects.add(t);
+    this.uiCam.ignore(t);
+    this.tweens.add({ targets: t, y: y - 22, alpha: 0, duration: 1000, onComplete: () => { this.worldObjects.delete(t); t.destroy(); } });
+  }
+
+  /** Cửa nhấp sáng khi có người vào/ra; mờ dần theo thời gian. */
+  private drawPulses(dt: number): void {
+    const g = this.pulseGfx;
+    g.clear();
+    if (!this.pulse.size) return;
+    const t = this.map.tile;
+    for (const [lotId, v] of this.pulse) {
+      const view = this.views.find((x) => x.lot.id === lotId);
+      if (!view) { this.pulse.delete(lotId); continue; }
+      const { lot } = view;
+      const d = buildingDoor(lot.h, lot.door.x - lot.x);
+      g.fillStyle(0xffd27a, v * 0.7).fillRect(lot.x * t + d.x, lot.y * t + d.y, d.w, d.h);
+      g.fillStyle(0xffc060, v * 0.35).fillRect(lot.x * t + d.x - 6, (lot.y + lot.h) * t, d.w + 12, 8);
+      const next = v - dt * 1.4;
+      if (next <= 0) this.pulse.delete(lotId); else this.pulse.set(lotId, next);
+    }
   }
 
   /** Đặt sprite theo vị trí và hướng; đổi khung bước chân khi đang đi. */

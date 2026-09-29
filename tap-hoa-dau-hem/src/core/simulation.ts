@@ -121,6 +121,13 @@ export function createMaxLevelSimulation(): GameState {
     seedCounter(state);
     syncActiveStore(state);
   }
+  // Tiệm bán theo kệ của loại khác (rau củ, giải khát, gia dụng...) cũng bày đủ hàng theo nhóm hàng của loại đó.
+  for (const store of state.stores) {
+    if (groceryStores.includes(store.id) || shopTypeOf(store).def.service !== 'shelves') continue;
+    visitStore(state, store.id);
+    seedBranchShelves(state);
+    syncActiveStore(state);
+  }
   const xoi = xoiStore?.id;
   if (xoi && visitStore(state, xoi)) {
     seedXoiCounter(state);
@@ -293,7 +300,8 @@ function seedFullShelves(state: GameState): void {
 
 function seedBranchShelves(state: GameState): void {
   const shop = activeShopType(state);
-  const categories: ShelfZone[] = ['dry', 'snack', 'drink'];
+  // Tạp hóa giữ bộ nhóm cũ; loại tiệm khác dùng chính nhóm hàng của nó để kệ khớp loại tiệm.
+  const categories: ShelfZone[] = shop.def.id === 'grocery' ? ['dry', 'snack', 'drink'] : shop.def.categories.filter((c): c is Exclude<typeof c, 'counter'> => c !== 'counter');
   for (let row = 0; row < state.shelves.length; row++) {
     if (!state.fixtures.some((fixture) => fixture.shelf === row)) continue;
     const candidates = DATA.products.filter((item) => shop.allowsProduct(item.id)
