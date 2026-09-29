@@ -14,6 +14,8 @@ const GRASS = 1, GRASS2 = 2, FLOWERS = 3, PAVEMENT = 4, ROAD = 5, ROAD_LINE = 6,
 const BLOCKED = [WATER, TREE, BUSH, LAMP];
 /** Ô người đi bộ hay dạo: dân trong phố chọn điểm đến trên các ô này. */
 const PROMENADE = [PAVEMENT, DIRT];
+/** Ô phát sáng ban đêm. */
+const LIGHTS = [LAMP];
 
 interface Lot { name: string; storeId: string; x: number; y: number; w: number; h: number; door: [number, number] }
 
@@ -99,6 +101,7 @@ const map = {
     firstgid: 1, name: 'city', tilewidth: T, tileheight: T, tilecount: 11, columns: 11, margin: 0, spacing: 0,
     image: 'city-tiles.png', imagewidth: 11 * T, imageheight: T,
     tiles: [
+      ...LIGHTS.map((gid) => ({ id: gid - 1, properties: [{ name: 'light', type: 'bool', value: true }] })),
       ...PROMENADE.map((gid) => ({ id: gid - 1, properties: [{ name: 'promenade', type: 'bool', value: true }] })),
       ...BLOCKED.map((gid) => ({ id: gid - 1, properties: [{ name: 'blocked', type: 'bool', value: true }] })),
     ],

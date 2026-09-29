@@ -102,6 +102,43 @@ export function ensureCityTileset(scene: Phaser.Scene): string {
 /** Kiểu tòa nhà = `kind` của chi nhánh (hoặc `main`/`vacant`); kiểu lạ dùng bảng màu mặc định. */
 export type BuildingKind = string;
 
+/** Cửa sổ của một tòa nhà (px trong texture, góc trên-trái); dùng chung để vẽ tòa nhà và để ánh sáng ban đêm khớp vị trí. */
+export function buildingWindows(wTiles: number, hTiles: number, doorCol: number): { x: number; y: number; w: number; h: number }[] {
+  const w = wTiles * T;
+  const roofH = Math.round(hTiles * T * 0.42);
+  const dx = doorCol * T;
+  const xs: number[] = [];
+  const add = (x: number): void => { if (!(x < 6 || x + 10 > w - 6)) xs.push(x); };
+  for (let x = dx - 20; x > 4; x -= 22) add(x);
+  for (let x = dx + T + 10; x < w - 12; x += 22) add(x);
+  return xs.map((x) => ({ x, y: roofH + 7, w: 10, h: 9 }));
+}
+
+/** Cửa ra vào (px trong texture) để đặt ánh sáng cửa. */
+export function buildingDoor(hTiles: number, doorCol: number): { x: number; y: number; w: number; h: number } {
+  const roofH = Math.round(hTiles * T * 0.42);
+  return { x: doorCol * T + 2, y: roofH + 8, w: T - 4, h: hTiles * T - roofH - 10 };
+}
+
+/** Khóa texture quầng sáng tròn (gradient trắng mờ dần) dùng với blend ADD. */
+export const GLOW_KEY = 'city-glow';
+
+export function ensureGlowTexture(scene: Phaser.Scene): string {
+  if (scene.textures.exists(GLOW_KEY)) return GLOW_KEY;
+  const size = 64;
+  const tex = scene.textures.createCanvas(GLOW_KEY, size, size);
+  if (!tex) return GLOW_KEY;
+  const ctx = tex.getContext();
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  tex.refresh();
+  return GLOW_KEY;
+}
+
 interface Look { roof: number; roofDark: number; wall: number; trim: number; awning: number }
 
 const LOOKS: Record<string, Look> = {
@@ -158,15 +195,13 @@ export function buildingTexture(scene: Phaser.Scene, kind: BuildingKind, wTiles:
     ctx.fillStyle = hex(0x3f2814); ctx.fillRect(dx + 2, roofH + 8, T - 4, 1);
     ctx.fillStyle = hex(0xf2c94c); ctx.fillRect(dx + T - 5, roofH + 12, 2, 2);
     // Cửa sổ sáng đèn hai bên cửa.
-    const win = (x: number): void => {
-      if (x < 6 || x + 10 > w - 6) return;
-      ctx.fillStyle = hex(L.trim); ctx.fillRect(x - 1, roofH + 6, 12, 11);
-      ctx.fillStyle = hex(0xffe9a3); ctx.fillRect(x, roofH + 7, 10, 9);
-      ctx.fillStyle = hex(0xfff6d0); ctx.fillRect(x + 1, roofH + 8, 3, 3);
-      ctx.fillStyle = hex(L.trim); ctx.fillRect(x + 4, roofH + 7, 1, 9);
-    };
-    for (let x = dx - 20; x > 4; x -= 22) win(x);
-    for (let x = dx + T + 10; x < w - 12; x += 22) win(x);
+    for (const win of buildingWindows(wTiles, hTiles, doorCol)) {
+      const { x, y } = win;
+      ctx.fillStyle = hex(L.trim); ctx.fillRect(x - 1, y - 1, 12, 11);
+      ctx.fillStyle = hex(0xffe9a3); ctx.fillRect(x, y, 10, 9);
+      ctx.fillStyle = hex(0xfff6d0); ctx.fillRect(x + 1, y + 1, 3, 3);
+      ctx.fillStyle = hex(L.trim); ctx.fillRect(x + 4, y, 1, 9);
+    }
   }
   tex.refresh();
   tex.setFilter(Phaser.Textures.FilterMode.NEAREST);

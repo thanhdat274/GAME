@@ -54,6 +54,14 @@ describe('cityMap', () => {
     expect(validateCityMap(map, storeIds, branchIds).join('\n')).toContain('ô cửa bị chặn');
   });
 
+  it('ô đèn đường có thuộc tính light và có trên bản đồ, không nằm trong lô đất', () => {
+    const map = load();
+    expect(map.lights.size).toBeGreaterThan(0);
+    const cells = map.objects.map((g, i) => (map.lights.has(g) ? i : -1)).filter((i) => i >= 0);
+    expect(cells.length).toBeGreaterThanOrEqual(6);
+    for (const i of cells) expect(lotAt(map, i % map.cols, Math.floor(i / map.cols))).toBeUndefined();
+  });
+
   it('lotAt tìm đúng lô theo ô', () => {
     const map = load();
     const lot = map.lots[0];

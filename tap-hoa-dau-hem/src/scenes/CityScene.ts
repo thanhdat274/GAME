@@ -10,7 +10,8 @@ import { formatMoney } from '../core/state';
 import cityMapJson from '../data/cityMap.json';
 import { G, persist } from '../game';
 import { customerTexture, staffType } from '../ui/art';
-import { buildingTexture, ensureCityTileset, CITY_TILESET_KEY, type BuildingKind } from '../ui/cityTiles';
+import { ambientAt, formatClock, multiplyColor, normalizeMinute, phaseIcon, presenceAt } from '../core/timeOfDay';
+import { buildingDoor, buildingTexture, buildingWindows, ensureCityTileset, ensureGlowTexture, CITY_TILESET_KEY, type BuildingKind } from '../ui/cityTiles';
 import { card, pageFrame } from '../ui/page';
 import { Button, toast } from '../ui/widgets';
 import { C, H, HEX, W, ZOOM, txt } from '../ui/theme';
@@ -25,6 +26,11 @@ const SHEET_H = 150;
 const CHAR_SCALE = 1 / (2 * ZOOM);
 const PLAYER_SPEED = 56;
 const WALK_FRAME_SECONDS = 0.18;
+/** Đồng hồ ngày-đêm trên phố chạy nhanh để thấy được chu kỳ: 4 phút game mỗi giây thật (~6 phút thật cho 24 giờ). */
+const MINUTES_PER_SECOND = 4;
+/** Màu nền cỏ của camera thế giới ban ngày (nhân với màu môi trường để vùng ngoài bản đồ khớp). */
+const GROUND_BG = 0x5fae3d;
+const LAMP_GLOW_SIZE = 46;
 const PLAYER_LOOK = { shirt: '#d84a3a', pants: '#3b4a6b', hair: '#2a1b12', skin: '#f1c9a0' };
 /** Vị trí người chơi khi rời màn (trong phiên chơi), để quay lại vẫn đứng ở đó. */
 let lastPlayerCell: Cell | null = null;
@@ -38,6 +44,8 @@ interface Actor {
   /** Dân phố: thời gian đứng nghỉ còn lại trước khi chọn điểm dạo mới. */
   rest: number;
   speed: number;
+  /** Dân phố ẩn khi vắng người (đêm); người chơi luôn hiện. */
+  active: boolean;
 }
 
 interface LotView {
@@ -77,6 +85,16 @@ export class CityScene extends Phaser.Scene {
   private follow = true;
   private marker!: Phaser.GameObjects.Graphics;
   private youLabel!: Phaser.GameObjects.Text;
+  /** Giờ hiển thị trên phố (phút trong ngày, số thực); tách khỏi đồng hồ game. */
+  private minute = 0;
+  private clockPaused = false;
+  private clockBtn!: Button;
+  private shownClock = '';
+  private overlay!: Phaser.GameObjects.Rectangle;
+  private lightGfx!: Phaser.GameObjects.Graphics;
+  private lampGlows: Phaser.GameObjects.Image[] = [];
+  private litLots: LotView[] = [];
+  private lastDark = -1;
 
   constructor() { super('City'); }
 
@@ -92,6 +110,12 @@ export class CityScene extends Phaser.Scene {
     this.npcs = [];
     this.pendingLot = null;
     this.follow = true;
+    this.minute = G.state.clock;
+    this.clockPaused = false;
+    this.shownClock = '';
+    this.lampGlows = [];
+    this.litLots = [];
+    this.lastDark = -1;
 
     this.worldCam = this.cameras.main.setBackgroundColor(0x5fae3d);
     this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height, false, 'ui');
@@ -103,6 +127,7 @@ export class CityScene extends Phaser.Scene {
 
     pageFrame(this, '🗺️ Bản đồ thành phố', () => { persist(); this.scene.start('Morning'); }, `Tiền chung · ${formatMoney(G.state.money)}`, 0);
     this.buildZoomButtons();
+    this.buildClock();
 
     this.zoomIndex = 0;
     this.applyCamera();
@@ -113,6 +138,7 @@ export class CityScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     const dt = Math.min(delta / 1000, 0.05);
+    this.updateClock(dt);
     this.updateActors(dt);
     // Đối tượng UI thêm sau (bảng thông tin, toast...) phải bị camera thế giới bỏ qua.
     if (this.children.length !== this.childCount) {
@@ -147,11 +173,95 @@ export class CityScene extends Phaser.Scene {
       this.worldObjects.add(building);
       const label = txt(this, 0, 0, lot.storeId ? lot.name : 'Đất trống', { size: 11, bold: true, color: HEX.white, stroke: '#3b2618', origin: [0.5, 1], align: 'center' }).setDepth(50);
       const sub = txt(this, 0, 0, '', { size: 9, bold: true, color: HEX.cream, stroke: '#3b2618', origin: [0.5, 0], align: 'center' }).setDepth(50);
-      this.views.push({ lot, def, building, label, sub });
+      const view: LotView = { lot, def, building, label, sub };
+      this.views.push(view);
+      if (opened) this.litLots.push(view);
     }
     this.highlight = this.add.graphics().setDepth(10);
     this.worldObjects.add(this.highlight);
+    this.buildLighting();
     this.refreshStatus();
+  }
+
+  /** Lớp phủ nhân màu theo giờ và các nguồn sáng ban đêm (đèn đường, cửa sổ, cửa). */
+  private buildLighting(): void {
+    const world = this.worldSize();
+    this.overlay = this.add.rectangle(0, 0, world.w, world.h, 0xffffff).setOrigin(0, 0).setDepth(30).setBlendMode(Phaser.BlendModes.MULTIPLY);
+    this.worldObjects.add(this.overlay);
+    const glowKey = ensureGlowTexture(this);
+    const t = this.map.tile;
+    for (let i = 0; i < this.map.objects.length; i++) {
+      if (!this.map.lights.has(this.map.objects[i])) continue;
+      const x = (i % this.map.cols) * t + t / 2;
+      const y = Math.floor(i / this.map.cols) * t + 3;
+      const glow = this.add.image(x, y, glowKey).setDisplaySize(LAMP_GLOW_SIZE, LAMP_GLOW_SIZE).setTint(0xffd68a).setBlendMode(Phaser.BlendModes.ADD).setDepth(31).setAlpha(0);
+      this.lampGlows.push(glow);
+      this.worldObjects.add(glow);
+    }
+    this.lightGfx = this.add.graphics().setDepth(31).setBlendMode(Phaser.BlendModes.ADD);
+    this.worldObjects.add(this.lightGfx);
+  }
+
+  /** Áp dụng màu môi trường của giờ hiện tại: lớp phủ, nền camera, đèn đường, cửa sổ. */
+  private applyAmbient(): void {
+    const a = ambientAt(this.minute);
+    this.overlay.setFillStyle(a.tint, 1);
+    this.worldCam.setBackgroundColor(multiplyColor(GROUND_BG, a.tint));
+    const flicker = 0.92 + 0.08 * Math.sin(this.time.now / 260);
+    for (const glow of this.lampGlows) glow.setAlpha(a.darkness * 0.9 * flicker);
+    if (Math.abs(a.darkness - this.lastDark) > 0.004) {
+      this.lastDark = a.darkness;
+      this.drawWindowLights(a.darkness);
+    }
+  }
+
+  private drawWindowLights(darkness: number): void {
+    const g = this.lightGfx;
+    g.clear();
+    if (darkness <= 0.01) return;
+    const t = this.map.tile;
+    for (const { lot } of this.litLots) {
+      const ox = lot.x * t;
+      const oy = lot.y * t;
+      const doorCol = lot.door.x - lot.x;
+      g.fillStyle(0xffc85a, darkness * 0.75);
+      for (const w of buildingWindows(lot.w, lot.h, doorCol)) g.fillRect(ox + w.x - 1, oy + w.y - 1, w.w + 2, w.h + 2);
+      const d = buildingDoor(lot.h, doorCol);
+      g.fillStyle(0xffb04a, darkness * 0.55).fillRect(ox + d.x, oy + d.y, d.w, d.h);
+      // Vệt sáng trước cửa trải ra vỉa hè.
+      g.fillStyle(0xffc060, darkness * 0.22).fillRect(ox + d.x - 6, oy + lot.h * t, d.w + 12, 8);
+    }
+  }
+
+  private buildClock(): void {
+    this.clockBtn = new Button(this, 50, 72, { w: 82, h: 22, radius: 4, label: '', size: 11, color: C.hud, sound: false, onTap: () => { this.clockPaused = !this.clockPaused; this.shownClock = ''; } });
+    this.clockBtn.setDepth(20);
+  }
+
+  private updateClock(dt: number): void {
+    if (!this.clockPaused) this.minute = normalizeMinute(this.minute + dt * MINUTES_PER_SECOND);
+    const text = formatClock(this.minute);
+    const label = `${phaseIcon(ambientAt(this.minute).phase)} ${text}${this.clockPaused ? ' ⏸' : ''}`;
+    if (label !== this.shownClock) { this.shownClock = label; this.clockBtn.label.setText(label); }
+    this.applyAmbient();
+    this.applyPresence();
+  }
+
+  /** Dân phố thưa dần về đêm: người thứ `target` trở đi ẩn và đứng yên; hiện lại thì xuất hiện ở điểm dạo ngẫu nhiên. */
+  private applyPresence(): void {
+    const target = Math.round(this.npcs.length * presenceAt(this.minute));
+    this.npcs.forEach((npc, i) => {
+      const active = i < target;
+      if (active === npc.active) return;
+      npc.active = active;
+      npc.sprite.setVisible(active);
+      npc.walker.path = [];
+      if (active) {
+        const at = pickWanderTarget(this.promenade, () => Math.random());
+        if (at) { const c = cellCenter(this.map, at); npc.walker.x = c.x; npc.walker.y = c.y; }
+        npc.rest = Math.random() * 2;
+      }
+    });
   }
 
   private refreshStatus(): void {
@@ -178,7 +288,7 @@ export class CityScene extends Phaser.Scene {
     const walker = createWalker(this.map, at);
     const sprite = this.add.image(walker.x, walker.y + 6, customerTexture(this, type)).setOrigin(0.5, 1).setScale(CHAR_SCALE);
     this.worldObjects.add(sprite);
-    return { walker, sprite, type, frame: 0, frameTimer: 0, rest: 0, speed };
+    return { walker, sprite, type, frame: 0, frameTimer: 0, rest: 0, speed, active: true };
   }
 
   private buildActors(): void {
@@ -211,6 +321,7 @@ export class CityScene extends Phaser.Scene {
       this.select(view);
     }
     for (const npc of this.npcs) {
+      if (!npc.active) continue;
       if (npc.walker.path.length) {
         stepWalker(this.map, npc.walker, npc.speed, dt);
       } else {

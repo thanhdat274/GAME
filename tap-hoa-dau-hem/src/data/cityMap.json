@@ -345,6 +345,16 @@
    "imageheight": 16,
    "tiles": [
     {
+     "id": 9,
+     "properties": [
+      {
+       "name": "light",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
      "id": 3,
      "properties": [
       {

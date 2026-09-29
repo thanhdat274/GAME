@@ -56,6 +56,8 @@ export interface CityMap {
   blocked: Set<number>;
   /** gid của ô vỉa hè/lối đi, nơi dân trong phố dạo bước. */
   promenade: Set<number>;
+  /** gid của ô phát sáng ban đêm (đèn đường). */
+  lights: Set<number>;
   /** gid tối đa hợp lệ (firstgid + tilecount - 1). */
   maxGid: number;
 }
@@ -73,9 +75,11 @@ export function parseCityMap(json: TiledMap): CityMap {
   const tileset = json.tilesets[0];
   const blocked = new Set<number>();
   const promenade = new Set<number>();
+  const lights = new Set<number>();
   for (const t of tileset?.tiles ?? []) {
     if (t.properties?.some((p) => p.name === 'blocked' && p.value === true)) blocked.add(tileset.firstgid + t.id);
     if (t.properties?.some((p) => p.name === 'promenade' && p.value === true)) promenade.add(tileset.firstgid + t.id);
+    if (t.properties?.some((p) => p.name === 'light' && p.value === true)) lights.add(tileset.firstgid + t.id);
   }
   return {
     cols: json.width,
@@ -85,6 +89,7 @@ export function parseCityMap(json: TiledMap): CityMap {
     objects: objects.data,
     blocked,
     promenade,
+    lights,
     maxGid: tileset ? tileset.firstgid + tileset.tilecount - 1 : 0,
     lots: lots.objects.map((o) => ({
       id: o.id,

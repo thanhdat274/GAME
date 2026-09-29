@@ -23,7 +23,7 @@
 
 ## 5. Để giai đoạn sau
 
-- Tô sáng/tối theo giờ trong ngày, thay tileset canvas bằng ảnh vẽ tay (đổi khóa texture), chỉnh bản đồ bằng Tiled.
+- (Đã làm ở change `city-day-night`.) Thay tileset canvas bằng ảnh vẽ tay (đổi khóa texture), chỉnh bản đồ bằng Tiled.
 - Chạy thử trên điện thoại thật và đo FPS khi bản đồ lớn hơn nhiều.
 
 ## 6. Nhân vật đi bộ trong phố
