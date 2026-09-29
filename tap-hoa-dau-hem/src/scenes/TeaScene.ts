@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { product, recipeById, type RecipeDef } from '../core/data';
 import { missingIngredients, prepareRecipe, recipeRequirements } from '../core/recipes';
-import { counterStockText } from '../core/customCups';
+import { counterStockText, handBrewQuality, qualityLabel, variantName } from '../core/customCups';
 import { TEA_BAR_GROUPS, barGroupOf, teaOrder } from '../core/teaBar';
 import { activeShopType } from '../core/shopTypes';
 import { formatMoney, unlockedProducts, warehouseQty } from '../core/state';
@@ -11,7 +11,7 @@ import { ScrollArea, pageFrame } from '../ui/page';
 import { Button } from '../ui/widgets';
 import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
-interface TeaData { recipeId?: string; fromShop?: boolean; fromKitchen?: boolean; kitchenFromShop?: boolean }
+interface TeaData { recipeId?: string; fromShop?: boolean; fromKitchen?: boolean; kitchenFromShop?: boolean; variantId?: string; forCustomer?: boolean }
 
 /**
  * Mini-game pha ly trà sữa: các ô nguyên liệu xếp theo quầy (trà, siro, topping, sữa/đường, foam, đá) với số lượng tồn;
@@ -38,7 +38,7 @@ export class TeaScene extends Phaser.Scene {
   create(data: TeaData): void {
     setupCamera(this);
     this.data0 = data;
-    this.variantId = undefined;
+    this.variantId = data.forCustomer ? data.variantId : undefined;
     this.step = 0;
     this.missed = 0;
     this.done = false;
@@ -51,9 +51,11 @@ export class TeaScene extends Phaser.Scene {
     this.recipe = recipe;
 
     const landscape = W > H;
-    pageFrame(this, `🧋 ${recipe.name}`, () => this.leave(), 'Chạm nguyên liệu đúng thứ tự để pha ly');
+    pageFrame(this, `🧋 ${recipe.name}`, () => this.leave(), data.forCustomer ? 'Chạm đúng thứ tự, sai thì ly kém ngon' : 'Chạm nguyên liệu đúng thứ tự để pha ly');
     const variantsY = landscape ? 66 : 76;
-    this.renderVariantButtons(variantsY);
+    // Pha cho khách: tùy chọn đã do khách gọi, không đổi được.
+    if (data.forCustomer) txt(this, W / 2, variantsY, `Khách gọi: ${recipe.name} · ${variantName(recipe, data.variantId ?? '')}`, { size: 11, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 24 });
+    else this.renderVariantButtons(variantsY);
     this.chips = txt(this, W / 2, variantsY + 30, '', { size: 10, color: HEX.muted, origin: [0.5, 0], align: 'center', wrap: W - 24 });
     this.prompt = txt(this, W / 2, variantsY + (landscape ? 50 : 66), '', { size: 14, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 24 });
     const listTop = variantsY + (landscape ? 68 : 88);
@@ -77,7 +79,7 @@ export class TeaScene extends Phaser.Scene {
   }
 
   private chooseVariant(id: string | undefined): void {
-    if (this.step > 0 || this.done) return; // đã bắt đầu pha thì không đổi tùy chọn nữa
+    if (this.step > 0 || this.done || this.data0.forCustomer) return; // đã bắt đầu pha thì không đổi tùy chọn nữa
     this.variantId = id;
     this.variantButtons.forEach((v) => v.button.setStyle(v.id === id ? C.green : C.wood));
     this.rebuildOrder();
@@ -191,7 +193,8 @@ export class TeaScene extends Phaser.Scene {
     this.done = true;
     this.finishButton?.destroy();
     this.finishButton = null;
-    const quality = Math.min(1.1, Math.max(0.75, 1.1 - this.missed * 0.07));
+    const quality = handBrewQuality(this.missed);
+    if (this.data0.forCustomer) { this.completeForCustomer(quality); return; }
     const made = prepareRecipe(G.state, this.recipe.id, quality, this.variantId);
     const perfect = this.missed === 0;
     if (made.ok) {
@@ -204,6 +207,20 @@ export class TeaScene extends Phaser.Scene {
     this.refresh();
     new Button(this, W / 2 - 84, H - 32, { w: 150, h: 42, label: 'Pha tiếp', size: 13, color: C.green, onTap: () => this.scene.restart(this.data0) });
     new Button(this, W / 2 + 84, H - 32, { w: 150, h: 42, label: this.data0.fromShop ? 'Về tiệm' : 'Về bếp', size: 13, color: C.blue, onTap: () => this.leave() });
+  }
+
+  /** Pha cho khách ở quầy: nguyên liệu chỉ bị trừ khi giao ly (bấm Giao cho khách). */
+  private completeForCustomer(quality: number): void {
+    this.prompt.setColor(quality >= 0.95 ? HEX.green : HEX.ink).setText(`${qualityLabel(quality)}${this.missed ? ` · sai ${this.missed} bước` : ' · không sai bước nào'}. Giao cho khách nhé!`);
+    this.refresh();
+    new Button(this, W / 2, H - 32, { w: 210, h: 44, label: '🧋 Giao cho khách', size: 14, color: C.green, onTap: () => this.deliver(quality) });
+  }
+
+  private deliver(quality: number): void {
+    const shop = this.scene.get('Shop') as Phaser.Scene & { handBrewDone?: (q: number) => void };
+    shop.handBrewDone?.(quality);
+    persist();
+    this.leave();
   }
 
   private leave(): void {

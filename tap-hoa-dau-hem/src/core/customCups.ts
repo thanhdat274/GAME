@@ -84,6 +84,30 @@ export function cupPrice(recipe: RecipeDef, basePrice: number, want: string, giv
   return basePrice + Math.min(deltaOf(recipe, give), deltaOf(recipe, want));
 }
 
+/** Chất lượng ly khách gọi mà người chơi pha bằng tay: 1.1 nếu không sai bước, mỗi bước sai trừ 0.07 (0.75–1.1). */
+export function handBrewQuality(missed: number): number {
+  return Math.min(1.1, Math.max(0.75, 1.1 - missed * 0.07));
+}
+
+/** Chất lượng ly do pha chế viên pha, theo chỉ số chuẩn xác (0.75–1.1). */
+export function staffBrewQuality(accuracy: number): number {
+  return Math.min(1.1, 0.75 + accuracy * 0.045);
+}
+
+/** Nhãn chất lượng ly pha ngay để hiện cho người chơi. */
+export function qualityLabel(quality: number): string {
+  return quality >= 1.05 ? 'Rất ngon' : quality >= 0.95 ? 'Ngon' : 'Tạm được';
+}
+
+/**
+ * Giá một ly pha theo đơn: giá món nhân hệ số chất lượng (0.75–1.25, làm tròn 500đ; chất lượng 1 giữ nguyên giá) cộng phụ thu như `cupPrice`.
+ */
+export function brewedCupPrice(recipe: RecipeDef, basePrice: number, want: string, give: string, quality: number): number {
+  const factor = Math.max(0.75, Math.min(1.25, quality));
+  const scaled = factor === 1 ? basePrice : Math.max(500, Math.round((basePrice * factor) / 500) * 500);
+  return scaled + Math.min(deltaOf(recipe, give), deltaOf(recipe, want));
+}
+
 /** Ô quầy so với yêu cầu của khách: có đúng loại ly khách gọi, chỉ có cùng món (loại khác), hay không liên quan. */
 export function slotMatch(slot: Slot, line: Pick<OrderLine, 'productId' | 'variantId'>): 'exact' | 'product' | 'none' {
   if (slot.productId !== line.productId || slot.qty <= 0) return 'none';

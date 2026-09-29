@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { visitStore } from '../src/core/branches';
-import { isMadeToOrder } from '../src/core/customCups';
+import { brewedCupPrice, isMadeToOrder } from '../src/core/customCups';
 import { DATA, recipeById, type RecipeDef } from '../src/core/data';
 import type { Customer } from '../src/core/customers';
 import { DaySession, endDay, openShop, runDayHeadless } from '../src/core/day';
@@ -84,7 +84,10 @@ describe('pha ngay khi khách chờ', () => {
     expect(line.servedVariant).toBe(line.variantId ?? '');
     const base = state.prices[line.productId] ?? DATA.products.find((p) => p.id === line.productId)!.price;
     const delta = line.variantId ? r.variants!.find((v) => v.id === line.variantId)!.priceDelta : 0;
-    expect(line.value).toBe(base + delta);
+    // Bấm Pha ngay: chất lượng cố định `autoQuality`, giá theo chất lượng cộng phụ thu.
+    const auto = DATA.balance.madeToOrder.autoQuality;
+    expect(line.value).toBe(brewedCupPrice(r, base, line.variantId ?? '', line.variantId ?? '', auto));
+    expect(line.value).toBeLessThan(base + delta);
     expect(session!.brewProgress()).toBeNull();
     expect(c.counterRequestResolved).toBe(true);
   });

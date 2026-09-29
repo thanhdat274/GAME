@@ -129,8 +129,8 @@ export interface Balance {
   counterSlots: number;
   counterCapacity: number;
   counterRequestSeconds: number;
-  /** Món pha theo đơn: thời gian yêu cầu quầy dài thêm bấy nhiêu giây (kịp bấm Pha ngay); khi ly đang được pha, kiên nhẫn của khách giảm chậm còn bấy nhiêu lần tốc độ thường (khách biết phải chờ). */
-  madeToOrder: { waitSeconds: number; brewPatienceRate: number };
+  /** Món pha theo đơn: thời gian yêu cầu quầy dài thêm bấy nhiêu giây (kịp bấm Pha ngay); khi ly đang được pha, kiên nhẫn của khách giảm chậm còn bấy nhiêu lần tốc độ thường (khách biết phải chờ). `autoQuality`: chất lượng ly bấm Pha ngay (không qua mini-game); pha tay và pha chế viên có thể cao hơn. */
+  madeToOrder: { waitSeconds: number; brewPatienceRate: number; autoQuality: number };
   counterWrongPenalty: number;
   refillSeconds: number;
   fastChangeSeconds: number;

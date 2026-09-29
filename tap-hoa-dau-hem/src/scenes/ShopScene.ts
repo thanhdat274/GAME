@@ -10,7 +10,7 @@ import { canGiveCredit } from '../core/ledger';
 import { claimQuest, questDef, questDone, questProgress, questsUnlocked } from '../core/quests';
 import { MAX_SHELVES, formatClock, formatMoney, warehouseQty, type Staff } from '../core/state';
 import { askable, discountedCashTotal, orderTotal } from '../core/customers';
-import { counterSlotLabel, orderLineName, slotMatch } from '../core/customCups';
+import { counterSlotLabel, orderLineName, qualityLabel, slotMatch } from '../core/customCups';
 import { ensureDiningTables } from '../core/dining';
 import { calendarDate } from '../core/calendar';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
@@ -529,7 +529,12 @@ export class ShopScene extends Phaser.Scene {
       this.sideFloat(v.sprite.x, v.sprite.y - 70, fit === 'worse' ? 'Ly chưa đúng ý · −1 sao' : 'Được ly xịn hơn', fit === 'worse' ? HEX.red : HEX.green, 12);
     });
     e.on('brewStarted', () => { play('pick'); this.queuePanel(); });
-    e.on('brewDone', () => { play('pick'); this.queuePanel(); });
+    e.on('brewDone', ({ customer, quality, by }) => {
+      play('pick');
+      const v = this.views.get(customer.id);
+      if (v && quality !== undefined) this.sideFloat(v.sprite.x, v.sprite.y - 70, `${by ? by + ': ' : ''}${qualityLabel(quality)}`, quality >= 0.95 ? HEX.green : HEX.ink, 12);
+      this.queuePanel();
+    });
     e.on('brewCancelled', ({ customer }) => {
       const v = this.views.get(customer.id);
       if (v) this.sideFloat(v.sprite.x, v.sprite.y - 70, 'Khách bỏ đi · mẻ bị bỏ', HEX.red, 12);
@@ -995,12 +1000,32 @@ export class ShopScene extends Phaser.Scene {
 
   /** Gom nhiều sự kiện trong cùng một khung (quét món, khách rời, đổi quầy...) thành một lần dựng lại bảng dưới. */
   /** Nút Pha ngay (hoặc trạng thái Đang pha) trong bảng phục vụ ở quầy. */
-  private addBrewButton(L: Phaser.GameObjects.Container, x: number, y: number, w: number, h: number, offer: { seconds: number } | null, brewing: { left: number } | null): void {
-    const label = brewing ? `🧋 Đang pha\n${Math.ceil(brewing.left)}s` : `🧋 Pha ngay\n${offer?.seconds ?? 0}s`;
-    const button = new Button(this, x, y, { w, h, label, size: 9, color: brewing ? C.grey : C.blue, onTap: () => { if (!brewing) this.session.startBrew(); } });
+  private addBrewButton(L: Phaser.GameObjects.Container, x: number, y: number, w: number, h: number, offer: { seconds: number } | null, brewing: { left: number; by?: string } | null): void {
+    // Hai nút xếp dọc: Pha ngay (tự pha, chờ hết thời gian) và Pha tay (mini-game, chất lượng theo độ chuẩn).
+    const half = Math.floor((h - 2) / 2);
+    const label = brewing ? `🧋 ${brewing.by ?? 'Đang pha'} ${Math.ceil(brewing.left)}s` : `🧋 Pha ngay ${offer?.seconds ?? 0}s`;
+    const button = new Button(this, x, y - (half + 2) / 2, { w, h: half, label, size: 8, color: brewing ? C.grey : C.blue, onTap: () => { if (!brewing) this.session.startBrew(); } });
     button.setEnabled(!brewing);
     this.brewButton = button;
     L.add(button);
+    const hand = new Button(this, x, y + (half + 2) / 2, { w, h: half, label: '✋ Pha tay', size: 8, color: C.green, onTap: () => this.openHandBrew() });
+    hand.setEnabled(!brewing && !!offer);
+    L.add(hand);
+  }
+
+  /** Pha tay ly khách đang gọi: mini-game pha ly phủ lên tiệm (tiệm đứng yên); xong thì ly được giao cho khách với chất lượng theo độ chuẩn. */
+  private openHandBrew(): void {
+    const offer = this.session.brewOffer();
+    if (!offer || this.ending || G.liveSnapshot) return;
+    this.session.paused = true;
+    setPlayClockRunning(false);
+    this.scene.pause('Shop');
+    this.scene.launch('Tea', { recipeId: offer.recipeId, variantId: offer.variant || undefined, forCustomer: true, fromShop: true });
+  }
+
+  /** Mini-game pha tay xong: giao ly cho khách đầu hàng. */
+  handBrewDone(quality: number): void {
+    this.session.brewByHand(quality);
   }
 
   private queuePanel(): void {
@@ -1417,7 +1442,7 @@ export class ShopScene extends Phaser.Scene {
     if (brewingNow && this.counterTimerText?.active) {
       this.counterTimerText.setText(`🧋 ${Math.ceil(brewingNow.left)}s`);
       this.counterRequestBar?.set(brewingNow.progress, C.blue);
-      if (this.brewButton?.active) this.brewButton.label.setText(`🧋 Đang pha\n${Math.ceil(brewingNow.left)}s`);
+      if (this.brewButton?.active) this.brewButton.label.setText(`🧋 ${brewingNow.by ?? 'Đang pha'} ${Math.ceil(brewingNow.left)}s`);
     } else if (this.counterTimerText?.active && requestLeft != null) {
       this.counterTimerText.setText(`⏱ ${Math.ceil(requestLeft)}s`);
       this.counterRequestBar?.set(requestLeft / Math.max(1, this.session.front?.counterRequestSeconds ?? 1), requestLeft <= 2 ? C.red : C.green);

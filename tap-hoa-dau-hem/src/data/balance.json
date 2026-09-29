@@ -31,7 +31,8 @@
   "counterRequestSeconds": 6,
   "madeToOrder": {
     "waitSeconds": 8,
-    "brewPatienceRate": 0.35
+    "brewPatienceRate": 0.35,
+    "autoQuality": 0.9
   },
   "counterWrongPenalty": 2,
   "refillSeconds": 1,

@@ -1,5 +1,5 @@
 import { computeTip, customerPayment, judgeChange, type ChangeResult } from './change';
-import { BASE_VARIANT, addCup, cupPrice, isCustomRecipe, isMadeToOrder, pickServed, removeCupRecord, slotMatch } from './customCups';
+import { BASE_VARIANT, addCup, brewedCupPrice, cupPrice, isCustomRecipe, isMadeToOrder, pickServed, removeCupRecord, slotMatch, staffBrewQuality } from './customCups';
 import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, shopDensityAt, type Customer, type OrderLine, type PaymentMethod } from './customers';
 import { recordDay } from './analytics';
 import { applyPlanogram, planogramProduct, runRestockRules } from './autorestock';
@@ -108,7 +108,7 @@ export interface DayEvents {
   counterExpired: { customer: Customer; productId: string };
   /** Pha ngay theo đơn: bắt đầu, xong (khách nhận ly) hoặc hủy (khách rời trước khi xong). */
   brewStarted: { customer: Customer; productId: string; variantId?: string; seconds: number };
-  brewDone: { customer: Customer; productId: string };
+  brewDone: { customer: Customer; productId: string; quality?: number; by?: string | null };
   brewCancelled: { customer: Customer; productId: string };
   paymentStarted: Customer;
   trayChanged: number[];
@@ -228,7 +228,11 @@ export class DaySession {
   autoRefill = false;
   private autoCooldown = 0;
   /** Mẻ đang pha ngay cho khách đầu hàng (chỉ một mẻ một lúc); không lưu vào bản lưu. */
-  private brew: { customerId: number; customer: Customer; line: OrderLine; variant: string; total: number; left: number } | null = null;
+  private brew: { customerId: number; customer: Customer; line: OrderLine; variant: string; quality: number; total: number; left: number } | null = null;
+  /** Mẻ pha chế viên đang pha (theo mã nhân viên), có thể cho khách đang xếp hàng; không lưu vào bản lưu. */
+  private staffBrews = new Map<string, { customerId: number; line: OrderLine; variant: string; quality: number; total: number }>();
+  /** Ly đã pha xong cho khách chưa tới lượt (theo mã khách); khách rời đi thì ly bỏ. */
+  private prebrewed = new Map<number, { variant: string; quality: number }>();
 
   private rng: Rng;
   private nextSpawnIn = 1.2;
@@ -408,7 +412,7 @@ export class DaySession {
       if (!this.playerAtCounter && !this.autoPlayer && c.lane === 0) rate *= b.topDown.awayPatienceRate;
       rate *= heat;
       // Khách đang được pha ly theo đơn chờ thong thả hơn.
-      if (this.brew?.customerId === c.id) rate *= b.madeToOrder.brewPatienceRate;
+      if (this.isBrewingFor(c.id)) rate *= b.madeToOrder.brewPatienceRate;
       c.patience -= dt * rate;
       c.waited = (c.waited ?? 0) + dt;
       if (cat && !c.catChecked && c.waited >= b.cat.waitSeconds) {
@@ -978,6 +982,13 @@ export class DaySession {
       this.events.emit('counterExpired', { customer: c, productId: line.productId });
       return;
     }
+    // Pha chế viên đã pha sẵn ly này trong lúc khách xếp hàng: giao ngay.
+    const pre = this.prebrewed.get(c.id);
+    if (pre) {
+      this.prebrewed.delete(c.id);
+      this.serveBrewed(c, line, pre.variant, pre.quality, 'staff');
+      return;
+    }
     const have = this.state.counter.some((slot) => slot.productId === line.productId && slot.qty > 0);
     // Món trà: hết ly trên quầy vẫn được yêu cầu nếu pha ngay được (món pha theo đơn luôn thế).
     const brewable = !have && this.canBrewLine(line);
@@ -1000,7 +1011,7 @@ export class DaySession {
   private tickCounterRequest(c: Customer, dt: number): void {
     if (c.counterRequestResolved || c.counterRequestLeft === null) return;
     // Đang pha ly cho khách này thì bộ đếm yêu cầu tạm dừng (kiên nhẫn chung vẫn giảm).
-    if (this.brew?.customerId === c.id) return;
+    if (this.isBrewingFor(c.id)) return;
     c.counterRequestLeft -= dt;
     if (c.counterRequestLeft <= 0) {
       const line = c.order.find((item) => item.counterLine && item.picked === 0 && item.missing === 0);
@@ -1277,31 +1288,57 @@ export class DaySession {
     return checkBrew(this.state, recipe.id, line.variantId || undefined).ok;
   }
 
-  /** Khách đầu hàng đang chờ ly mà có thể pha ngay: món, tùy chọn và thời gian pha; null nếu không. */
+  /** Khách đầu hàng đang chờ ly mà có thể pha ngay: món, tùy chọn và thời gian pha; null nếu không (hoặc đã có người đang pha ly này). */
   brewOffer(): { recipeId: string; productId: string; variant: string; seconds: number } | null {
     const c = this.front;
-    if (!c || c.status !== 'scanning' || c.counterRequestResolved || this.brew) return null;
+    if (!c || c.status !== 'scanning' || c.counterRequestResolved || this.isBrewingFor(c.id)) return null;
     const line = c.order.find((item) => item.counterLine && item.picked === 0 && item.missing === 0);
     if (!line || !this.canBrewLine(line)) return null;
     const recipe = recipeByOutput(line.productId)!;
     return { recipeId: recipe.id, productId: line.productId, variant: line.variantId ?? BASE_VARIANT, seconds: recipe.prepSeconds };
   }
 
-  /** Tiến độ mẻ đang pha cho khách đầu hàng: 0..1 và số giây còn lại, hoặc null nếu không có mẻ. */
-  brewProgress(): { productId: string; progress: number; left: number } | null {
-    const b = this.brew;
-    return b ? { productId: b.line.productId, progress: 1 - Math.max(0, b.left) / b.total, left: Math.max(0, b.left) } : null;
+  /** Đang có mẻ pha cho khách này (người chơi hoặc pha chế viên)? */
+  private isBrewingFor(customerId: number): boolean {
+    if (this.brew?.customerId === customerId) return true;
+    for (const b of this.staffBrews.values()) if (b.customerId === customerId) return true;
+    return false;
   }
 
-  /** Bắt đầu pha ly khách đầu hàng đang gọi: nguyên liệu bị trừ ngay, ly xong sau `prepSeconds`. */
-  startBrew(): boolean {
+  /** Tiến độ mẻ đang pha cho khách đầu hàng: 0..1 và số giây còn lại; `by` là tên pha chế viên nếu không phải người chơi; null nếu không có mẻ. */
+  brewProgress(): { productId: string; progress: number; left: number; by?: string } | null {
+    const b = this.brew;
+    if (b) return { productId: b.line.productId, progress: 1 - Math.max(0, b.left) / b.total, left: Math.max(0, b.left) };
+    const c = this.front;
+    if (!c) return null;
+    for (const [staffId, sb] of this.staffBrews) {
+      if (sb.customerId !== c.id) continue;
+      const left = Math.max(0, this.workerOf(staffId)?.left ?? 0);
+      return { productId: sb.line.productId, progress: 1 - left / sb.total, left, by: this.staffOf(staffId)?.name ?? 'Nhân viên' };
+    }
+    return null;
+  }
+
+  /** Bắt đầu pha ly khách đầu hàng đang gọi: nguyên liệu bị trừ ngay, ly xong sau `prepSeconds` với chất lượng `quality`. */
+  startBrew(quality: number = DATA.balance.madeToOrder.autoQuality): boolean {
     const offer = this.brewOffer();
     if (!offer) return false;
     const c = this.front!;
     const line = c.order.find((item) => item.counterLine && item.picked === 0 && item.missing === 0)!;
     if (!brewCup(this.state, offer.recipeId, offer.variant || undefined).ok) return false;
-    this.brew = { customerId: c.id, customer: c, line, variant: offer.variant, total: offer.seconds, left: offer.seconds };
+    this.brew = { customerId: c.id, customer: c, line, variant: offer.variant, quality, total: offer.seconds, left: offer.seconds };
     this.events.emit('brewStarted', { customer: c, productId: line.productId, variantId: line.variantId, seconds: offer.seconds });
+    return true;
+  }
+
+  /** Người chơi pha tay ly khách đầu hàng gọi (mini-game): trừ nguyên liệu và giao ngay ly với chất lượng `quality`. */
+  brewByHand(quality: number): boolean {
+    const offer = this.brewOffer();
+    if (!offer) return false;
+    const c = this.front!;
+    const line = c.order.find((item) => item.counterLine && item.picked === 0 && item.missing === 0)!;
+    if (!brewCup(this.state, offer.recipeId, offer.variant || undefined).ok) return false;
+    this.serveBrewed(c, line, offer.variant, quality, null);
     return true;
   }
 
@@ -1319,20 +1356,25 @@ export class DaySession {
     b.left -= dt;
     if (b.left > 0) return;
     this.brew = null;
-    this.completeBrewedLine(c, b.line, b.variant);
-    this.events.emit('brewDone', { customer: c, productId: b.line.productId });
+    this.serveBrewed(c, b.line, b.variant, b.quality, null);
+  }
+
+  /** Ly pha xong đưa tới khách đầu hàng, rồi quét/tính tiền như khi phục vụ từ quầy. `by`: tên pha chế viên, null nếu người chơi. */
+  private serveBrewed(c: Customer, line: OrderLine, variant: string, quality: number, by: string | null): void {
+    this.completeBrewedLine(c, line, variant, quality);
+    this.events.emit('brewDone', { customer: c, productId: line.productId, quality, by });
     if (this.state.settings.autoScan) {
       c.autoScanned = true;
-      this.scanItem(b.line.productId);
+      this.scanItem(line.productId);
     } else this.maybeStartPayment(c);
   }
 
-  /** Khách nhận đúng ly vừa pha: ghi giá món cộng phụ thu, đánh dấu đã phục vụ (không qua ô quầy). */
-  private completeBrewedLine(c: Customer, line: OrderLine, variant: string): void {
+  /** Khách nhận đúng ly vừa pha: ghi giá theo chất lượng cộng phụ thu, đánh dấu đã phục vụ (không qua ô quầy). */
+  private completeBrewedLine(c: Customer, line: OrderLine, variant: string, quality = 1): void {
     const recipe = recipeByOutput(line.productId)!;
     line.picked++;
     line.servedVariant = variant;
-    line.value = (line.value ?? 0) + cupPrice(recipe, priceOf(line.productId, this.state), variant, variant);
+    line.value = (line.value ?? 0) + brewedCupPrice(recipe, priceOf(line.productId, this.state), variant, variant, quality);
     c.counterRequestLeft = null;
     c.counterRequestResolved = true;
     this.state.today.counterServed++;
@@ -1340,17 +1382,58 @@ export class DaySession {
   }
 
   /** Pha và đưa ngay ly đúng loại (thu ngân/tự động: thời gian pha đã tính vào việc của người đó). */
-  private brewInstant(c: Customer, line: OrderLine): boolean {
+  private brewInstant(c: Customer, line: OrderLine, quality: number): boolean {
     const recipe = recipeByOutput(line.productId);
     if (!isCustomRecipe(recipe) || !brewCup(this.state, recipe.id, line.variantId || undefined).ok) return false;
-    this.completeBrewedLine(c, line, line.variantId ?? BASE_VARIANT);
+    this.completeBrewedLine(c, line, line.variantId ?? BASE_VARIANT, quality);
     return true;
   }
 
-  /** Giây pha cộng thêm vào việc của thu ngân khi khách gọi ly phải pha ngay. */
+  /** Giây pha cộng thêm vào việc của thu ngân khi khách gọi ly phải pha ngay (ly pha chế viên đã pha sẵn thì không mất thời gian). */
   private brewSecondsFor(c: Customer): number {
+    if (this.prebrewed.has(c.id)) return 0;
     const line = c.order.find((l) => l.counterLine && l.picked === 0 && l.missing === 0);
     return line && this.canBrewLine(line) ? recipeByOutput(line.productId)!.prepSeconds : 0;
+  }
+
+  /**
+   * Khách tiếp theo pha chế viên nên pha cho: khách đang xếp hàng (chưa tới lượt) hoặc khách đầu hàng đang chờ ly,
+   * gọi ly pha ngay được và chưa có ai đang pha. Ưu tiên theo thứ tự hàng của người chơi rồi tới hàng thu ngân.
+   */
+  private brewTarget(): { customer: Customer; line: OrderLine; recipe: RecipeDef; variant: string } | null {
+    for (const c of [...this.queue, ...this.lanes.flatMap((lane) => lane.queue)]) {
+      const waiting = c.status === 'waiting' || (c === this.front && c.status === 'scanning' && !c.counterRequestResolved);
+      if (!waiting || this.prebrewed.has(c.id) || this.isBrewingFor(c.id)) continue;
+      const line = c.order.find((l) => l.counterLine && l.picked === 0 && l.missing === 0);
+      if (!line || !this.canBrewLine(line)) continue;
+      return { customer: c, line, recipe: recipeByOutput(line.productId)!, variant: line.variantId ?? BASE_VARIANT };
+    }
+    return null;
+  }
+
+  /** Pha chế viên nhận pha một ly cho khách đang chờ: trừ nguyên liệu ngay, ly xong sau thời gian pha của người đó. */
+  private startStaffBrew(s: Staff, w: Worker): boolean {
+    const target = this.brewTarget();
+    if (!target || !brewCup(this.state, target.recipe.id, target.variant || undefined).ok) return false;
+    const total = target.recipe.prepSeconds * timeFactor(s, w.tired);
+    w.task = `brew:${target.customer.id}`;
+    w.left = total;
+    this.staffBrews.set(s.id, { customerId: target.customer.id, line: target.line, variant: target.variant, quality: staffBrewQuality(s.stats.accuracy), total });
+    if (target.customer === this.front) this.events.emit('brewStarted', { customer: target.customer, productId: target.line.productId, variantId: target.line.variantId, seconds: total });
+    return true;
+  }
+
+  /** Xong ly của pha chế viên: giao ngay nếu khách đang chờ ở quầy, không thì để dành tới lượt khách. */
+  private finishStaffBrew(s: Staff): void {
+    const b = this.staffBrews.get(s.id);
+    this.staffBrews.delete(s.id);
+    if (!b) return;
+    const c = this.customers.find((x) => x.id === b.customerId);
+    if (!c || c.status === 'done' || c.status === 'fleeing' || b.line.picked > 0 || b.line.missing > 0) return;
+    this.jobDone(s);
+    this.log(`${s.name} pha xong ${product(b.line.productId).name} cho khách`);
+    if (c === this.front && c.status === 'scanning' && !c.counterRequestResolved) this.serveBrewed(c, b.line, b.variant, b.quality, s.name);
+    else this.prebrewed.set(c.id, { variant: b.variant, quality: b.quality });
   }
 
   trayTotal(): number { return this.tray.reduce((a, b) => a + b, 0); }
@@ -1575,6 +1658,15 @@ export class DaySession {
       worker.idle = DATA.balance.staff.refillCheckSeconds;
     }
     c.status = 'done';
+    this.prebrewed.delete(c.id);
+    for (const [staffId, b] of this.staffBrews) {
+      if (b.customerId !== c.id) continue;
+      // Khách đi mất khi đang pha: mẻ bị bỏ, nguyên liệu đã trừ không hoàn lại.
+      this.staffBrews.delete(staffId);
+      const worker = this.workerOf(staffId);
+      if (worker) { worker.task = null; worker.left = 0; worker.idle = 0; }
+      this.events.emit('brewCancelled', { customer: c, productId: b.line.productId });
+    }
     if (reason !== 'closed') {
       recordRating(this.state, stars);
       this.state.today.ratingSum += stars;
@@ -1798,12 +1890,14 @@ export class DaySession {
       if (!this.closed && !this.isOnShift(s)) continue;
       w.idle -= dt;
       if (w.idle > 0) continue;
+      if (s.role === 'barista' && this.startStaffBrew(s, w)) continue;
       if (s.role === 'chef' || s.role === 'barista') {
         const category = s.role === 'chef' ? 'food' : 'beverage';
         const recipe = DATA.recipes.find((item) => item.category === category && item.unlockLevel <= this.state.level
           && !isMadeToOrder(item) && this.state.activeRecipes.includes(item.id) && this.state.fixtures.some((f) => f.type === item.station)
           && Object.entries(item.ingredients).every(([id, qty]) => this.state.warehouse.reduce((n, lot) => n + (lot.productId === id ? lot.qty : 0), 0) >= qty));
-        if (!recipe) { w.idle = DATA.balance.staff.refillCheckSeconds; continue; }
+        // Pha chế viên kiểm tra khách chờ ly thường xuyên hơn để kịp pha theo đơn.
+        if (!recipe) { w.idle = s.role === 'barista' ? Math.min(DATA.balance.staff.refillCheckSeconds, 1) : DATA.balance.staff.refillCheckSeconds; continue; }
         w.task = `cook:${recipe.id}`;
         w.left = recipe.prepSeconds * timeFactor(s, w.tired);
         continue;
@@ -1883,6 +1977,10 @@ export class DaySession {
       fillOrder(order, recipe.output, 1);
       this.jobDone(s);
       this.log(`${s.name} làm 1 ${product(recipe.output).name} cho đơn của ${this.state.stores.find((x) => x.id === order.toStoreId)?.name ?? 'tiệm khác'}`);
+      return;
+    }
+    if (key.startsWith('brew:')) {
+      this.finishStaffBrew(s);
       return;
     }
     if (key.startsWith('cook:')) {
@@ -1979,16 +2077,21 @@ export class DaySession {
     const req = c.order.find((l) => l.counterLine && l.picked === 0 && l.missing === 0);
     if (req) {
       // Ưu tiên đúng ly có sẵn, rồi pha ngay (thời gian pha đã cộng vào việc của thu ngân), rồi ly thay thế gần nhất.
-      const exact = this.state.counter.findIndex((slot) => slotMatch(slot, req) === 'exact');
-      const idx = exact >= 0 ? exact : this.canBrewLine(req) ? -1 : this.state.counter.findIndex((slot) => slot.productId === req.productId && slot.qty > 0);
-      if (idx >= 0) {
+      const pre = this.prebrewed.get(c.id);
+      if (pre) this.prebrewed.delete(c.id);
+      const exact = pre ? -1 : this.state.counter.findIndex((slot) => slotMatch(slot, req) === 'exact');
+      const idx = pre ? -1 : exact >= 0 ? exact : this.canBrewLine(req) ? -1 : this.state.counter.findIndex((slot) => slot.productId === req.productId && slot.qty > 0);
+      if (pre) {
+        // Pha chế viên đã pha sẵn ly này.
+        this.completeBrewedLine(c, req, pre.variant, pre.quality);
+      } else if (idx >= 0) {
         const slot = this.state.counter[idx];
         this.applyCustomCup(c, req, slot);
         slot.qty--;
         req.picked++;
         req.counterSlot = idx;
         t.counterServed++;
-      } else if (this.brewInstant(c, req)) {
+      } else if (this.brewInstant(c, req, staffBrewQuality(s.stats.accuracy))) {
         // Ly pha theo đơn đã đưa cho khách.
       } else {
         req.missing = req.qty;
@@ -2344,7 +2447,7 @@ export class DaySession {
     if (c.status === 'scanning' && !c.counterRequestResolved) {
       const line = c.order.find((item) => item.counterLine && item.picked === 0 && item.missing === 0);
       // Đang pha ly cho khách này thì chờ mẻ xong.
-      if (this.brew?.customerId === c.id) return;
+      if (this.isBrewingFor(c.id)) return;
       const exact = line ? this.state.counter.findIndex((slot) => slotMatch(slot, line) === 'exact') : -1;
       if (exact >= 0) this.serveCounterRequest(exact);
       else if (this.startBrew()) return;
