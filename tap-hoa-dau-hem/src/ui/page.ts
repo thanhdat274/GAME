@@ -6,9 +6,9 @@ import { C, H, HEX, W, txt } from './theme';
 export const PAGE_TOP = 58;
 
 /** Nền + thanh tiêu đề có nút quay lại cho các màn quản lý (Kho, Giá, Sổ nợ...). */
-export function pageFrame(scene: Phaser.Scene, title: string, onBack: () => void, subtitle?: string): void {
+export function pageFrame(scene: Phaser.Scene, title: string, onBack: () => void, subtitle?: string, backgroundAlpha = 1): void {
   const g = scene.add.graphics();
-  g.fillStyle(C.wall, 1).fillRect(0, 0, W, H);
+  g.fillStyle(C.wall, backgroundAlpha).fillRect(0, 0, W, H);
   g.fillStyle(C.hud, 1).fillRect(0, 0, W, 50);
   // Nẹp gỗ trang trí viền tiêu đề đậm chất tạp hóa xưa
   g.fillStyle(C.woodLight, 1).fillRect(0, 48, W, 2);
