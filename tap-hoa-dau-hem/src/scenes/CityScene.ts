@@ -10,10 +10,12 @@ import { formatMoney } from '../core/state';
 import cityMapJson from '../data/cityMap.json';
 import { G, persist } from '../game';
 import { customerTexture, staffType } from '../ui/art';
+import { calendarDate } from '../core/calendar';
+import { rainTint, weatherAt, weatherIcon, type WeatherContext } from '../core/cityWeather';
 import { describeMechanics, shopTypeDef } from '../core/shopTypes';
 import { cityShops, pickShop, shopIsOpen, type ShopTarget } from '../core/cityShopping';
 import { ambientAt, formatClock, multiplyColor, normalizeMinute, phaseIcon, presenceAt } from '../core/timeOfDay';
-import { buildingDoor, buildingTexture, buildingWindows, ensureCityTileset, ensureGlowTexture, CITY_TILESET_KEY, type BuildingKind } from '../ui/cityTiles';
+import { buildingDoor, buildingTexture, buildingWindows, ensureCityTileset, ensureGlowTexture, ensureRainTexture, CITY_TILESET_KEY, type BuildingKind } from '../ui/cityTiles';
 import { card, pageFrame } from '../ui/page';
 import { Button, toast } from '../ui/widgets';
 import { C, H, HEX, W, ZOOM, emoji, txt } from '../ui/theme';
@@ -105,6 +107,11 @@ export class CityScene extends Phaser.Scene {
   private lampGlows: Phaser.GameObjects.Image[] = [];
   private litLots: LotView[] = [];
   private lastDark = -1;
+  private weatherCtx: WeatherContext = { season: 'spring', heavyRain: false };
+  /** Cường độ mưa hiện tại 0..1 (theo ngày game, giờ trên phố, mùa và sự kiện). */
+  private rain = 0;
+  private rainA!: Phaser.GameObjects.TileSprite;
+  private rainB!: Phaser.GameObjects.TileSprite;
   private shops: ShopTarget[] = [];
   /** Độ sáng còn lại của cửa (0..1) theo id lô đất, tăng khi có người vào/ra. */
   private pulse = new Map<number, number>();
@@ -131,6 +138,12 @@ export class CityScene extends Phaser.Scene {
     this.litLots = [];
     this.lastDark = -1;
     this.pulse.clear();
+    this.rain = 0;
+    const s = G.state;
+    this.weatherCtx = {
+      season: calendarDate(s.day, { month: s.calendarStartMonth, year: s.calendarStartYear }).season,
+      heavyRain: s.activeEvents.some((event) => event.id === 'heavy_rain'),
+    };
 
     this.worldCam = this.cameras.main.setBackgroundColor(0x5fae3d);
     this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height, false, 'ui');
@@ -144,6 +157,7 @@ export class CityScene extends Phaser.Scene {
     pageFrame(this, '🗺️ Bản đồ thành phố', () => { persist(); this.scene.start('Morning'); }, `Tiền chung · ${formatMoney(G.state.money)}`, 0);
     this.buildZoomButtons();
     this.buildClock();
+    this.buildRain();
 
     this.zoomIndex = 0;
     this.applyCamera();
@@ -223,13 +237,16 @@ export class CityScene extends Phaser.Scene {
   /** Áp dụng màu môi trường của giờ hiện tại: lớp phủ, nền camera, đèn đường, cửa sổ. */
   private applyAmbient(): void {
     const a = ambientAt(this.minute);
-    this.overlay.setFillStyle(a.tint, 1);
-    this.worldCam.setBackgroundColor(multiplyColor(GROUND_BG, a.tint));
+    // Mưa làm trời xám và tối hơn, đèn bật sớm.
+    const tint = multiplyColor(a.tint, rainTint(this.rain));
+    const darkness = Math.max(a.darkness, this.rain * 0.35);
+    this.overlay.setFillStyle(tint, 1);
+    this.worldCam.setBackgroundColor(multiplyColor(GROUND_BG, tint));
     const flicker = 0.92 + 0.08 * Math.sin(this.time.now / 260);
-    for (const glow of this.lampGlows) glow.setAlpha(a.darkness * 0.9 * flicker);
-    if (Math.abs(a.darkness - this.lastDark) > 0.004) {
-      this.lastDark = a.darkness;
-      this.drawWindowLights(a.darkness);
+    for (const glow of this.lampGlows) glow.setAlpha(darkness * 0.9 * flicker);
+    if (Math.abs(darkness - this.lastDark) > 0.004) {
+      this.lastDark = darkness;
+      this.drawWindowLights(darkness);
     }
   }
 
@@ -256,18 +273,45 @@ export class CityScene extends Phaser.Scene {
     this.clockBtn.setDepth(20);
   }
 
+  /** Hạt mưa phủ màn hình (camera UI): hai lớp cuộn khác tốc độ; ẩn hẳn khi trời quang. */
+  private buildRain(): void {
+    const key = ensureRainTexture(this);
+    this.rainA = this.add.tileSprite(0, 0, W, H, key).setOrigin(0, 0).setDepth(60).setVisible(false);
+    this.rainB = this.add.tileSprite(0, 0, W, H, key).setOrigin(0, 0).setDepth(60).setScale(1.5).setVisible(false);
+    this.rainB.setSize(W / 1.5, H / 1.5);
+  }
+
+  private updateRain(dt: number): void {
+    const on = this.rain > 0.02;
+    this.rainA.setVisible(on);
+    this.rainB.setVisible(on);
+    if (!on) return;
+    const speed = 0.6 + 0.4 * this.rain;
+    this.rainA.setAlpha(0.15 + 0.5 * this.rain);
+    this.rainB.setAlpha(0.1 + 0.3 * this.rain);
+    this.rainA.tilePositionX += 90 * speed * dt;
+    this.rainA.tilePositionY -= 300 * speed * dt;
+    this.rainB.tilePositionX += 60 * speed * dt;
+    this.rainB.tilePositionY -= 200 * speed * dt;
+  }
+
   private updateClock(dt: number): void {
+    const s = G.state;
     if (!this.clockPaused) this.minute = normalizeMinute(this.minute + dt * MINUTES_PER_SECOND);
     const text = formatClock(this.minute);
-    const label = `${phaseIcon(ambientAt(this.minute).phase)} ${text}${this.clockPaused ? ' ⏸' : ''}`;
+    const weather = weatherAt(s.day, this.minute, this.weatherCtx);
+    this.rain = weather.rain;
+    const label = `${phaseIcon(ambientAt(this.minute).phase)} ${text}${weatherIcon(weather.kind)}${this.clockPaused ? ' ⏸' : ''}`;
     if (label !== this.shownClock) { this.shownClock = label; this.clockBtn.label.setText(label); }
     this.applyAmbient();
     this.applyPresence();
+    this.updateRain(dt);
   }
 
   /** Dân phố thưa dần về đêm: người thứ `target` trở đi ẩn và đứng yên; hiện lại thì xuất hiện ở điểm dạo ngẫu nhiên. */
   private applyPresence(): void {
-    const target = Math.round(this.npcs.length * presenceAt(this.minute));
+    // Trời mưa thì ít người ra đường.
+    const target = Math.round(this.npcs.length * presenceAt(this.minute) * (1 - 0.5 * this.rain));
     this.npcs.forEach((npc, i) => {
       const active = i < target;
       if (active === npc.active) return;
@@ -348,7 +392,8 @@ export class CityScene extends Phaser.Scene {
         continue;
       }
       if (npc.walker.path.length) {
-        if (stepWalker(this.map, npc.walker, npc.speed, dt) && npc.shop) this.enterShop(npc);
+        // Trời mưa thì đi nhanh hơn.
+        if (stepWalker(this.map, npc.walker, npc.speed * (1 + 0.25 * this.rain), dt) && npc.shop) this.enterShop(npc);
       } else {
         npc.rest -= dt;
         if (npc.rest <= 0) this.chooseErrand(npc);
@@ -363,7 +408,8 @@ export class CityScene extends Phaser.Scene {
   /** Người rảnh: đi mua ở một tiệm đang mở (theo sở thích, độ đông và hàng còn) hoặc dạo tiếp. */
   private chooseErrand(npc: Actor): void {
     npc.rest = Phaser.Math.FloatBetween(1, 4);
-    if (Math.random() < SHOP_CHANCE) {
+    // Trời mưa thì ghé tiệm để trú nhiều hơn.
+    if (Math.random() < SHOP_CHANCE + 0.25 * this.rain) {
       const shop = pickShop(npc.type, this.shops, this.minute, () => Math.random());
       if (shop && walkTo(this.map, this.grid, npc.walker, shop.door)) {
         npc.shop = shop;

@@ -120,6 +120,30 @@ export function buildingDoor(hTiles: number, doorCol: number): { x: number; y: n
   return { x: doorCol * T + 2, y: roofH + 8, w: T - 4, h: hTiles * T - roofH - 10 };
 }
 
+/** Khóa texture hạt mưa (lát được, các vệt chéo xuống trái). */
+export const RAIN_KEY = 'city-rain';
+
+export function ensureRainTexture(scene: Phaser.Scene): string {
+  if (scene.textures.exists(RAIN_KEY)) return RAIN_KEY;
+  const size = 64;
+  const tex = scene.textures.createCanvas(RAIN_KEY, size, size);
+  if (!tex) return RAIN_KEY;
+  const ctx = tex.getContext();
+  let s = 97;
+  const next = (): number => { s = (s * 1103515245 + 12345) >>> 0; return s / 2 ** 32; };
+  for (let i = 0; i < 14; i++) {
+    const x = 6 + Math.floor(next() * (size - 12));
+    const y = Math.floor(next() * (size - 14));
+    const len = 8 + Math.floor(next() * 5);
+    ctx.fillStyle = 'rgba(205,220,245,0.85)';
+    // Vệt "/" : cứ 3 hàng dịch sang trái một điểm ảnh.
+    for (let k = 0; k < len; k++) ctx.fillRect(x - Math.floor(k / 3), y + k, 1, 1);
+  }
+  tex.refresh();
+  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  return RAIN_KEY;
+}
+
 /** Khóa texture quầng sáng tròn (gradient trắng mờ dần) dùng với blend ADD. */
 export const GLOW_KEY = 'city-glow';
 
