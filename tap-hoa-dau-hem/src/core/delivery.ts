@@ -1,7 +1,7 @@
 import { DATA, hasFeature, product } from './data';
 import type { Rng } from './rng';
 import { priceOf, shelfQty, unlockedProducts, usableShelves, warehouseQty, type GameState } from './state';
-import { takeLots, takeOneFromSlot } from './stock';
+import { takeLots, takeOneFromSlot, type Cart } from './stock';
 
 export type PhoneOrderStatus = 'ringing' | 'accepted' | 'out' | 'done' | 'declined' | 'missed';
 
@@ -81,6 +81,11 @@ export function orderShortfall(state: GameState, items: Record<string, number>):
   return Object.entries(items)
     .map(([productId, qty]) => ({ productId, missing: qty - warehouseQty(state, productId) - shelfQty(state, productId) }))
     .filter((x) => x.missing > 0);
+}
+
+/** Giỏ giao ngay đúng phần đơn còn thiếu, không mua thừa hàng đã có trên kệ hoặc trong kho. */
+export function orderRestockCart(state: GameState, items: Record<string, number>): Cart {
+  return Object.fromEntries(orderShortfall(state, items).map(({ productId, missing }) => [productId, missing]));
 }
 
 /** Giữ hàng cho đơn: lấy từ kho trước (FEFO), thiếu thì lấy trên kệ. Trả về giá vốn. */

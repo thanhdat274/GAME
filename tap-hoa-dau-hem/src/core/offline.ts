@@ -3,7 +3,7 @@ import { DATA, hasFeature, product } from './data';
 import { ensureDailyQuests } from './quests';
 import { payroll } from './staff';
 import { emptyStats, priceOf, usableShelves, type GameState } from './state';
-import { electricityCost, expireLots, receiveDeliveries, takeLots, takeOneFromSlot } from './stock';
+import { autoArrange, buyStock, electricityCost, expireLots, receiveDeliveries, suggestCart, takeLots, takeOneFromSlot } from './stock';
 import { recordTaxableRevenue, updateTax } from './tax';
 
 export interface OfflineReport {
@@ -12,6 +12,7 @@ export interface OfflineReport {
   days: number;
   revenue: number;
   cogs: number;
+  purchases: number;
   wages: number;
   electricity: number;
   profit: number;
@@ -67,22 +68,33 @@ function sellOffline(state: GameState, productId: string, want: number): number 
 /**
  * Thu nhập offline bằng mô hình rút gọn (không chạy từng tick): mỗi ngày game tương đương,
  * chạy quy tắc tự nhập, bán theo nhu cầu × 60% trong giới hạn tồn kho, trừ lương, điện, hàng hỏng.
- * Chỉ tính khi đã mở chế độ quản lý, đang ở buổi sáng và có ít nhất 1 ngày quản lý làm mẫu.
+ * Chỉ tính khi người chơi bật chế độ quản lý, đang ở buổi sáng và có ít nhất 1 ngày quản lý làm mẫu.
  */
 export function applyOfflineIncome(state: GameState, elapsedMs: number): OfflineReport | null {
   const cfg = DATA.balance.offline;
-  if (!offlineUnlocked(state) || state.phase !== 'morning' || !state.managerStats.length) return null;
+  if (!offlineUnlocked(state) || !state.manager.enabled || state.phase !== 'morning' || !state.managerStats.length) return null;
   const capped = Math.min(elapsedMs, cfg.maxHours * 3_600_000);
   const days = Math.floor(capped / (cfg.realMinutesPerDay * 60_000));
   if (days <= 0) return null;
   const demand = offlineDemand(state);
   const report: OfflineReport = {
-    hours: capped / 3_600_000, days: 0, revenue: 0, cogs: 0, wages: 0, electricity: 0, profit: 0,
+    hours: capped / 3_600_000, days: 0, revenue: 0, cogs: 0, purchases: 0, wages: 0, electricity: 0, profit: 0,
     sold: {}, spoiled: {}, outOfStockDay: null, restock: [],
   };
   for (let i = 0; i < days; i++) {
     state.today = emptyStats();
+    const beforeRules = state.money;
     report.restock.push(...runRestockRules(state).messages);
+    report.purchases += Math.max(0, beforeRules - state.money);
+    const cart = suggestCart(state);
+    if (Object.keys(cart).length) {
+      const purchase = buyStock(state, cart);
+      if (purchase.ok) {
+        report.purchases += purchase.total;
+        report.restock.push(`Quản lý tự nhập ${Object.values(cart).reduce((sum, qty) => sum + qty, 0)} món.`);
+      }
+    }
+    autoArrange(state);
     let soldToday = 0;
     let wantToday = 0;
     for (const [id, perDay] of Object.entries(demand)) {

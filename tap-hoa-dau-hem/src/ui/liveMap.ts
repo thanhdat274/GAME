@@ -560,7 +560,8 @@ export class LiveMap {
   private place(a: Agent): void {
     const { gx, gy, cell } = this.geom;
     const x = gx + (a.pos.x + 0.5 + a.spread.x) * cell + a.jitter.x;
-    const y = gy + (a.pos.y + 0.5 + a.spread.y) * cell + cell * 0.35 + a.jitter.y;
+    const y = gy + (a.pos.y + 0.5 + a.spread.y) * cell + cell * 0.35 + a.jitter.y
+      + (a.goal.kind === 'porch' ? cell * 0.75 : 0);
     a.sprite.setPosition(x, y).setVisible(!a.hidden).setDepth(y);
     a.tag?.setPosition(x, y - this.personH - 1).setVisible(!a.hidden).setDepth(y + 1);
     const sel = this.selected?.kind === 'agent' && this.selected.id === a.id;

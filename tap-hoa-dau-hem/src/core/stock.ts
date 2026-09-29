@@ -780,11 +780,18 @@ export function sellFixture(state: GameState, uid: number): SellFixtureResult {
 /** Số lượng nên có của một món: bán + thiếu hôm qua (có dự phòng); món chưa có số liệu dùng mức ước tính. */
 export function suggestedTarget(state: GameState, p: Product): number {
   const cfg = DATA.balance.suggest;
-  const demand = (state.yesterdaySold[p.id] ?? 0) + (state.yesterdayMissed[p.id] ?? 0);
+  const recent = recentDailySales(state);
+  const lastThree = recentDailySales(state, 3);
+  const reviewRequests = state.reviews.filter((r) => r.productId === p.id && state.day - r.day <= 7 && (r.issue === 'missing' || r.issue === 'noStock')).length;
+  const demand = Math.max(
+    (state.yesterdaySold[p.id] ?? 0) + (state.yesterdayMissed[p.id] ?? 0),
+    Math.ceil(recent[p.id] ?? 0),
+    Math.ceil(lastThree[p.id] ?? 0),
+  ) + reviewRequests * 2;
   // Hàng mau hỏng: nhập sát nhu cầu (không dự phòng). Món chưa ai hỏi thì không nhập thử (newFresh = 0): khách
   // thỉnh thoảng hỏi món tiệm chưa bán, số "hỏi mà không có" đó thành nhu cầu cho ngày sau. Hàng HSD dài nhập như hàng khô.
   if (isPerishable(p)) return demand > 0 ? Math.max(1, Math.ceil(demand * cfg.freshFactor)) : cfg.newFresh;
-  const base = demand > 0 ? demand : p.price <= cfg.cheapPrice ? cfg.newCheap : cfg.newPricey;
+  const base = demand > 0 ? demand : p.price <= cfg.cheapPrice ? 3 : 2;
   return Math.ceil(base * cfg.buffer) + 1;
 }
 
@@ -860,16 +867,29 @@ function xoiSuggestionTargets(state: GameState): { p: Product; target: number }[
  * theo món đã bán, vì nguyên liệu được giữ trong kho chứ không bày trên kệ.
  */
 export function suggestCart(state: GameState, supplierId = 'co_tu'): Cart {
-  const targets = activeShopType(state).def.id === 'xoi'
+  const rawTargets = activeShopType(state).def.id === 'xoi'
     ? xoiSuggestionTargets(state)
     : unlockedProducts(state.level, state)
       .filter((p) => !p.behindCounter && hasPlaceFor(state, p))
       .map((p) => ({ p, target: suggestedTarget(state, p) }));
-  const items = targets.map(({ p, target }) => ({ p, target, want: Math.max(0, target - totalQty(state, p.id)), blocked: false }));
+  const known = (id: string) => totalQty(state, id) > 0 || state.shelves.some((row) => row.some((slot) => slot.productId === id))
+    || (state.yesterdaySold[id] ?? 0) > 0 || (state.yesterdayMissed[id] ?? 0) > 0
+    || (state.today.missed[id] ?? 0) > 0 || (recentDailySales(state)[id] ?? 0) > 0
+    || state.reviews.some((r) => r.productId === id && r.issue === 'missing' && state.day - r.day <= 7);
+  const targets = activeShopType(state).def.id === 'xoi' ? rawTargets : [
+    ...rawTargets.filter(({ p }) => known(p.id)),
+    ...rawTargets.filter(({ p }) => !known(p.id)).sort((a, b) => a.p.cost - b.p.cost).slice(0, 3),
+  ];
+  const items = targets.map(({ p, target }) => {
+    const stock = totalQty(state, p.id);
+    const need = known(p.id) && stock < 5 ? Math.max(5, target) : target;
+    return { p, target: need, want: Math.max(0, need - stock), blocked: false };
+  });
   const cart: Cart = {};
-  for (;;) {
+  const urgent = items.filter((it) => known(it.p.id) && totalQty(state, it.p.id) < 5);
+  for (const group of [urgent, items.filter((it) => !urgent.includes(it))]) for (;;) {
     let best: (typeof items)[number] | null = null;
-    for (const it of items) {
+    for (const it of group) {
       if (it.blocked || it.want <= (cart[it.p.id] ?? 0)) continue;
       const missing = (it.want - (cart[it.p.id] ?? 0)) / it.target;
       if (!best || missing > (best.want - (cart[best.p.id] ?? 0)) / best.target) best = it;
@@ -916,38 +936,49 @@ export interface RestockSuggestion {
 export function suggestRestockCart(state: GameState, supplierId = 'co_tu', topN = 5): RestockSuggestion {
   const cfg = DATA.balance.suggest;
   const daily = recentDailySales(state);
+  const trend = recentDailySales(state, 3);
+  const reviewNeed = (id: string) => state.reviews.filter((r) => r.productId === id && state.day - r.day <= 7 && (r.issue === 'missing' || r.issue === 'noStock')).length;
+  const interest = (id: string) => Math.max(daily[id] ?? 0, trend[id] ?? 0) + reviewNeed(id) * 2;
   const candidates = unlockedProducts(state.level, state).filter((p) => !p.behindCounter && hasPlaceFor(state, p));
   const slotCap = new Map<string, number>();
   for (const r of usableShelves(state)) {
     for (const s of state.shelves[r]) if (s.productId) slotCap.set(s.productId, (slotCap.get(s.productId) ?? 0) + shelfCapacity(state, r));
   }
-  const freshTarget = (p: Product, extra = 0) => Math.max(cfg.newFresh, Math.ceil((daily[p.id] ?? 0) * cfg.freshFactor) + extra);
+  const freshTarget = (p: Product, extra = 0) => Math.max(cfg.newFresh, Math.ceil(interest(p.id) * cfg.freshFactor) + extra);
 
   const out: { p: Product; target: number }[] = [];
   for (const p of candidates) {
     const cap = slotCap.get(p.id);
     const have = totalQty(state, p.id);
     const missed = state.today.missed[p.id] ?? 0;
-    // Sắp hết: tổng trên kệ + kho chưa tới nửa ô.
-    const low = cap !== undefined && have < DATA.balance.slotCapacity / 2;
-    if (!low && missed === 0) continue;
-    const target = isPerishable(p) ? freshTarget(p, missed) : Math.max(cap ?? DATA.balance.slotCapacity, missed * 2);
+    // Hàng từng bày hoặc có nhu cầu mà tổng kho + kệ còn dưới 5 cái.
+    const low = cap !== undefined && have < 5;
+    if (!low && missed === 0 && !(reviewNeed(p.id) > 0 && have < 5)) continue;
+    const target = isPerishable(p) ? Math.max(5, freshTarget(p, missed)) : Math.max(cap ?? DATA.balance.slotCapacity, missed * 2);
     if (target > have) out.push({ p, target });
   }
   const outIds = new Set(out.map((it) => it.p.id));
   const best = candidates
-    .filter((p) => !outIds.has(p.id) && (daily[p.id] ?? 0) > 0)
-    .sort((a, b) => daily[b.id] - daily[a.id])
+    .filter((p) => !outIds.has(p.id) && interest(p.id) > 0)
+    .sort((a, b) => interest(b.id) - interest(a.id))
     .slice(0, topN)
-    .map((p) => ({ p, target: isPerishable(p) ? freshTarget(p) : Math.max(DATA.balance.slotCapacity, Math.ceil(daily[p.id] * cfg.buffer)) }))
+    .map((p) => ({ p, target: isPerishable(p) ? freshTarget(p) : Math.max(DATA.balance.slotCapacity, Math.ceil(interest(p.id) * cfg.buffer)) }))
     .filter((it) => it.target > totalQty(state, it.p.id));
 
+  // Thử một ít hàng chưa từng bán, ưu tiên món khách hỏi hoặc đánh giá nhắc tới.
+  const newItems = candidates
+    .filter((p) => !outIds.has(p.id) && !best.some((it) => it.p.id === p.id) && totalQty(state, p.id) === 0 && interest(p.id) === 0)
+    .sort((a, b) => a.cost - b.cost)
+    .slice(0, 2)
+    .map((p) => ({ p, target: isPerishable(p) ? cfg.newFresh : p.price <= cfg.cheapPrice ? 3 : 2 }))
+    .filter((it) => it.target > 0);
+
   const cart: Cart = {};
-  for (const group of [out, best]) {
+  for (const group of [out, best, newItems]) {
     const items = group.map(({ p, target }) => {
       const have = totalQty(state, p.id);
       // Món chưa có số liệu bán coi như bán chậm, để món bán chạy được mua trước khi thiếu tiền.
-      return { p, have, rate: Math.max(daily[p.id] ?? 0, 0.3), want: target - have, blocked: false };
+      return { p, have, rate: Math.max(interest(p.id), 0.3), want: target - have, blocked: false };
     });
     // Mỗi lần thêm 1 món cho món sẽ bán hết sớm nhất (số ngày còn đủ bán ít nhất).
     const cover = (it: (typeof items)[number]) => (it.have + (cart[it.p.id] ?? 0)) / it.rate;

@@ -4,11 +4,12 @@ import type { CustomerType } from '../core/data';
 import { DATA, hasFeature, product, type Category } from '../core/data';
 import { activeShopType } from '../core/shopTypes';
 import { DaySession, endDay, runDayHeadless } from '../core/day';
-import { orderShortfall, orderUnits, tripSeconds, type PhoneOrder } from '../core/delivery';
+import { orderRestockCart, orderShortfall, orderUnits, tripSeconds, type PhoneOrder } from '../core/delivery';
 import { roleDef, moodLabel } from '../core/staff';
 import { canGiveCredit } from '../core/ledger';
 import { claimQuest, questDef, questDone, questProgress, questsUnlocked } from '../core/quests';
 import { MAX_SHELVES, formatClock, formatMoney, warehouseQty, type Staff } from '../core/state';
+import { buyStock, checkCart } from '../core/stock';
 import { askable, discountedCashTotal, orderTotal } from '../core/customers';
 import { ensureDiningTables } from '../core/dining';
 import { calendarDate } from '../core/calendar';
@@ -125,6 +126,13 @@ export class ShopScene extends Phaser.Scene {
   private idleSec = 0;
   private idleAuto = false;
   private idleBadge: Phaser.GameObjects.Container | null = null;
+  private sideNotice: Phaser.GameObjects.Container | null = null;
+  private sideNoticeBg: Phaser.GameObjects.Graphics | null = null;
+  private sideNoticeText: Phaser.GameObjects.Text | null = null;
+  private sideNoticeTimer: Phaser.Time.TimerEvent | null = null;
+  private sideNoticeInPanel = false;
+  private sideNoticeCustomerId: number | null = null;
+  private pendingPhoneOrderId: number | null = null;
 
   constructor() {
     super('Shop');
@@ -145,6 +153,13 @@ export class ShopScene extends Phaser.Scene {
     this.questBtn = null;
     this.restockBtn = null;
     this.counterBtn = null;
+    this.sideNotice = null;
+    this.sideNoticeBg = null;
+    this.sideNoticeText = null;
+    this.sideNoticeTimer = null;
+    this.sideNoticeInPanel = false;
+    this.sideNoticeCustomerId = null;
+    this.pendingPhoneOrderId = null;
     this.questsDoneSeen = new Set((G.state.quests?.list ?? []).filter((q) => q.claimed || questDone(G.state, questDef(q.id))).map((q) => q.id));
     const s = G.state;
     this.session = G.liveSnapshot?.dayRuntime
@@ -176,7 +191,7 @@ export class ShopScene extends Phaser.Scene {
       mode: 'watch',
       onSwitchMode: G.liveSnapshot ? undefined : () => { this.liveMap.close(); this.setViewMode('topdown'); },
     });
-    this.mapBtn = new Button(this, 26, COUNTER_Y + 44, { w: 44, h: 40, label: '🗺️\nSơ đồ', size: 9, color: C.blue, onTap: () => this.liveMap.open() }).setDepth(260);
+    this.mapBtn = new Button(this, 26, COUNTER_Y + 44, { w: 44, h: 40, label: '🗺️\nSơ đồ', size: 9, color: C.blue, onTap: () => { this.hideSideNotice(); this.liveMap.open(); } }).setDepth(260);
     this.drawCounter();
     this.addZoneRefillButtons();
     this.hud = new Hud(this, s, {
@@ -491,21 +506,32 @@ export class ShopScene extends Phaser.Scene {
       this.flyItem(productId, shelf, slot, customer);
       this.queuePanel();
     });
-    e.on('itemMissing', ({ customer }) => {
+    e.on('itemMissing', ({ customer, productId }) => {
       play('wrong');
       vibrate(60);
       const v = this.views.get(customer.id);
       if (v) this.sideFloat(v.sprite.x, v.sprite.y - 70, '🙁 Hết!', HEX.red, 13);
+      this.showSideNotice(`📦 ${product(productId).name} hết trên kệ · kiểm kho, cần thì nhập thêm`, C.redDark);
       // Nhắc nút nhập hàng khi khách hỏi món đã hết.
       if (this.restockBtn && !this.tweens.isTweening(this.restockBtn)) this.tweens.add({ targets: this.restockBtn, scale: 1.2, yoyo: true, repeat: 2, duration: 160 });
     });
-    e.on('stockAsking', () => this.queuePanel());
+    e.on('stockAsking', (customer) => {
+      this.queuePanel();
+      // Khách ở quầy nhân viên không được phủ lời nhắc lên bảng thao tác của người chơi.
+      if (customer !== this.session.front) return;
+      const names = customer.order.filter(askable).map((line) => product(line.productId).name).join(', ');
+      this.showSideNotice(`🔎 Khách hỏi ${names || 'hàng hết trên kệ'} · đang kiểm kho`, C.blue, true);
+      this.sideNoticeCustomerId = customer.id;
+    });
     e.on('stockAsked', ({ customer, productId, found, missing }) => {
       const v = this.views.get(customer.id);
       const name = product(productId).name;
       if (found > 0) play('pick');
       this.sideFloat(v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74,
         found > 0 ? `📦 Kho còn ${name}!${missing > 0 ? ` (thiếu ${missing})` : ''}` : `🙁 Hết ${name} thật rồi`, found > 0 ? HEX.green : HEX.red, 12);
+      this.showSideNotice(found > 0
+        ? `📦 Còn ${found} ${name} trong kho · đưa khách và bày thêm lên kệ${missing > 0 ? ` (thiếu ${missing})` : ''}`
+        : `⚠️ ${name} đã hết cả kho · mở Nhập hàng để bổ sung`, found > 0 ? C.greenDark : C.redDark);
       this.queuePanel();
     });
     e.on('itemScanned', () => this.queuePanel());
@@ -589,6 +615,7 @@ export class ShopScene extends Phaser.Scene {
       if (this.topDown || this.liveMap.visible) return;
       const who = by === 'player' ? 'Bạn' : this.session.staffOf(by)?.name ?? 'Thu ngân';
       this.sideFloat(W / 2, 240 + DY, `🗯️ ${who}: "Chen gì mà chen, ra sau xếp hàng!"`, HEX.red, 12);
+      this.showSideNotice(`🗯️ ${who} nhắc khách chen hàng ra cuối hàng`, C.redDark);
     });
     e.on('counterfeit', ({ by, bill, action }) => {
       const who = by === 'player' ? 'Bạn' : this.session.staffOf(by)?.name ?? 'Thu ngân';
@@ -601,6 +628,7 @@ export class ShopScene extends Phaser.Scene {
       if (this.topDown || this.liveMap.visible) return;
       const who = by === 'player' ? 'Bạn' : this.session.staffOf(by)?.name ?? 'Nhân viên';
       this.sideFloat(W / 2, 200 + DY, `${guard ? '💂' : '🗯️'} ${who}: "Giữ trật tự giùm nha!"`, HEX.red, 12);
+      this.showSideNotice(`${guard ? '💂 Bảo vệ' : '🗯️ ' + who} nhắc khách giữ trật tự`, C.redDark);
     });
     e.on('phoneRing', () => { play('door'); vibrate(40); this.updatePhone(); });
     e.on('phoneOrderUpdate', () => this.updatePhone());
@@ -721,15 +749,41 @@ export class ShopScene extends Phaser.Scene {
     return `${o.name} (${o.place}) đặt: ${items}.\nTiền hàng ${formatMoney(o.value)} + ship ${formatMoney(o.fee)} · giao trước ${formatClock(o.deadline)}`;
   }
 
-  private answerPhone(): void {
-    const o = this.session.phoneOrders.find((x) => x.status === 'ringing');
+  private answerPhone(orderId?: number): void {
+    const o = this.session.phoneOrders.find((x) => x.status === 'ringing' && (orderId === undefined || x.id === orderId));
     if (!o) return;
     if (!G.liveSnapshot) this.session.paused = true;
-    const resume = () => { if (!G.liveSnapshot && !this.pauseLayer) this.session.paused = false; this.updatePhone(); };
+    const resume = () => {
+      if (!G.liveSnapshot && !this.pauseLayer) this.session.paused = false;
+      setPlayClockRunning(true);
+      if (G.state.settings.sound) startMusic();
+      this.updatePhone();
+    };
     const short = orderShortfall(G.state, o.items);
     const shortText = short.length ? `\n❌ Thiếu: ${short.map((x) => `${x.missing} ${product(x.productId).name.toLowerCase()}`).join(', ')}` : '';
+    const cart = orderRestockCart(G.state, o.items);
+    const purchase = short.length ? checkCart(G.state, cart, 'co_tu') : null;
+    const purchaseText = purchase
+      ? purchase.ok ? `\n📦 Cô Tư giao ngay phần thiếu: ${formatMoney(purchase.total)}.`
+        : `\n📦 Chưa nhập ngay được: ${purchase.reason === 'money' ? 'thiếu tiền' : purchase.reason === 'space' ? 'kho đầy' : 'món chưa thể đặt'}.`
+      : '';
     const buttons = short.length
-      ? [{ label: 'Không đủ hàng · từ chối', color: C.grey, onTap: () => { this.session.declineOrder(o.id); resume(); } }]
+      ? [
+        ...(!G.liveSnapshot && purchase?.ok ? [{ label: `📦 Nhập đủ ${formatMoney(purchase.total)} & nhận`, color: C.green, onTap: () => {
+          const bought = buyStock(G.state, orderRestockCart(G.state, o.items), 'co_tu');
+          if (!bought.ok) { toast(this, 'Không nhập được hàng cho đơn này.', 300, C.red); this.answerPhone(o.id); return; }
+          if (this.session.acceptOrder(o.id) !== 'ok') { toast(this, 'Đơn chưa nhận được, hãy kiểm tra lại hàng.', 300, C.red); this.answerPhone(o.id); return; }
+          persist();
+          play('pick');
+          resume();
+          if (!this.session.presentStaff().some((st) => st.role === 'delivery')) this.time.delayedCall(140, () => this.selfDeliver());
+        } }] : []),
+        { label: '🛒 Mở nhập hàng', color: C.blue, onTap: () => {
+          this.pendingPhoneOrderId = o.id;
+          this.openRestock(o.items);
+        } },
+        { label: 'Từ chối', color: C.grey, onTap: () => { this.session.declineOrder(o.id); resume(); } },
+      ]
       : [
         { label: `✓ Nhận (${orderUnits(o)} món)`, color: C.green, onTap: () => {
           this.session.acceptOrder(o.id);
@@ -739,20 +793,26 @@ export class ShopScene extends Phaser.Scene {
         } },
         { label: 'Từ chối', color: C.grey, onTap: () => { this.session.declineOrder(o.id); resume(); } },
       ];
-    dialog(this, { icon: '☎️', title: 'Đơn giao hàng', body: this.orderText(o) + shortText, buttons, width: 320 });
+    dialog(this, { icon: '☎️', title: 'Đơn giao hàng', body: this.orderText(o) + shortText + purchaseText, buttons, width: 320 });
   }
 
   private selfDeliver(): void {
     const o = this.session.phoneOrders.find((x) => x.status === 'accepted' && !x.courier);
     if (!o) return;
+    if (!G.liveSnapshot) this.session.paused = true;
+    setPlayClockRunning(false);
+    const resume = () => {
+      if (!G.liveSnapshot) this.session.paused = false;
+      setPlayClockRunning(true);
+    };
     const secs = Math.round(tripSeconds(o.distance));
     dialog(this, {
       icon: '🛵',
       title: `Tự đi giao cho ${o.name}?`,
       body: `Đi về mất khoảng ${secs} giây. Quầy của bạn bỏ trống trong lúc đó (khách mới sang quầy nhân viên hoặc phải chờ).\nHạn giao ${formatClock(o.deadline)}.`,
       buttons: [
-        { label: 'Đi giao ngay', color: C.green, onTap: () => { if (this.session.selfDeliver(o.id)) { play('door'); this.renderPanel(true); } this.updatePhone(); } },
-        { label: 'Để sau', color: C.grey },
+        { label: 'Đi giao ngay', color: C.green, onTap: () => { if (this.session.selfDeliver(o.id)) { play('door'); this.renderPanel(true); } this.updatePhone(); resume(); } },
+        { label: 'Để sau', color: C.grey, onTap: resume },
       ],
     });
   }
@@ -990,6 +1050,7 @@ export class ShopScene extends Phaser.Scene {
     this.ownerAvatar?.setVisible(!away);
     const managerKey = this.managerView ? `manager-${G.state.manager.speed}-${this.session.openIncidents().map((i) => i.id).join(',')}` : '';
     const mode = away && !c ? 'away' : managerKey || (!c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'waiting' && c.askLeft !== undefined && c.order.some(askable) ? `ask-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`);
+    if (this.sideNoticeInPanel && mode !== `ask-${this.sideNoticeCustomerId}`) this.hideSideNotice();
     if (!force && mode === this.panelMode) return;
     const keepPay = mode === this.panelMode && mode.startsWith('pay');
     this.panelMode = mode;
@@ -1049,7 +1110,7 @@ export class ShopScene extends Phaser.Scene {
     const names = c.order.filter(askable).map((l) => product(l.productId).name.toLowerCase());
     const items = names.join(', ') || 'hàng';
     L.add(txt(this, W / 2, PANEL_Y + 50, `🙋 ${this.who(c)}: ${this.askSpeech(c, items)}`, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: W - 40 }));
-    L.add(txt(this, W / 2, PANEL_Y + 110, '🔎 Đang kiểm kho...\nCòn thì lấy đưa khách và bày thêm lên kệ; hết thì tính tiền phần còn lại.', { size: 13, origin: [0.5, 0.5], align: 'center', color: HEX.muted, wrap: W - 50 }));
+    L.add(txt(this, W / 2, PANEL_Y + 103, '🔎 Đang kiểm kho...\nCòn thì đưa khách; hết thì tính tiền phần còn lại.', { size: 11, origin: [0.5, 0.5], align: 'center', color: HEX.muted, wrap: W - 50 }));
   }
 
   private who(c: Customer): string {
@@ -1437,8 +1498,13 @@ export class ShopScene extends Phaser.Scene {
 
   /** Đếm thời gian không chạm màn hình; giờ tạm dừng (menu, nhập hàng) không tính và đếm lại từ đầu. */
   private tickIdle(dt: number): void {
+    if (!G.state.manager.enabled) {
+      if (this.idleAuto) this.setIdleAuto(false);
+      this.idleSec = 0;
+      return;
+    }
     if (G.liveSnapshot || this.ending || this.idleAuto) return;
-    const limit = G.state.settings.idleAutoPlay ?? 60;
+    const limit = G.state.settings.idleAutoPlay ?? 0;
     if (!limit || this.session.paused || G.state.today.managerDay) {
       this.idleSec = 0;
       return;
@@ -1511,6 +1577,38 @@ export class ShopScene extends Phaser.Scene {
     if (!this.topDown) floatText(this, x, y, text, color, size);
   }
 
+  /** Nhắc việc đủ lâu để đọc ở góc nhìn ngang, dùng chung cho thiếu hàng và an ninh. */
+  private showSideNotice(message: string, color: number, inPanel = false): void {
+    if (this.topDown || this.liveMap?.visible) return;
+    if (!this.sideNotice) {
+      this.sideNoticeBg = this.add.graphics();
+      this.sideNoticeText = txt(this, W / 2, 0, '', {
+        size: 12, bold: true, color: HEX.cream, origin: [0.5, 0], align: 'center', wrap: W - 48,
+      });
+      this.sideNotice = this.add.container(0, 0, [this.sideNoticeBg, this.sideNoticeText]).setDepth(950);
+    }
+    this.sideNoticeText!.setText(message);
+    this.sideNoticeInPanel = inPanel;
+    this.sideNoticeText!.setColor(inPanel ? HEX.ink : HEX.cream);
+    const height = Math.max(42, this.sideNoticeText!.height + 16);
+    const top = inPanel ? Math.max(PANEL_Y + 124, H - height - 70) : HUD_H + 8;
+    this.sideNoticeText!.setPosition(W / 2, top + 8);
+    this.sideNoticeBg!.clear();
+    this.sideNoticeBg!.fillStyle(inPanel ? 0xf7f1e6 : color, 0.96).fillRoundedRect(12, top, W - 24, height, 8);
+    if (inPanel) this.sideNoticeBg!.lineStyle(2, color, 1).strokeRoundedRect(12, top, W - 24, height, 8);
+    this.sideNotice!.setVisible(true);
+    this.sideNoticeTimer?.remove(false);
+    this.sideNoticeTimer = this.time.delayedCall(3800, () => this.hideSideNotice());
+  }
+
+  private hideSideNotice(): void {
+    this.sideNoticeTimer?.remove(false);
+    this.sideNoticeTimer = null;
+    this.sideNoticeInPanel = false;
+    this.sideNoticeCustomerId = null;
+    this.sideNotice?.setVisible(false);
+  }
+
   private get topDown(): boolean {
     return !!this.playMap?.visible;
   }
@@ -1554,6 +1652,7 @@ export class ShopScene extends Phaser.Scene {
 
   private applyViewMode(): void {
     const top = !G.liveSnapshot && G.state.settings.viewMode === 'topdown';
+    if (top) this.hideSideNotice();
     if (top) {
       if (!this.playMap) {
         this.playMap = new LiveMap(this, this.session, {
@@ -1691,10 +1790,10 @@ export class ShopScene extends Phaser.Scene {
       },
     });
     L.add(scanBtn);
-    // Rảnh tay bao lâu thì game chơi hộ quầy: 1 phút → 30 giây → tắt.
-    const idleSteps = [60, 30, 0];
+    // Chơi hộ chỉ chạy khi người chơi chủ động bật.
+    const idleSteps = [0, 60, 30];
     const idleLabel = () => {
-      const v = G.state.settings.idleAutoPlay ?? 60;
+      const v = G.state.settings.idleAutoPlay ?? 0;
       return v ? `🤖 Chơi hộ: ${v >= 60 ? `${v / 60} phút` : `${v}s`}` : '🤖 Chơi hộ: Tắt';
     };
     const idleBtn = new Button(this, W / 2 + 56, y, {
@@ -1704,7 +1803,7 @@ export class ShopScene extends Phaser.Scene {
       label: idleLabel(),
       color: C.blue,
       onTap: () => {
-        const cur = idleSteps.indexOf(G.state.settings.idleAutoPlay ?? 60);
+        const cur = idleSteps.indexOf(G.state.settings.idleAutoPlay ?? 0);
         G.state.settings.idleAutoPlay = idleSteps[(cur + 1) % idleSteps.length];
         idleBtn.setText(idleLabel());
         persist();
@@ -1830,7 +1929,7 @@ export class ShopScene extends Phaser.Scene {
   }
 
   /** Tạm dừng bán để nhập thêm hàng: màn Nhập hàng phủ lên, tiệm đứng yên tới khi quay lại. */
-  private openRestock(): void {
+  private openRestock(orderItems?: Record<string, number>): void {
     if (this.ending) return;
     if (this.session.closed) { toast(this, 'Tiệm đã đóng cửa, mai nhập tiếp nhé!'); return; }
     this.pauseLayer?.destroy();
@@ -1838,7 +1937,7 @@ export class ShopScene extends Phaser.Scene {
     if (!G.liveSnapshot) this.session.paused = true;
     setPlayClockRunning(false);
     this.scene.pause('Shop');
-    this.scene.launch('Restock');
+    this.scene.launch('Restock', orderItems ? { orderItems } : undefined);
   }
 
   /** Tiệm xôi: màn Bếp (ngâm, hấp, làm món) phủ lên tiệm; tiệm đứng yên tới khi quay lại. */
@@ -1867,6 +1966,12 @@ export class ShopScene extends Phaser.Scene {
     this.renderPanel(true);
     // Trong lúc nhập hàng mà app bị ẩn thì bảng tạm dừng đã mở: giữ nguyên trạng thái dừng.
     if (this.pauseLayer) return;
+    const orderId = this.pendingPhoneOrderId;
+    this.pendingPhoneOrderId = null;
+    if (orderId !== null && this.session.phoneOrders.some((o) => o.id === orderId && o.status === 'ringing')) {
+      this.answerPhone(orderId);
+      return;
+    }
     if (!G.liveSnapshot) this.session.paused = false;
     setPlayClockRunning(true);
     if (G.state.settings.sound) startMusic();
