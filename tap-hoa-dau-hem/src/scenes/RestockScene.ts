@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { DATA, product, supplier, type Category } from '../core/data';
 import type { LiveShopCommand } from '../core/liveSession';
 import { activeShopType } from '../core/shopTypes';
+import { orderRestockCart } from '../core/delivery';
 import { formatMoney, priceOf, shelfQty, unlockedProducts, usableShelves, warehouseQty, warehouseTotals } from '../core/state';
 import {
   assignCounterSlot, assignSlot, buyStock, canRefill, checkCart, clearSlot, counterFreeForNew, hasPlaceFor, planNewProducts, refillSlot, slotFreeForNew,
@@ -82,9 +83,11 @@ export class RestockScene extends Phaser.Scene {
     super('Restock');
   }
 
-  create(data: { tab?: Tab } = {}): void {
+  create(data: { tab?: Tab; orderItems?: Record<string, number> } = {}): void {
     setupCamera(this);
-    this.cart = {};
+    this.cart = data.orderItems ? orderRestockCart(G.state, data.orderItems) : {};
+    this.suggested = new Set(Object.keys(this.cart));
+    if (data.orderItems) this.supplierId = 'co_tu';
     this.busy = false;
     this.selected = null;
     this.supplierBtns = {};
@@ -96,7 +99,7 @@ export class RestockScene extends Phaser.Scene {
     if (!supplierUnlocked(G.state, this.supplierId)) this.supplierId = 'co_tu';
     // Tiệm chỉ bán ở quầy (tiệm xôi) không có kệ: màn này chỉ còn phần nhập nguyên liệu.
     this.counterShop = activeShopType(G.state).def.service === 'counter';
-    pageFrame(this, this.counterShop ? '📦 Nhập nguyên liệu' : '📦 Nhập & bày hàng', () => this.close(), '⏸ Tiệm đang tạm dừng');
+    pageFrame(this, data.orderItems ? '📦 Nhập cho đơn giao' : this.counterShop ? '📦 Nhập nguyên liệu' : '📦 Nhập & bày hàng', () => this.close(), data.orderItems ? '⏸ Đơn đang chờ bạn xử lý' : '⏸ Tiệm đang tạm dừng');
     this.tabBtns = {
       buy: new Button(this, 92, TAB_Y, { w: 154, h: 36, radius: 5, label: '🛒 Nhập hàng', size: 13.5, onTap: () => this.setTab('buy') }),
       arrange: new Button(this, 268, TAB_Y, { w: 154, h: 36, radius: 5, label: '🧺 Bày kệ', size: 13.5, onTap: () => this.setTab('arrange') }),
@@ -308,7 +311,7 @@ export class RestockScene extends Phaser.Scene {
         : !check.ok && check.reason === 'space' ? '⚠️ Kho đầy, không đủ chỗ chứa'
           : !check.ok && check.reason === 'min-order' ? `⚠️ Đơn tối thiểu ${formatMoney(sp.minOrder)} (thiếu ${formatMoney(check.missing)})`
             : sp.delayDays > 0 && Object.keys(this.cart).length ? `🚚 Giao 15:00 ngày ${s.day + sp.delayDays}`
-              : sp.invoice === false ? '⚠️ Chợ không xuất hóa đơn: thanh tra thuế có thể phạt'
+              : sp.invoice === false ? 'Chợ không xuất hóa đơn: không có VAT đầu vào để khấu trừ'
                 : Object.keys(this.cart).length ? '✓ Hàng giao ngay vào kho' : '',
     );
     this.buyBtn.setText(sp.delayDays > 0 ? 'Đặt hàng' : 'Nhập hàng');

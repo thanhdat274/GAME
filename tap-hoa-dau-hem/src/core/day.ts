@@ -36,7 +36,7 @@ import {
   formatClock,
 } from './state';
 import {
-  assignSlot, canRefill, electricityCost, refillCounterSlot, expireLots, putIntoSlot, receiveDeliveries, refillSlot, shelfCapacity, slotUnitPrice, stowHolding,
+  assignSlot, autoArrange, buyStock, canRefill, electricityCost, refillCounterSlot, expireLots, putIntoSlot, receiveDeliveries, refillSlot, shelfCapacity, slotUnitPrice, stowHolding, suggestCart,
   findSlotWith, takeLots, takeOneFromSlot, zoneOf, type DeliveryResult,
   spoilFrozenStock,
 } from './stock';
@@ -2451,6 +2451,19 @@ export function startNextDay(state: GameState): number {
   const restock = runRestockRules(state);
   state.morningNotes.push(...restock.messages);
   for (const text of restock.messages) state.today.journal.push({ m: DATA.balance.openMinute, t: text });
+  if (state.manager.enabled && hasFeature(state.level, 'manager')) {
+    const cart = suggestCart(state);
+    if (Object.keys(cart).length) {
+      const bought = buyStock(state, cart);
+      if (bought.ok) {
+        const count = Object.values(cart).reduce((sum, qty) => sum + qty, 0);
+        const note = `🧑‍💼 Quản lý nhập ${count} món theo sức bán và ý kiến khách.`;
+        state.morningNotes.push(note);
+        state.today.journal.push({ m: DATA.balance.openMinute, t: note });
+      }
+    }
+    autoArrange(state);
+  }
   return grandmaHelp(state);
 }
 

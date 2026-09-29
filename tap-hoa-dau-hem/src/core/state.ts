@@ -307,7 +307,7 @@ export interface Settings {
   autoChange: boolean;
   /** Tự quét toàn bộ giỏ khi khách đến quầy. Mặc định tắt để người chơi làm quen. */
   autoScan: boolean;
-  /** Không chạm màn hình bao nhiêu giây thì game chơi hộ quầy (0 = tắt, chưa đặt = 60). */
+  /** Không chạm màn hình bao nhiêu giây thì game chơi hộ quầy (0 hoặc chưa đặt = tắt). */
   idleAutoPlay?: number;
   /** Góc nhìn lúc bán: 'side' = nhìn ngang (mặc định), 'topdown' = sơ đồ trên xuống, tự đi lại. */
   viewMode?: 'side' | 'topdown';
@@ -482,6 +482,8 @@ export interface TaxState {
   month: number;
   /** Doanh thu cả năm đã ghi nhận (để so với ngưỡng miễn thuế). */
   yearRevenue: number;
+  /** VAT theo doanh thu tích lũy; dùng khi vượt ngưỡng năm vì VAT áp trên toàn doanh thu. */
+  yearVatPotential: number;
   monthRevenue: Record<TaxKind, number>;
   /** VAT phải nộp của tháng (doanh nghiệp: đầu ra − đầu vào, có thể âm = được khấu trừ chuyển kỳ sau). */
   monthVat: number;
@@ -517,7 +519,7 @@ export interface TaxState {
 
 export function emptyTaxState(): TaxState {
   return {
-    registered: false, registeredDay: 0, year: 0, month: 0, yearRevenue: 0,
+    registered: false, registeredDay: 0, year: 0, month: 0, yearRevenue: 0, yearVatPotential: 0,
     monthRevenue: { goods: 0, food: 0, service: 0 }, monthVat: 0, monthPit: 0, monthStaffPit: 0, bills: [], nextBillId: 1, lifetimePaid: 0,
     mode: 'household', companyDay: 0, reserveOn: false, reserve: 0, invoiceMachine: false, unauditedMarket: 0,
     onTimeStreak: 0, bestOnTimeStreak: 0, yearLate: 0, yearEvasion: false, yearPaid: 0, audits: [], years: [], machineWarnedYear: 0,
@@ -533,7 +535,7 @@ export interface ActiveEvent {
 }
 
 export interface GameState {
-  version: 7;
+  version: 8;
   day: number;
   phase: Phase;
   /** Phút trong ngày (480 = 08:00) khi đang mở cửa. */
@@ -676,7 +678,7 @@ export function createNewGame(): GameState {
   const b = DATA.balance;
   const fixtures = defaultFixtures();
   const state: GameState = {
-    version: 7,
+    version: 8,
     day: 1,
     phase: 'morning',
     clock: b.openMinute,

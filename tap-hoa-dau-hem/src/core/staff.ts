@@ -90,13 +90,21 @@ export function ensureBoard(state: GameState): Candidate[] {
       fillBoard(state, board.list, board.day, target);
       board.targetCount = board.list.length;
     }
+    ensureGuardCandidate(state, board.list, board.day);
     return board.list;
   }
   const rng = new Rng(daySeed(state.day, 0x57aff));
   const count = rng.int(cfg().candidateMin, cfg().candidateMax);
   const list = fillBoard(state, [], state.day, count);
+  ensureGuardCandidate(state, list, state.day);
   state.staffBoard = { day: state.day, list, targetCount: count };
   return list;
+}
+
+/** Bảo vệ phải luôn tuyển được sau khi mở khóa, kể cả bảng ứng viên cũ đã tạo trước đó. */
+function ensureGuardCandidate(state: GameState, list: Candidate[], day: number): void {
+  if (!hasFeature(state.level, 'thief') || state.staff.some((s) => s.role === 'guard') || list.some((c) => c.role === 'guard')) return;
+  list.push(makeCandidate(new Rng(daySeed(day, 0x6a17d)), `guard_${day}`, ['guard']));
 }
 
 function fillBoard(state: GameState, current: Candidate[], day: number, targetCount: number): Candidate[] {

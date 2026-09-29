@@ -705,7 +705,7 @@ export class TitleScene extends Phaser.Scene {
   private showOfflineReport(report: OfflineReport): void {
     const details = [
       `Bạn vắng mặt ${report.hours.toFixed(1)} giờ · tiệm tự vận hành ${report.days} ngày.`,
-      `Doanh thu ${formatMoney(report.revenue)} · hàng nhập ${formatMoney(report.cogs)}.`,
+      `Doanh thu ${formatMoney(report.revenue)} · hàng nhập ${formatMoney(report.purchases)}.`,
       `Lương ${formatMoney(report.wages)} · điện ${formatMoney(report.electricity)}.`,
       `Lãi ròng ${formatMoney(report.profit)}.`,
       ...(report.outOfStockDay !== null ? [`Tiệm gần hết hàng từ ngày ${report.outOfStockDay}.`] : []),

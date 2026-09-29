@@ -45,8 +45,8 @@ const TUTORIALS: Record<string, { icon: string; title: string; body: string }> =
   decor: { icon: '🪴', title: 'Trang trí', body: 'Đồ trang trí tăng thu hút, khách tới đông hơn. Mua ở ☰ Tiệm → Trang trí.' },
   freezer: { icon: '❄️', title: 'Tủ đông', body: 'Kem, xúc xích, há cảo... chỉ bày được trong tủ đông (8.000đ điện/ngày).' },
   bargain: { icon: '🙏', title: 'Khách mặc cả', body: 'Bà nội trợ có thể xin bớt 5–15%. Bớt thì khách vui; không bớt thì có thể bỏ về.' },
-  company: { icon: '🏢', title: 'Lên doanh nghiệp', body: 'Có thể thành lập công ty ở ☰ Tiệm → Sổ thuế: mất ngưỡng miễn thuế, nộp VAT khấu trừ + thuế TNDN trên lãi; đổi lại được chiết khấu 5% ở mối có hóa đơn, khách công ty ghé nhiều hơn, đơn tiệc trả cao hơn.' },
-  tax: { icon: '🧾', title: 'Đăng ký hộ kinh doanh', body: 'Tiệm đã lớn, phải đóng thuế như ngoài đời! Doanh thu mỗi năm dưới ngưỡng thì miễn thuế; vượt ngưỡng thì nộp VAT + thuế TNCN theo % doanh thu, chốt mỗi tháng. Xem ở ☰ Tiệm → Sổ thuế. Có thêm mối Chợ đầu mối: rẻ nhưng không có hóa đơn.' },
+  company: { icon: '🏢', title: 'Lên công ty', body: 'Có thể thành lập công ty ở ☰ Tiệm → Sổ thuế. Công ty kê khai VAT theo phương pháp khấu trừ và TNDN trên thu nhập tính thuế; thuế suất tùy doanh thu kỳ trước, có ưu đãi nếu đủ điều kiện. Trong game còn có chiết khấu 5% ở mối có hóa đơn và thêm khách công ty.' },
+  tax: { icon: '🧾', title: 'Đăng ký hộ kinh doanh', body: 'Cửa hàng đã mở Sổ thuế. Ngưỡng không chịu VAT và TNCN kinh doanh hiện là 1 tỷ đồng doanh thu/năm. Khi vượt ngưỡng, VAT tính trên toàn doanh thu năm; TNCN theo phương pháp doanh thu tính trên phần vượt. Lịch nộp trong game được rút gọn; xem ☰ Tiệm → Sổ thuế.' },
   staff: { icon: '👥', title: 'Thuê nhân viên', body: 'Tiệm đông rồi! Vào ☰ Tiệm → Nhân sự để thuê thu ngân. Bé Lan đang chờ ở bảng tuyển dụng.' },
   warehouse_big: { icon: '🏬', title: 'Kho tổng', body: 'Nâng kho lên 120 ô ở ☰ Tiệm → Kho hàng.' },
   refill_staff: { icon: '🧺', title: 'Nhân viên bổ sung kệ', body: 'Thêm chỗ thứ 2. Nhân viên bổ sung kệ tự nạp ô vơi dưới 40%.' },
@@ -1275,7 +1275,7 @@ export class MorningScene extends Phaser.Scene {
           : !check.ok && check.reason === 'space' ? '⚠️ Kho đầy, không đủ chỗ chứa'
             : !check.ok && check.reason === 'min-order' ? `⚠️ Đơn tối thiểu ${formatMoney(sp.minOrder)} (thiếu ${formatMoney(check.missing)})`
               : sp.delayDays > 0 && Object.keys(this.cart).length ? `🚚 Giao 15:00 ngày ${s.day + sp.delayDays} · dư kho vào hàng chờ`
-                : sp.invoice === false ? '⚠️ Chợ không xuất hóa đơn: thanh tra thuế có thể phạt'
+                : sp.invoice === false ? 'Chợ không xuất hóa đơn: không có VAT đầu vào để khấu trừ'
                   : Object.keys(this.cart).length ? '✓ Hàng giao ngay vào kho' : '',
       );
       this.buyBtn.setText(sp.delayDays > 0 ? 'Đặt hàng' : 'Nhập hàng');

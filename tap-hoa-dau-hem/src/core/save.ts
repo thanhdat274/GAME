@@ -7,7 +7,7 @@ import { createNewGame, defaultFixtures, emptySlots, syncActiveStore, type GameS
 
 export const SAVE_KEY = 'thdh.save.v1';
 export const BACKUP_KEY = 'thdh.save.v1.bak';
-export const CURRENT_VERSION = 7;
+export const CURRENT_VERSION = 8;
 /** Bản lưu trước khi migrate lên version mới, giữ 14 ngày để khôi phục. */
 export const PRE_MIGRATE_KEY = 'thdh.save.premigrate';
 const PRE_MIGRATE_DAYS = 14;
@@ -179,6 +179,73 @@ const migrations: Record<number, Migration> = {
         data: migrateFridges((store.data && typeof store.data === 'object') ? store.data as Record<string, unknown> : {}),
       })),
     };
+  },
+  /** v7 -> v8: xóa khoản phạt 40% giá trị hàng chợ thiếu hóa đơn của luật game cũ. */
+  7: (state) => {
+    const tax = state.tax && typeof state.tax === 'object' ? state.tax as Record<string, unknown> : null;
+    if (!tax) return { ...state, version: 8 };
+    const oldMarketFine = (line: string): number => {
+      const match = /^Hàng nhập không hóa đơn [\d.]+đ: phạt ([\d.]+)đ$/u.exec(line.trim());
+      return match ? Number(match[1].replaceAll('.', '')) : 0;
+    };
+    let refund = 0;
+    const refundByYear = new Map<number, number>();
+    const returnPaid = (bill: Record<string, unknown>): void => {
+      const paid = Math.max(0, Number(bill.paidTotal) || 0);
+      refund += paid;
+      const year = Number(bill.year);
+      refundByYear.set(year, (refundByYear.get(year) ?? 0) + paid);
+    };
+    const currentYear = Number(tax.year);
+    const revenueByYear = new Map<number, number>([[currentYear, Number(tax.yearRevenue) || 0]]);
+    const years = Array.isArray(tax.years) ? tax.years as Record<string, unknown>[] : [];
+    for (const year of years) revenueByYear.set(Number(year.year), Number(year.revenue) || 0);
+    const bills = Array.isArray(tax.bills) ? tax.bills as Record<string, unknown>[] : [];
+    tax.bills = bills.filter((bill) => {
+      const yearlyRevenue = revenueByYear.get(Number(bill.year));
+      if (bill.kind !== 'audit' && bill.mode !== 'company' && yearlyRevenue !== undefined
+          && yearlyRevenue <= DATA.balance.tax.yearlyThreshold && !(Number(bill.staffPit) > 0)) {
+        // Các tờ VAT/TNCN hộ dựa trên ngưỡng 25 triệu cũ không còn nợ ở ngưỡng 1 tỷ.
+        returnPaid(bill);
+        return false;
+      }
+      if (bill.kind !== 'audit' || typeof bill.note !== 'string') return true;
+      const lines = bill.note.split('\n');
+      const marketFine = lines.reduce((sum, line) => sum + oldMarketFine(line), 0);
+      if (!marketFine) return true;
+      const otherLines = lines.filter((line) => !oldMarketFine(line));
+      if (otherLines.length === 0) {
+        // Tờ chỉ có khoản phạt sai: hủy nợ; hoàn tiền nếu người chơi đã nộp.
+        returnPaid(bill);
+        return false;
+      }
+      bill.note = otherLines.join('\n');
+      if (bill.status === 'open') bill.amount = Math.max(0, (Number(bill.amount) || 0) - marketFine);
+      return true;
+    });
+    const audits = Array.isArray(tax.audits) ? tax.audits as Record<string, unknown>[] : [];
+    for (const audit of audits) {
+      const findings = Array.isArray(audit.findings) ? audit.findings as string[] : [];
+      const marketFine = findings.reduce((sum, line) => sum + oldMarketFine(line), 0);
+      if (!marketFine) continue;
+      audit.total = Math.max(0, (Number(audit.total) || 0) - marketFine);
+      audit.findings = findings.filter((line) => !oldMarketFine(line));
+    }
+    if (tax.mode !== 'company' && (Number(tax.yearRevenue) || 0) <= DATA.balance.tax.yearlyThreshold) {
+      tax.monthVat = 0;
+      tax.monthPit = 0;
+      // Bản cũ chưa lưu đủ ngành của doanh thu năm; dùng tỷ lệ bán lẻ làm ước tính VAT lũy kế.
+      tax.yearVatPotential = (Number(tax.yearRevenue) || 0) * DATA.balance.tax.rates.goods.vat;
+      if (state.today && typeof state.today === 'object') (state.today as Record<string, unknown>).taxAccrued = 0;
+    }
+    for (const year of years) year.paid = Math.max(0, (Number(year.paid) || 0) - (refundByYear.get(Number(year.year)) ?? 0));
+    tax.lifetimePaid = Math.max(0, (Number(tax.lifetimePaid) || 0) - refund);
+    tax.yearPaid = Math.max(0, (Number(tax.yearPaid) || 0) - (refundByYear.get(currentYear) ?? 0));
+    const openBills = (tax.bills as Record<string, unknown>[]).some((bill) => bill.status === 'open');
+    const reserveReturn = !openBills && tax.mode !== 'company' && (Number(tax.yearRevenue) || 0) <= DATA.balance.tax.yearlyThreshold
+      ? Math.max(0, Number(tax.reserve) || 0) : 0;
+    if (reserveReturn) tax.reserve = 0;
+    return { ...state, version: 8, money: (Number(state.money) || 0) + refund + reserveReturn, tax };
   },
 };
 

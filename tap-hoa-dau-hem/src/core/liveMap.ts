@@ -9,6 +9,7 @@ import { fixtureOfShelf, type Fixture, type GameState } from './state';
  */
 export type Goal =
   | { kind: 'door' }
+  | { kind: 'porch' }
   /** Đứng cạnh nội thất (kệ, trạm bếp, kệ kho). */
   | { kind: 'fixture'; uid: number }
   /** Xếp hàng ở quầy: `lane` = vị trí quầy (0 = quầy người chơi), `index` = thứ tự trong hàng. */
@@ -60,8 +61,8 @@ export function customerGoal(session: LiveSessionView, c: Customer): Goal {
 /** Nhân viên đang muốn đứng ở đâu, theo việc đang làm. `lane` = vị trí quầy nếu đang đứng quầy. */
 export function staffGoal(state: GameState, task: string | null, lane: number | null, role?: string): Goal {
   if (lane !== null) return { kind: 'behind', lane };
-  // Bảo vệ đứng trông ở cửa.
-  if (role === 'guard' && !task) return { kind: 'door' };
+  // Bảo vệ đứng ngoài hiên trông xe; khi có việc vẫn xử lý khách trong tiệm.
+  if (role === 'guard' && !task) return { kind: 'porch' };
   const rack = state.fixtures.find((f) => DATA.furniture.find((d) => d.id === f.type)?.kind === 'storage');
   // Rảnh việc: đứng chờ ở kệ kho, không có thì cạnh kệ hàng đầu tiên, cho khỏi chắn cửa.
   if (!task) {
@@ -137,6 +138,7 @@ const QUEUE_CELLS = 6;
 export function goalCells(state: GameState, goal: Goal, grid: boolean[], lines: (lane: number) => Cell[]): Cell[] | null {
   switch (goal.kind) {
     case 'door':
+    case 'porch':
     case 'away':
       return [DATA.land.door];
     case 'fixture': {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DATA } from '../src/core/data';
-import { assignSlot, checkCart, recentDailySales, shelfCapacity, suggestRestockCart } from '../src/core/stock';
+import { DATA, product } from '../src/core/data';
+import { assignSlot, checkCart, recentDailySales, shelfCapacity, suggestCart, suggestedTarget, suggestRestockCart } from '../src/core/stock';
 import { createNewGame, lotsFrom, type DayRecord, type GameState } from '../src/core/state';
 
 function shop(money = 2_000_000): GameState {
@@ -15,6 +15,32 @@ function day(sold: Record<string, number>): DayRecord {
 }
 
 describe('gợi ý nhập hàng giữa giờ bán', () => {
+  it('buổi sáng ưu tiên món dưới 5 và tăng nhu cầu theo đánh giá khách', () => {
+    const s = shop();
+    s.warehouse = lotsFrom({ mi_goi: 4 });
+    s.analytics = [day({ mi_goi: 8 })];
+    const before = suggestedTarget(s, product('mi_goi'));
+    s.reviews.push({ id: 1, day: s.day, minute: 600, name: 'Khách', stars: 2, issue: 'missing', productId: 'mi_goi', text: 'Hết mì' });
+    expect(suggestedTarget(s, product('mi_goi'))).toBeGreaterThan(before);
+    expect(suggestCart(s).mi_goi).toBeGreaterThanOrEqual(1);
+  });
+
+  it('giữa giờ mua lại món chỉ còn 4 cái', () => {
+    const s = shop();
+    s.warehouse = lotsFrom({ mi_goi: 4 });
+    assignSlot(s, 0, 0, 'mi_goi');
+    const sug = suggestRestockCart(s);
+    expect(sug.outOfStock).toContain('mi_goi');
+    expect(sug.cart.mi_goi).toBeGreaterThan(0);
+  });
+
+  it('đánh giá thiếu hàng đưa món lên ưu tiên giữa giờ', () => {
+    const s = shop();
+    s.reviews.push({ id: 1, day: s.day, minute: 600, name: 'Khách', stars: 2, issue: 'missing', productId: 'gao', text: 'Thiếu gạo' });
+    const sug = suggestRestockCart(s);
+    expect(sug.outOfStock).toContain('gao');
+    expect(sug.cart.gao).toBeGreaterThan(0);
+  });
   it('bán trung bình mỗi ngày gồm các ngày gần nhất và hôm nay', () => {
     const s = shop();
     s.analytics = [day({ mi_goi: 10 }), day({ mi_goi: 20, keo: 4 })];

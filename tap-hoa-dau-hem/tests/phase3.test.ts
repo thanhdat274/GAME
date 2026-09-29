@@ -4,7 +4,7 @@ import { addRule, applyPlanogram, lockPlanogram, runRestockRules, suggestRule } 
 import { createCustomer } from '../src/core/customers';
 import { DATA } from '../src/core/data';
 import { DaySession, endDay, openShop, runDayHeadless, setManagerMode, startNextDay, type Incident } from '../src/core/day';
-import { createPhoneOrder, orderShortfall } from '../src/core/delivery';
+import { createPhoneOrder, orderRestockCart, orderShortfall } from '../src/core/delivery';
 import { buyFixture, placeAnywhere, plot, plotCells, plotStatus, unlockPlot } from '../src/core/layout';
 import { applyOfflineIncome, offlineElapsed } from '../src/core/offline';
 import { levelForExp, saleExpMultiplier } from '../src/core/progression';
@@ -18,7 +18,7 @@ import {
   staffSlots, timeFactor, tiredAfterMinutes, updateMoods,
 } from '../src/core/staff';
 import { createNewGame, formatMoney, unlockedProducts, warehouseQty, type GameState, type Staff } from '../src/core/state';
-import { addLot, autoArrange, shelfCapacity, takeOneFromSlot } from '../src/core/stock';
+import { addLot, autoArrange, buyStock, shelfCapacity, takeOneFromSlot } from '../src/core/stock';
 import { PLAYER, TaskQueue } from '../src/core/tasks';
 import saveV3 from './fixtures/save-v3.json';
 import type { StaffRole, StaffStats } from '../src/core/data';
@@ -563,6 +563,19 @@ describe('tổng kết có chi phí nhân sự', () => {
 });
 
 describe('đặt hàng tự động', () => {
+  it('quản lý bật thì ngày mới tự nhập hàng và bày kệ, tắt thì giữ quyền cho người chơi', () => {
+    const s = shop(20);
+    s.manager.enabled = false;
+    s.phase = 'summary';
+    startNextDay(s);
+    expect(s.warehouse).toHaveLength(0);
+    s.manager.enabled = true;
+    s.phase = 'summary';
+    startNextDay(s);
+    expect(s.money).toBeLessThan(5_000_000);
+    expect(s.shelves.some((row) => row.some((slot) => slot.qty > 0))).toBe(true);
+  });
+
   it('buổi sáng: tồn 8 mì gói, quy tắc "dưới 15 thì nhập 40 từ Cô Tư" → tự mua 40 gói', () => {
     const s = shop(16);
     addLot(s, 'mi_goi', 8, null);
@@ -648,6 +661,21 @@ describe('an ninh', () => {
 });
 
 describe('giao hàng tận nhà', () => {
+  it('nhập đúng phần thiếu rồi nhận được đơn đang đổ chuông', () => {
+    const s = shop(18);
+    addLot(s, 'mi_goi', 2, null);
+    const d = new DaySession(s, 10);
+    const o = createPhoneOrder(s, new Rng(1), 71, s.clock);
+    o.items = { mi_goi: 4, gao: 3 };
+    d.phoneOrders.push(o);
+    expect(orderRestockCart(s, o.items)).toEqual({ mi_goi: 2, gao: 3 });
+    expect(d.acceptOrder(o.id)).toBe('short');
+    expect(buyStock(s, orderRestockCart(s, o.items), 'co_tu').ok).toBe(true);
+    expect(d.acceptOrder(o.id)).toBe('ok');
+    expect(orderShortfall(s, o.items)).toEqual([{ productId: 'mi_goi', missing: 4 }, { productId: 'gao', missing: 3 }]);
+    expect(o.status).toBe('accepted');
+  });
+
   it('đơn thiếu hàng thì không nhận được và báo món thiếu', () => {
     const s = shop(18);
     addLot(s, 'mi_goi', 2, null);
@@ -808,9 +836,20 @@ describe('chế độ quản lý', () => {
 describe('thu nhập offline', () => {
   function managerShop(): GameState {
     const s = shop(20);
+    s.manager.enabled = true;
     s.managerStats = [{ day: 1, revenue: 0, profit: 0, sold: { mi_goi: 20 } }];
     return s;
   }
+
+  it('tắt quản lý thì không tự chạy ngày khi vắng mặt', () => {
+    const s = managerShop();
+    s.manager.enabled = false;
+    addLot(s, 'mi_goi', 20, null);
+    const money = s.money;
+    expect(applyOfflineIncome(s, 2 * 3_600_000)).toBeNull();
+    expect(s.day).toBe(1);
+    expect(s.money).toBe(money);
+  });
 
   it('vắng 2 giờ: 2 ngày trôi qua, bán 60% nhu cầu, cộng tiền và trừ lương, điện', () => {
     const s = managerShop();
@@ -823,19 +862,20 @@ describe('thu nhập offline', () => {
     expect(r.sold.mi_goi).toBe(24);
     expect(s.day).toBe(day + 2);
     expect(r.wages).toBe(60_000);
-    expect(s.money).toBe(money + r.revenue - r.wages - r.electricity);
+    expect(s.money).toBe(money + r.revenue - r.purchases - r.wages - r.electricity);
     expect(r.profit).toBe(r.revenue - r.cogs - r.wages - r.electricity);
     expect(r.outOfStockDay).toBeNull();
   });
 
-  it('hết hàng giữa chừng: chỉ tính tới khi hết và ghi ngày hết hàng', () => {
+  it('quản lý tự nhập và bày thêm hàng khi kho sắp hết', () => {
     const s = managerShop();
     addLot(s, 'mi_goi', 12, null);
     const day = s.day;
     const r = applyOfflineIncome(s, 4 * 3_600_000)!;
-    expect(r.sold.mi_goi).toBe(12);
-    expect(r.days).toBe(1);
-    expect(r.outOfStockDay).toBe(day + 1);
+    expect(r.sold.mi_goi).toBeGreaterThan(12);
+    expect(r.days).toBeGreaterThan(1);
+    expect(r.purchases).toBeGreaterThan(0);
+    expect(s.day).toBeGreaterThan(day + 1);
   });
 
   it('giới hạn 8 giờ; dưới L20 không có thu nhập offline', () => {
@@ -856,6 +896,15 @@ describe('thu nhập offline', () => {
     expect(s.lastSeen).toBe(9_000_000);
     expect(offlineElapsed(s, 9_000_000 + 8 * 3_600_000, 3_600_000)).toBe(3_600_000);
     expect(offlineElapsed(s, 9_500_000)).toBe(500_000);
+  });
+});
+
+describe('tuyển bảo vệ', () => {
+  it('luôn có ứng viên bảo vệ sau khi mở khóa, kể cả bảng đã tạo trước đó', () => {
+    const s = shop(14);
+    ensureBoard(s);
+    s.level = 15;
+    expect(ensureBoard(s).some((c) => c.role === 'guard')).toBe(true);
   });
 });
 
