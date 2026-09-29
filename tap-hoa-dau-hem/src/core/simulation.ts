@@ -128,6 +128,13 @@ export function createMaxLevelSimulation(): GameState {
     seedBranchShelves(state);
     syncActiveStore(state);
   }
+  // Tiệm bán ở quầy khác tiệm xôi (trà sữa...) bày sẵn thành phẩm của thực đơn lên quầy.
+  for (const store of state.stores) {
+    if (store.id === xoiStore?.id || shopTypeOf(store).def.service !== 'counter') continue;
+    visitStore(state, store.id);
+    seedCounter(state);
+    syncActiveStore(state);
+  }
   const xoi = xoiStore?.id;
   if (xoi && visitStore(state, xoi)) {
     seedXoiCounter(state);

@@ -10,16 +10,16 @@ export class PrestigeScene extends Phaser.Scene {
   constructor() { super('Prestige'); }
   create(): void {
     setupCamera(this);
-    pageFrame(this, '🏆 Danh hiệu', () => this.scene.start('Morning'), 'Phát triển chuỗi sau level 35');
+    pageFrame(this, '🏆 Danh hiệu', () => this.scene.start('Morning'), `Phát triển chuỗi sau level ${DATA.levels.maxLevel}`);
     const list = new ScrollArea(this, PAGE_TOP + 4, H - 8);
     const s = G.state;
     const stars = prestigeStars(s);
     const capExp = DATA.levels.levels[DATA.levels.maxLevel - 1].exp;
     list.add(card(this, 8, 8, W - 16, 104, 0xfff1c1));
     list.add(txt(this, 18, 19, currentTitle(s), { size: 18, bold: true }));
-    list.add(txt(this, 18, 51, s.level < 35 ? `Mở hệ danh hiệu khi đạt level 35 (${s.level}/35).` : `★ ${stars}/30 · Tăng ${stars}% doanh thu`, { size: 13, color: HEX.ink }));
+    list.add(txt(this, 18, 51, s.level < DATA.levels.maxLevel ? `Mở hệ danh hiệu khi đạt level ${DATA.levels.maxLevel} (${s.level}/${DATA.levels.maxLevel}).` : `★ ${stars}/30 · Tăng ${stars}% doanh thu`, { size: 13, color: HEX.ink }));
     const progress = Math.max(0, s.exp - capExp) % PRESTIGE_EXP_PER_STAR;
-    list.add(txt(this, 18, 78, s.level < 35 ? `EXP ${formatNumber(s.exp)}/${formatNumber(capExp)}` : `${formatNumber(progress)}/${formatNumber(PRESTIGE_EXP_PER_STAR)} EXP tới sao tiếp theo`, { size: 11, color: HEX.muted, wrap: W - 36 }));
+    list.add(txt(this, 18, 78, s.level < DATA.levels.maxLevel ? `EXP ${formatNumber(s.exp)}/${formatNumber(capExp)}` : `${formatNumber(progress)}/${formatNumber(PRESTIGE_EXP_PER_STAR)} EXP tới sao tiếp theo`, { size: 11, color: HEX.muted, wrap: W - 36 }));
     let y = 126;
     for (const title of DATA.titles) {
       const owned = stars >= title.stars;

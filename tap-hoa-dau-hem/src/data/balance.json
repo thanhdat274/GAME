@@ -147,6 +147,12 @@
       "cells": 120,
       "cost": 900000,
       "unlockLevel": 11
+    },
+    {
+      "name": "Kho trung tâm",
+      "cells": 200,
+      "cost": 1500000,
+      "unlockLevel": 38
     }
   ],
   "notColdBuyChance": 0.5,
@@ -405,7 +411,7 @@
     "maxExtraOrders": 2
   },
   "chain": {
-    "maxStores": 8
+    "maxStores": 12
   },
   "stickyRice": {
     "soakMinMinutes": 360,

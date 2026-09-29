@@ -864,7 +864,7 @@ function baseUnlocked(level: number, shop: ReturnType<typeof activeShopType> | n
   let list = baseUnlockedCache.get(key);
   if (!list) {
     const cats = unlockedCategories(level);
-    list = DATA.products.filter((p) => !p.recipeOnly && !p.eventOnly && (!shop || shop.allowsProduct(p.id))
+    list = DATA.products.filter((p) => !p.recipeOnly && !p.eventOnly && (shop ? shop.allowsProduct(p.id) : !p.shopOnly)
       && p.unlockLevel <= level && (p.behindCounter ? level >= 3 : cats.includes(p.category)));
     baseUnlockedCache.set(key, list);
   }

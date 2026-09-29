@@ -63,6 +63,8 @@ function behavior(def: ShopTypeDef): ShopTypeBehavior {
       if (!p) return false;
       // Thành phẩm chế biến chỉ thuộc về loại tiệm có công thức làm ra nó.
       if (p.recipeOnly) return false;
+      // Nguyên liệu riêng của một loại tiệm (`shopOnly`) chỉ bán ở tiệm liệt kê nó trong `ingredients`.
+      if (p.shopOnly) return false;
       return def.categories.includes(p.category);
     },
     densityAt: (minute) => {

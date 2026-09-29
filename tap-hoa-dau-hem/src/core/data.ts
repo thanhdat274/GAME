@@ -43,6 +43,8 @@ export interface Product {
   eventOnly?: string;
   /** Thành phẩm do bếp/quầy nước chế biến, không nhập từ mối sỉ. */
   recipeOnly?: boolean;
+  /** Chỉ các loại tiệm liệt kê mặt hàng này trong `ingredients` mới nhập/bán; tạp hóa và tiệm khác không thấy nó. */
+  shopOnly?: boolean;
 }
 
 export interface LevelDef {

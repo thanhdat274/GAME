@@ -29,8 +29,10 @@ const LOTS: Lot[] = [
   { name: 'Quầy giải khát', storeId: 'drink', x: 23, y: 17, w: 6, h: 5, door: [26, 16] },
   { name: 'Cửa hàng gia dụng', storeId: 'home', x: 32, y: 17, w: 5, h: 5, door: [34, 16] },
   // Đất trống chờ khu mới, cửa nhìn ra bãi cỏ giữa hai hàng nhà (nối với lối đất).
-  { name: 'Đất trống', storeId: '', x: 14, y: 24, w: 6, h: 5, door: [17, 23] },
-  { name: 'Đất trống', storeId: '', x: 23, y: 24, w: 6, h: 5, door: [26, 23] },
+  { name: 'Tiệm trà sữa', storeId: 'tea', x: 14, y: 24, w: 6, h: 5, door: [17, 23] },
+  { name: 'Tiệm bánh kẹo', storeId: 'bakery', x: 23, y: 24, w: 6, h: 5, door: [26, 23] },
+  { name: 'Siêu thị mini', storeId: 'mart', x: 3, y: 24, w: 8, h: 5, door: [7, 23] },
+  { name: 'Đất trống', storeId: '', x: 32, y: 24, w: 5, h: 5, door: [34, 23] },
 ];
 
 let seed = 20260929;

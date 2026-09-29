@@ -12,5 +12,8 @@
   { "id": "long_den_mua", "name": "Dây lồng đèn", "icon": "🏮", "slot": "wall", "cost": 0, "attraction": 16, "unlockLevel": 21, "exclusive": true },
   { "id": "bang_khai_giang", "name": "Bảng khai giảng", "icon": "🎒", "slot": "wall", "cost": 0, "attraction": 10, "unlockLevel": 21, "exclusive": true },
   { "id": "co_bong_da", "name": "Cờ mùa bóng đá", "icon": "⚽", "slot": "wall", "cost": 0, "attraction": 15, "unlockLevel": 22, "exclusive": true },
-  { "id": "bang_khen_thue", "name": "Bằng khen nộp thuế gương mẫu", "icon": "🏅", "slot": "wall", "cost": 0, "attraction": 12, "unlockLevel": 10, "exclusive": true }
+  { "id": "bang_khen_thue", "name": "Bằng khen nộp thuế gương mẫu", "icon": "🏅", "slot": "wall", "cost": 0, "attraction": 12, "unlockLevel": 10, "exclusive": true },
+  { "id": "neon_tra_sua", "name": "Biển neon trà sữa", "icon": "🧋", "slot": "sign", "cost": 320000, "attraction": 28, "unlockLevel": 42 },
+  { "id": "ke_hoa", "name": "Kệ hoa trang trí", "icon": "🌸", "slot": "floor", "cost": 180000, "attraction": 16, "unlockLevel": 44 },
+  { "id": "tranh_tra_sua", "name": "Tranh tường trà sữa", "icon": "🖼️", "slot": "wall", "cost": 260000, "attraction": 22, "unlockLevel": 48 }
 ]

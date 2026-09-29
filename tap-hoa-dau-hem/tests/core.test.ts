@@ -361,7 +361,8 @@ describe('level và sao', () => {
     expect(levelForExp(560)).toBe(5);
     expect(levelForExp(1780)).toBe(9);
     expect(levelForExp(10550)).toBe(20);
-    expect(levelForExp(9_999_999)).toBe(35);
+    expect(levelForExp(9_999_999)).toBe(DATA.levels.maxLevel);
+    expect(DATA.levels.maxLevel).toBe(50);
   });
 
   it('lên nhiều level một lúc', () => {

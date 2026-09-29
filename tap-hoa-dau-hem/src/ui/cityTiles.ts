@@ -173,6 +173,9 @@ const LOOKS: Record<string, Look> = {
   industrial: { roof: 0x7d8590, roofDark: 0x5f666f, wall: 0xd9d6cf, trim: 0x4a4f57, awning: 0xe08a2e },
   veg: { roof: 0x8cb83a, roofDark: 0x6d9a2a, wall: 0xf6f0d4, trim: 0x5a4a20, awning: 0x8cb83a },
   drink: { roof: 0x2fa6a0, roofDark: 0x1f8580, wall: 0xf2f7f2, trim: 0x2a5a6a, awning: 0xf28ab0 },
+  tea: { roof: 0xe58fb0, roofDark: 0xc26e90, wall: 0xfff0f4, trim: 0x8a4a62, awning: 0xf7a8c4 },
+  bakery: { roof: 0xd9a066, roofDark: 0xb37d45, wall: 0xfff4e0, trim: 0x7a5230, awning: 0xf2c94c },
+  mart: { roof: 0xc0392b, roofDark: 0x9a2c21, wall: 0xf7f7f2, trim: 0x4a4f57, awning: 0xffffff },
   home: { roof: 0x8a5aa8, roofDark: 0x6e4488, wall: 0xf3ecf4, trim: 0x4a3060, awning: 0xe8b04a },
   vacant: { roof: 0x000000, roofDark: 0x000000, wall: 0x000000, trim: 0x8b5a2b, awning: 0x000000 },
 };

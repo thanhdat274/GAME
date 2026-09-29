@@ -122,7 +122,7 @@ describe('hàng đợi việc (TaskQueue)', () => {
 
 describe('dữ liệu giai đoạn 3', () => {
   it('level 10–20 và chỗ nhân viên L10: 1, L12: 2, L15: 4, L20: 6', () => {
-    expect(DATA.levels.maxLevel).toBe(35);
+    expect(DATA.levels.maxLevel).toBe(50);
     expect(levelForExp(2200)).toBe(10);
     expect(levelForExp(10550)).toBe(20);
     expect([9, 10, 11, 12, 14, 15, 19, 20].map((level) => staffSlots(level))).toEqual([0, 1, 1, 2, 2, 4, 4, 6]);

@@ -60,6 +60,10 @@ export function validateContent(data: GameData = DATA): string[] {
   report.errors.push(...validateShopTypes(data.shopTypes, data.branches));
   report.errors.push(...validateEventsData(events));
 
+  // Hàng `shopOnly` phải được ít nhất một loại tiệm khai báo trong `ingredients`, nếu không sẽ không ai bán được.
+  const listed = new Set(data.shopTypes.flatMap((t) => t.ingredients));
+  for (const p of data.products) if (p.shopOnly && !listed.has(p.id)) report.add(`products.${p.id}`, 'shopOnly nhưng không loại tiệm nào liệt kê trong ingredients');
+
   for (const l of data.levels.levels) {
     const at = `levels.${l.level}`;
     for (const c of l.categories) if (!isCategory(c)) report.add(at, `nhóm hàng "${c}" không hợp lệ`);
