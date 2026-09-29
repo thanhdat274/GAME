@@ -1,10 +1,15 @@
 import Phaser from 'phaser';
 import { branchAvailable, maxStores, openBranch, visitStore } from '../core/branches';
 import { clampScroll, lotAt, parseCityMap, type CityLot, type CityMap, type TiledMap } from '../core/cityMap';
-import { DATA, type BranchDef } from '../core/data';
+import {
+  cellCenter, cellOf, createWalker, doorCell, isWalkable, nearestWalkable, pickWanderTarget, promenadeCells, stepWalker, walkTo, walkableGrid,
+  type Cell, type Walker,
+} from '../core/cityWalk';
+import { DATA, type BranchDef, type CustomerType } from '../core/data';
 import { formatMoney } from '../core/state';
 import cityMapJson from '../data/cityMap.json';
 import { G, persist } from '../game';
+import { customerTexture, staffType } from '../ui/art';
 import { buildingTexture, ensureCityTileset, CITY_TILESET_KEY, type BuildingKind } from '../ui/cityTiles';
 import { card, pageFrame } from '../ui/page';
 import { Button, toast } from '../ui/widgets';
@@ -16,6 +21,24 @@ const ZOOM_STEPS = [1, 1.5, 2];
 const DRAG_THRESHOLD = 8;
 const MAP_KEY = 'city-map';
 const SHEET_H = 150;
+/** Nhân vật vẽ ở đơn vị 2×ZOOM texel/px logic; thu về 12×20 px thế giới (một ô 16 px). */
+const CHAR_SCALE = 1 / (2 * ZOOM);
+const PLAYER_SPEED = 56;
+const WALK_FRAME_SECONDS = 0.18;
+const PLAYER_LOOK = { shirt: '#d84a3a', pants: '#3b4a6b', hair: '#2a1b12', skin: '#f1c9a0' };
+/** Vị trí người chơi khi rời màn (trong phiên chơi), để quay lại vẫn đứng ở đó. */
+let lastPlayerCell: Cell | null = null;
+
+interface Actor {
+  walker: Walker;
+  sprite: Phaser.GameObjects.Image;
+  type: CustomerType;
+  frame: 0 | 1;
+  frameTimer: number;
+  /** Dân phố: thời gian đứng nghỉ còn lại trước khi chọn điểm dạo mới. */
+  rest: number;
+  speed: number;
+}
 
 interface LotView {
   lot: CityLot;
@@ -46,6 +69,14 @@ export class CityScene extends Phaser.Scene {
   private pinchStart = 0;
   private pinchIndex = 0;
   private childCount = -1;
+  private grid: boolean[] = [];
+  private promenade: Cell[] = [];
+  private player!: Actor;
+  private npcs: Actor[] = [];
+  private pendingLot: LotView | null = null;
+  private follow = true;
+  private marker!: Phaser.GameObjects.Graphics;
+  private youLabel!: Phaser.GameObjects.Text;
 
   constructor() { super('City'); }
 
@@ -58,12 +89,16 @@ export class CityScene extends Phaser.Scene {
     this.sheet = null;
     this.drag = null;
     this.childCount = -1;
+    this.npcs = [];
+    this.pendingLot = null;
+    this.follow = true;
 
     this.worldCam = this.cameras.main.setBackgroundColor(0x5fae3d);
     this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height, false, 'ui');
     this.uiCam.setZoom(ZOOM).centerOn(W / 2, H / 2);
 
     this.buildWorld();
+    this.buildActors();
     this.uiCam.ignore([...this.worldObjects]);
 
     pageFrame(this, '🗺️ Bản đồ thành phố', () => { persist(); this.scene.start('Morning'); }, `Tiền chung · ${formatMoney(G.state.money)}`, 0);
@@ -71,13 +106,14 @@ export class CityScene extends Phaser.Scene {
 
     this.zoomIndex = 0;
     this.applyCamera();
-    const active = this.map.lots.find((l) => l.storeId === G.state.activeStoreId) ?? this.map.lots[0];
-    this.centerOnLot(active);
+    this.centerOnActor(this.player);
     this.bindInput();
-    this.events.once('shutdown', () => { this.input.off('pointerdown'); this.input.off('pointermove'); this.input.off('pointerup'); this.input.off('wheel'); });
+    this.events.once('shutdown', () => { lastPlayerCell = cellOf(this.map, this.player.walker.x, this.player.walker.y); this.input.off('pointerdown'); this.input.off('pointermove'); this.input.off('pointerup'); this.input.off('wheel'); });
   }
 
-  update(): void {
+  update(_time: number, delta: number): void {
+    const dt = Math.min(delta / 1000, 0.05);
+    this.updateActors(dt);
     // Đối tượng UI thêm sau (bảng thông tin, toast...) phải bị camera thế giới bỏ qua.
     if (this.children.length !== this.childCount) {
       this.childCount = this.children.length;
@@ -136,6 +172,110 @@ export class CityScene extends Phaser.Scene {
     }
   }
 
+  // ---- Nhân vật -------------------------------------------------------------------------------
+
+  private makeActor(type: CustomerType, at: Cell, speed: number): Actor {
+    const walker = createWalker(this.map, at);
+    const sprite = this.add.image(walker.x, walker.y + 6, customerTexture(this, type)).setOrigin(0.5, 1).setScale(CHAR_SCALE);
+    this.worldObjects.add(sprite);
+    return { walker, sprite, type, frame: 0, frameTimer: 0, rest: 0, speed };
+  }
+
+  private buildActors(): void {
+    this.grid = walkableGrid(this.map);
+    this.promenade = promenadeCells(this.map, this.grid);
+    const activeLot = this.map.lots.find((l) => l.storeId === G.state.activeStoreId) ?? this.map.lots[0];
+    const start = lastPlayerCell && isWalkable(this.map, this.grid, lastPlayerCell) ? lastPlayerCell : doorCell(activeLot);
+    this.player = this.makeActor(staffType({ id: 'player', name: 'Chủ tiệm', look: PLAYER_LOOK }), start, PLAYER_SPEED);
+    this.youLabel = txt(this, 0, 0, 'Bạn', { size: 9, bold: true, color: HEX.white, stroke: '#3b2618', origin: [0.5, 1], align: 'center' }).setDepth(50);
+
+    // Dân phố: nhiều tiệm mở thì phố đông hơn.
+    const count = Math.min(12, 6 + G.state.stores.length);
+    for (let i = 0; i < count && this.promenade.length; i++) {
+      const type = Phaser.Utils.Array.GetRandom(DATA.customers);
+      const at = pickWanderTarget(this.promenade, () => Math.random())!;
+      const npc = this.makeActor(type, at, Phaser.Math.Between(18, 30));
+      npc.rest = Math.random() * 3;
+      this.npcs.push(npc);
+    }
+    this.marker = this.add.graphics().setDepth(9);
+    this.worldObjects.add(this.marker);
+  }
+
+  private updateActors(dt: number): void {
+    const arrived = stepWalker(this.map, this.player.walker, this.player.speed, dt);
+    this.animate(this.player, dt);
+    if (arrived && this.pendingLot) {
+      const view = this.pendingLot;
+      this.pendingLot = null;
+      this.select(view);
+    }
+    for (const npc of this.npcs) {
+      if (npc.walker.path.length) {
+        stepWalker(this.map, npc.walker, npc.speed, dt);
+      } else {
+        npc.rest -= dt;
+        if (npc.rest <= 0) {
+          const target = pickWanderTarget(this.promenade, () => Math.random());
+          if (target && walkTo(this.map, this.grid, npc.walker, target)) npc.rest = Phaser.Math.FloatBetween(1, 4);
+        }
+      }
+      this.animate(npc, dt);
+    }
+    this.followPlayer(dt);
+    this.drawMarker();
+  }
+
+  /** Đặt sprite theo vị trí và hướng; đổi khung bước chân khi đang đi. */
+  private animate(a: Actor, dt: number): void {
+    const moving = a.walker.path.length > 0;
+    if (moving) {
+      a.frameTimer += dt;
+      if (a.frameTimer >= WALK_FRAME_SECONDS) { a.frameTimer = 0; a.frame = a.frame === 0 ? 1 : 0; }
+    } else { a.frame = 0; a.frameTimer = 0; }
+    const back = a.walker.facing === 'up';
+    a.sprite.setTexture(customerTexture(this, a.type, a.frame, back));
+    a.sprite.setFlipX(a.walker.facing === 'left');
+    a.sprite.setPosition(a.walker.x, a.walker.y + 6).setDepth(20 + a.walker.y / 1000);
+  }
+
+  private followPlayer(dt: number): void {
+    if (!this.follow) return;
+    const view = this.viewSize();
+    const goal = { x: this.player.walker.x - view.w / 2, y: this.player.walker.y - view.h / 2 };
+    const k = 1 - Math.exp(-6 * dt);
+    this.pan = { x: this.pan.x + (goal.x - this.pan.x) * k, y: this.pan.y + (goal.y - this.pan.y) * k };
+    this.applyCamera();
+  }
+
+  private centerOnActor(a: Actor): void {
+    const view = this.viewSize();
+    this.pan = { x: a.walker.x - view.w / 2, y: a.walker.y - view.h / 2 };
+    this.applyCamera();
+  }
+
+  private drawMarker(): void {
+    this.marker.clear();
+    const path = this.player.walker.path;
+    if (!path.length) return;
+    const c = cellCenter(this.map, path[path.length - 1]);
+    const pulse = 0.5 + 0.5 * Math.sin(this.time.now / 160);
+    this.marker.lineStyle(1.5, 0xffffff, 0.5 + 0.4 * pulse).strokeCircle(c.x, c.y, 4 + pulse * 2);
+    this.marker.fillStyle(0xffe08a, 0.8).fillCircle(c.x, c.y, 2);
+  }
+
+  /** Người chơi đi tới ô `target` (hoặc tới cửa `lot` rồi mở bảng thông tin). */
+  private walkPlayerTo(target: Cell, lot: LotView | null): void {
+    this.select(null);
+    this.pendingLot = null;
+    if (!walkTo(this.map, this.grid, this.player.walker, target)) { toast(this, 'Không đi tới được chỗ đó'); return; }
+    this.follow = true;
+    if (lot) {
+      if (this.player.walker.path.length === 0) this.select(lot);
+      else this.pendingLot = lot;
+    }
+  }
+
   // ---- Camera ---------------------------------------------------------------------------------
 
   private get zoomScale(): number { return ZOOM * ZOOM_STEPS[this.zoomIndex]; }
@@ -167,15 +307,6 @@ export class CityScene extends Phaser.Scene {
     this.applyCamera();
   }
 
-  private centerOnLot(lot: CityLot): void {
-    const view = this.viewSize();
-    this.pan = {
-      x: (lot.x + lot.w / 2) * this.map.tile - view.w / 2,
-      y: (lot.y + lot.h / 2) * this.map.tile - view.h / 2,
-    };
-    this.applyCamera();
-  }
-
   /** Điểm thế giới → tọa độ logic của camera UI (để đặt nhãn sắc nét, không bị phóng theo bản đồ). */
   private toUi(wx: number, wy: number): { x: number; y: number } {
     const k = this.zoomScale / ZOOM;
@@ -194,6 +325,8 @@ export class CityScene extends Phaser.Scene {
       v.label.setVisible(visible).setPosition(top.x, top.y - 2);
       v.sub.setVisible(visible).setPosition(bottom.x, bottom.y + 2);
     }
+    const me = this.toUi(this.player.walker.x, this.player.walker.y - 14);
+    this.youLabel.setPosition(me.x, me.y);
     this.drawHighlight();
   }
 
@@ -234,6 +367,7 @@ export class CityScene extends Phaser.Scene {
       const dy = p.y - d.y;
       if (!d.moved && Math.hypot(dx, dy) / ZOOM > DRAG_THRESHOLD) d.moved = true;
       if (!d.moved) return;
+      this.follow = false;
       this.pan = { x: d.panX - dx / this.zoomScale, y: d.panY - dy / this.zoomScale };
       this.applyCamera();
     });
@@ -253,12 +387,16 @@ export class CityScene extends Phaser.Scene {
     const w = this.toWorld(px, py);
     const lot = lotAt(this.map, Math.floor(w.x / this.map.tile), Math.floor(w.y / this.map.tile));
     const view = lot ? this.views.find((v) => v.lot === lot) ?? null : null;
-    this.select(view);
+    if (view) { this.walkPlayerTo(doorCell(view.lot), view); return; }
+    const cell = { x: Math.floor(w.x / this.map.tile), y: Math.floor(w.y / this.map.tile) };
+    const target = isWalkable(this.map, this.grid, cell) ? cell : nearestWalkable(this.map, this.grid, cell);
+    if (target) this.walkPlayerTo(target, null);
   }
 
   private buildZoomButtons(): void {
     const x = W - 26;
     new Button(this, x, 86, { w: 36, h: 36, label: '+', size: 20, color: C.wood, onTap: () => this.setZoomIndex(this.zoomIndex + 1) });
+    new Button(this, x, 170, { w: 36, h: 36, label: '◎', size: 16, color: C.blue, onTap: () => { this.follow = true; } });
     new Button(this, x, 128, { w: 36, h: 36, label: '−', size: 20, color: C.wood, onTap: () => this.setZoomIndex(this.zoomIndex - 1) });
   }
 
@@ -276,6 +414,7 @@ export class CityScene extends Phaser.Scene {
 
   /** Cuộn để tòa nhà nằm giữa vùng trống phía trên bảng thông tin, không bị bảng che. */
   private revealAboveSheet(lot: CityLot): void {
+    this.follow = false;
     const regionTop = 58;
     const regionBottom = H - SHEET_H - 16;
     const k = ZOOM / this.zoomScale;

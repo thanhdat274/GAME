@@ -3,6 +3,8 @@
  * `CityScene` dùng cùng file JSON qua loader Tiled của Phaser.
  */
 
+import { unreachableDoors } from './cityWalk';
+
 export interface TiledProperty { name: string; type?: string; value: string | number | boolean }
 
 export interface TiledTileLayer { name: string; type: 'tilelayer'; width: number; height: number; data: number[] }
@@ -52,6 +54,8 @@ export interface CityMap {
   lots: CityLot[];
   /** gid của ô không đi qua được. */
   blocked: Set<number>;
+  /** gid của ô vỉa hè/lối đi, nơi dân trong phố dạo bước. */
+  promenade: Set<number>;
   /** gid tối đa hợp lệ (firstgid + tilecount - 1). */
   maxGid: number;
 }
@@ -68,8 +72,10 @@ export function parseCityMap(json: TiledMap): CityMap {
   if (!ground || !objects || !lots) throw new Error('cityMap: thiếu lớp ground, objects hoặc lots');
   const tileset = json.tilesets[0];
   const blocked = new Set<number>();
+  const promenade = new Set<number>();
   for (const t of tileset?.tiles ?? []) {
     if (t.properties?.some((p) => p.name === 'blocked' && p.value === true)) blocked.add(tileset.firstgid + t.id);
+    if (t.properties?.some((p) => p.name === 'promenade' && p.value === true)) promenade.add(tileset.firstgid + t.id);
   }
   return {
     cols: json.width,
@@ -78,6 +84,7 @@ export function parseCityMap(json: TiledMap): CityMap {
     ground: ground.data,
     objects: objects.data,
     blocked,
+    promenade,
     maxGid: tileset ? tileset.firstgid + tileset.tilecount - 1 : 0,
     lots: lots.objects.map((o) => ({
       id: o.id,
@@ -125,6 +132,11 @@ export function validateCityMap(map: CityMap, storeIds: ReadonlySet<string>, bra
     }
   }
   for (const id of ['main', ...branchIds]) if (!usedStores.has(id)) errors.push(`cityMap: cửa hàng "${id}" chưa có lô đất`);
+  // Mọi cửa phải đi tới được từ cửa tiệm chính, nếu không nhân vật bị kẹt.
+  const main = map.lots.find((l) => l.storeId === 'main');
+  if (main && errors.length === 0) {
+    for (const lot of unreachableDoors(map, main.door)) errors.push(`cityMap.lots.${lot.name}#${lot.id}: không có đường đi tới cửa từ tiệm chính`);
+  }
   return errors;
 }
 

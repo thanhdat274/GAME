@@ -23,5 +23,13 @@
 
 ## 5. Để giai đoạn sau
 
-- Tô sáng/tối theo giờ trong ngày, nhân vật đi bộ ngoài phố, thay tileset canvas bằng ảnh vẽ tay (đổi khóa texture), chỉnh bản đồ bằng Tiled.
+- Tô sáng/tối theo giờ trong ngày, thay tileset canvas bằng ảnh vẽ tay (đổi khóa texture), chỉnh bản đồ bằng Tiled.
 - Chạy thử trên điện thoại thật và đo FPS khi bản đồ lớn hơn nhiều.
+
+## 6. Nhân vật đi bộ trong phố
+
+- [x] 6.1 `src/core/cityWalk.ts`: lưới đi được, tìm đường BFS, `stepWalker`, điểm dạo (thuộc tính tileset `promenade`)
+- [x] 6.2 `validateCityMap` báo cửa không đi tới được từ tiệm chính
+- [x] 6.3 `CityScene`: người chơi chạm để đi bộ, đi tới cửa tiệm rồi mở bảng, camera đi theo và nút về giữa (◎)
+- [x] 6.4 Dân phố đi dạo (6–12 người, đông hơn khi mở nhiều tiệm), khung bước chân và hướng nhìn
+- [x] 6.5 `tests/cityWalk.test.ts` (10 test), chạy thử trong trình duyệt

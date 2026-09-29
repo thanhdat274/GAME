@@ -289,6 +289,26 @@
    "imageheight": 16,
    "tiles": [
     {
+     "id": 3,
+     "properties": [
+      {
+       "name": "promenade",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "properties": [
+      {
+       "name": "promenade",
+       "type": "bool",
+       "value": true
+      }
+     ]
+    },
+    {
      "id": 6,
      "properties": [
       {
