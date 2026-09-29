@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { product, recipeById, type RecipeDef } from '../core/data';
 import { missingIngredients, prepareRecipe, recipeRequirements } from '../core/recipes';
+import { counterStockText } from '../core/customCups';
 import { TEA_BAR_GROUPS, barGroupOf, teaOrder } from '../core/teaBar';
 import { activeShopType } from '../core/shopTypes';
 import { formatMoney, unlockedProducts, warehouseQty } from '../core/state';
@@ -115,7 +116,8 @@ export class TeaScene extends Phaser.Scene {
     } else {
       this.prompt.setColor(HEX.ink).setText(`Bước ${this.step + 1}/${this.order.length}: thêm ${product(next).icon} ${product(next).name}`);
     }
-    this.chips.setText(this.order.map((id, i) => `${i < this.step ? '✓' : i === this.step ? '▶' : '·'}${product(id).icon}`).join(' '));
+    const onCounter = counterStockText(G.state.counter, this.recipe.output);
+    this.chips.setText(`${this.order.map((id, i) => `${i < this.step ? '✓' : i === this.step ? '▶' : '·'}${product(id).icon}`).join(' ')}\nTrên quầy: ${onCounter || 'chưa có ly nào'}`);
     for (const [id, tile] of this.tiles) {
       const left = warehouseQty(G.state, id) - (this.done ? 0 : this.used.get(id) ?? 0);
       tile.badge.setText(String(Math.max(0, left)));

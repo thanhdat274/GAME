@@ -577,6 +577,8 @@ export interface RecipeVariant {
   qualityDelta: number;
   /** Nguyên liệu tốn thêm khi chọn biến thể (vd. "Thêm topping"). */
   extraIngredients?: Record<string, number>;
+  /** Trọng số khách gọi tùy chọn này ở món `minigame: 'tea'` (ly thường có trọng số riêng trong `customCups.ts`); thiếu = 0.2. */
+  orderWeight?: number;
 }
 
 const CATEGORIES: Category[] = ['dry', 'snack', 'household', 'drink', 'fresh', 'frozen', 'counter'];

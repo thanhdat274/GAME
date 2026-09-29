@@ -19,6 +19,8 @@ export interface Slot {
   lots?: SlotLot[];
   /** Bán xả: phần trăm giảm giá (30/50) cho hàng hết hạn hôm nay. */
   clearance?: number;
+  /** Ô quầy của món trà: số ly theo tùy chọn (khóa rỗng = ly thường). Thông tin phụ, luôn được khớp lại theo `qty` khi đọc (`customCups.ts`). */
+  variants?: Record<string, number>;
 }
 
 /** Lô hàng trong kho. */

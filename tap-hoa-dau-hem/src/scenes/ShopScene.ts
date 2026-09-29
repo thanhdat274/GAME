@@ -10,6 +10,7 @@ import { canGiveCredit } from '../core/ledger';
 import { claimQuest, questDef, questDone, questProgress, questsUnlocked } from '../core/quests';
 import { MAX_SHELVES, formatClock, formatMoney, warehouseQty, type Staff } from '../core/state';
 import { askable, discountedCashTotal, orderTotal } from '../core/customers';
+import { counterSlotLabel, orderLineName, slotMatch } from '../core/customCups';
 import { ensureDiningTables } from '../core/dining';
 import { calendarDate } from '../core/calendar';
 import { G, persist, sceneForPhase, setPlayClockRunning } from '../game';
@@ -509,9 +510,9 @@ export class ShopScene extends Phaser.Scene {
       this.queuePanel();
     });
     e.on('itemScanned', () => this.queuePanel());
-    e.on('counterRequested', ({ customer, productId, seconds }) => {
+    e.on('counterRequested', ({ customer, productId, seconds, variantId }) => {
       const v = this.views.get(customer.id);
-      this.sideFloat(v?.sprite.x ?? W / 2, FEET_Y - 78, `Sau quầy: ${product(productId).name} · ${seconds}s`, '#1f5fa0', 12);
+      this.sideFloat(v?.sprite.x ?? W / 2, FEET_Y - 78, `Sau quầy: ${orderLineName({ productId, variantId })} · ${seconds}s`, '#1f5fa0', 12);
       this.queuePanel();
     });
     e.on('counterServed', () => { play('pick'); this.queuePanel(); });
@@ -519,6 +520,11 @@ export class ShopScene extends Phaser.Scene {
       play('wrong'); vibrate(60);
       const v = this.views.get(customer.id);
       if (v) this.sideFloat(v.sprite.x, v.sprite.y - 70, 'Sai món!', HEX.red, 13);
+    });
+    e.on('counterVariant', ({ customer, fit }) => {
+      const v = this.views.get(customer.id);
+      if (!v || fit === 'exact') return;
+      this.sideFloat(v.sprite.x, v.sprite.y - 70, fit === 'worse' ? 'Ly chưa đúng ý · −1 sao' : 'Được ly xịn hơn', fit === 'worse' ? HEX.red : HEX.green, 12);
     });
     e.on('counterExpired', () => this.queuePanel());
     e.on('paymentStarted', () => this.queuePanel());
@@ -1191,7 +1197,7 @@ export class ShopScene extends Phaser.Scene {
       if (isOutOfStock) icon.setAlpha(0.45);
       L.add(icon);
 
-      L.add(this.panelText(x, y + 22, p.name, { size: cw < 90 ? 9 : 11, origin: [0.5, 0.5], color: isOutOfStock ? HEX.muted : HEX.ink, wrap: cw - 8 }));
+      L.add(this.panelText(x, y + 22, orderLineName(l), { size: cw < 90 ? 9 : 11, origin: [0.5, 0.5], color: isOutOfStock ? HEX.muted : HEX.ink, wrap: cw - 8 }));
 
       let status = '';
       let statusColor = HEX.ink;
@@ -1236,12 +1242,12 @@ export class ShopScene extends Phaser.Scene {
       const slots = G.state.counter;
       slots.forEach((slot, i) => {
         const x = 46 + i * 78;
-        const label = slot.productId ? `${product(slot.productId).name}\n×${slot.qty}` : 'Trống';
+        const label = counterSlotLabel(slot);
         const counterButton = new Button(this, x, PANEL_Y + 174, {
           w: 70,
           h: 44,
           label,
-          color: slot.productId === request.productId ? C.green : C.grey,
+          color: slotMatch(slot, request) === 'exact' ? C.green : slotMatch(slot, request) === 'product' ? C.yellow : C.grey,
           size: 10,
           onTap: () => {
             if (G.liveSnapshot) { void this.liveCommand({ type: 'serveCounter', slot: i }); return; }

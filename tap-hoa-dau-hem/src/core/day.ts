@@ -1,4 +1,5 @@
 import { computeTip, customerPayment, judgeChange, type ChangeResult } from './change';
+import { BASE_VARIANT, addCup, isCustomRecipe, pickServed, cupPrice, removeCupRecord } from './customCups';
 import { askable, createCustomer, meanSpawnSeconds, orderTotal, ratingFor, shopDensityAt, type Customer, type OrderLine, type PaymentMethod } from './customers';
 import { recordDay } from './analytics';
 import { applyPlanogram, planogramProduct, runRestockRules } from './autorestock';
@@ -99,9 +100,11 @@ export interface DayEvents {
   stockAsked: { customer: Customer; productId: string; found: number; missing: number; restocked: number };
   basketReady: Customer;
   itemScanned: { customer: Customer; productId: string; scanned: number; remaining: number };
-  counterRequested: { customer: Customer; productId: string; seconds: number };
+  counterRequested: { customer: Customer; productId: string; seconds: number; variantId?: string };
   counterServed: { customer: Customer; productId: string; slot: number };
   counterWrong: { customer: Customer; slot: number };
+  /** Ly trà tùy biến đã đưa: loại khách gọi, loại đưa và mức khớp (exact/better/worse). */
+  counterVariant: { customer: Customer; productId: string; wanted: string; served: string; fit: 'exact' | 'better' | 'worse' };
   counterExpired: { customer: Customer; productId: string };
   paymentStarted: Customer;
   trayChanged: number[];
@@ -978,7 +981,7 @@ export class DaySession {
     }
     c.counterRequestResolved = false;
     c.counterRequestLeft = c.counterRequestSeconds;
-    this.events.emit('counterRequested', { customer: c, productId: line.productId, seconds: c.counterRequestSeconds });
+    this.events.emit('counterRequested', { customer: c, productId: line.productId, seconds: c.counterRequestSeconds, variantId: line.variantId });
   }
 
   private tickCounterRequest(c: Customer, dt: number): void {
@@ -1212,6 +1215,21 @@ export class DaySession {
       this.events.emit('counterWrong', { customer: c, slot: slotIndex });
       return slot?.productId === line.productId ? 'empty' : 'wrong';
     }
+    // Món trà tùy biến: đưa đúng ly khách gọi nếu có, không thì ly gần nhất; tiền theo ly thực sự đưa.
+    const recipe = recipeByOutput(line.productId);
+    if (isCustomRecipe(recipe)) {
+      const want = line.variantId ?? BASE_VARIANT;
+      const served = pickServed(slot, recipe, want)!;
+      removeCupRecord(slot, served.key);
+      line.servedVariant = served.key;
+      line.value = (line.value ?? 0) + cupPrice(recipe, priceOf(line.productId, this.state), want, served.key);
+      if (served.fit === 'worse') {
+        // Ly kém hơn khách gọi (thiếu topping/size...): trừ một sao và một phần kiên nhẫn, vẫn trả tiền ly nhận được.
+        c.penalty = Math.min(1, c.penalty + 1);
+        c.patience = Math.max(0, c.patience - DATA.balance.counterWrongPenalty / 2);
+      }
+      this.events.emit('counterVariant', { customer: c, productId: line.productId, wanted: want, served: served.key, fit: served.fit });
+    }
     slot.qty--;
     line.picked++;
     line.counterSlot = slotIndex;
@@ -1381,7 +1399,9 @@ export class DaySession {
       const counter = this.state.counter[line.counterSlot];
       if (counter?.productId === line.productId) {
         const returned = Math.min(remaining, DATA.balance.counterCapacity - counter.qty);
-        counter.qty += returned;
+        // Ly tùy biến được trả lại đúng loại đã lấy.
+        if (line.servedVariant !== undefined && isCustomRecipe(recipeByOutput(line.productId))) for (let i = 0; i < returned; i++) addCup(counter, line.servedVariant);
+        else counter.qty += returned;
         remaining -= returned;
       }
     } else {

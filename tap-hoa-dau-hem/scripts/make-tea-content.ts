@@ -65,13 +65,13 @@ const costOf = (ing: Record<string, number>): number => Object.entries(ing).redu
 
 /** Biến thể: nguyên liệu thêm và giá cộng thêm (theo chi phí thêm). */
 function variantsOf(d: Drink): object[] {
-  const list: { id: string; name: string; extra: Record<string, number>; quality: number }[] = [
-    { id: 'size_l', name: 'Size L', extra: { nuoc_da: 1, nuoc_duong: 1 }, quality: 0 },
+  const list: { id: string; name: string; extra: Record<string, number>; quality: number; weight: number }[] = [
+    { id: 'size_l', name: 'Size L', extra: { nuoc_da: 1, nuoc_duong: 1 }, quality: 0, weight: 0.3 },
   ];
-  if (!d.ingredients.tran_chau_den) list.push({ id: 'them_tran_chau', name: '+ Trân châu', extra: { tran_chau_den: 1 }, quality: 0.05 });
-  if (!d.ingredients.thach_dua) list.push({ id: 'them_thach', name: '+ Thạch dừa', extra: { thach_dua: 1 }, quality: 0.05 });
-  if (!d.ingredients.foam_cheese && d.unlock >= 41) list.push({ id: 'them_foam', name: '+ Foam', extra: { foam_cheese: 1 }, quality: 0.05 });
-  return list.map((v) => ({ id: v.id, name: v.name, priceDelta: roundUp(costOf(v.extra) * 1.6), qualityDelta: v.quality, extraIngredients: v.extra }));
+  if (!d.ingredients.tran_chau_den) list.push({ id: 'them_tran_chau', name: '+ Trân châu', extra: { tran_chau_den: 1 }, quality: 0.05, weight: 0.2 });
+  if (!d.ingredients.thach_dua) list.push({ id: 'them_thach', name: '+ Thạch dừa', extra: { thach_dua: 1 }, quality: 0.05, weight: 0.12 });
+  if (!d.ingredients.foam_cheese && d.unlock >= 41) list.push({ id: 'them_foam', name: '+ Foam', extra: { foam_cheese: 1 }, quality: 0.05, weight: 0.15 });
+  return list.map((v) => ({ id: v.id, name: v.name, priceDelta: roundUp(costOf(v.extra) * 1.6), qualityDelta: v.quality, extraIngredients: v.extra, orderWeight: v.weight }));
 }
 
 function stepsOf(d: Drink): string[] {

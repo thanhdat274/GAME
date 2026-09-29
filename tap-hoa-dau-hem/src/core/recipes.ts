@@ -1,3 +1,4 @@
+import { addCup, BASE_VARIANT, isCustomRecipe } from './customCups';
 import { DATA, product, recipeById, type RecipeDef, type RecipeVariant } from './data';
 import { activeShopType, shopTypeOf } from './shopTypes';
 import { COOKED_RICE_ID, cookedPortions, riceDishQuality, takeCookedRice } from './stickyRice';
@@ -126,10 +127,13 @@ export function prepareRecipe(state: GameState, id: string, quality = 1, variant
   consumeWarehouse(store, stock);
   const output = product(recipe.output);
   outputSlot.productId = output.id;
-  outputSlot.qty++;
+  // Món trà có tùy chọn: ly được đếm theo loại và phụ thu tính lúc phục vụ (khách gọi loại nào trả loại đó), nên giá chung không cộng phụ thu.
+  const custom = isCustomRecipe(recipe);
+  if (custom) addCup(outputSlot, variant?.id ?? BASE_VARIANT);
+  else outputSlot.qty++;
   outputSlot.lots = [{ qty: outputSlot.qty, exp: state.day + recipe.shelfLifeDays - 1 }];
   const qualityFactor = Math.max(0.75, Math.min(1.25, finalQuality + (variant?.qualityDelta ?? 0)));
-  store.prices[output.id] = qualityPrice(output.id, qualityFactor, variant?.priceDelta ?? 0);
+  store.prices[output.id] = qualityPrice(output.id, qualityFactor, custom ? 0 : variant?.priceDelta ?? 0);
   const variantNote = variant ? ` (${variant.name})` : '';
   const cost = Object.entries(requirements).reduce((sum, [item, qty]) => sum + product(item).cost * qty, 0);
   store.today.journal.push({ m: state.clock, t: `Đã chế biến ${output.name}${variantNote}; nguyên liệu ${formatMoney(cost)}` });

@@ -129,7 +129,9 @@ export class SummaryScene extends Phaser.Scene {
       // Tiệm chỉ bán ở quầy (tiệm xôi) làm món chứ không nhập, và không có khu kệ.
       const counterShop = activeShopType(G.state).def.service === 'counter';
       const t = txt(this, W / 2, y + 6, counterShop
-        ? `🍙 Khách gọi mà quầy hết món: ${list}\nNgâm thêm nếp và làm sẵn trước giờ cao điểm nhé!`
+        ? (activeShopType(G.state).def.id === 'xoi'
+          ? `🍙 Khách gọi mà quầy hết món: ${list}\nNgâm thêm nếp và làm sẵn trước giờ cao điểm nhé!`
+          : `🧋 Khách gọi mà quầy hết món: ${list}\nPha sẵn thêm các ly này (kể cả Size L, topping) trước giờ cao điểm nhé!`)
         : `📦 Khách hỏi mà hết hàng: ${list}\nNhập thêm những món này nhé!`, {
         size: 13,
         bold: true,

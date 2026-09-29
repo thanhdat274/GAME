@@ -1,3 +1,4 @@
+import { orderVariantFor } from './customCups';
 import { DATA, recipeById, type Category, type CustomerType } from './data';
 import type { Rng } from './rng';
 import { priceOf, unlockedCategories, unlockedProducts, usableShelves, type GameState } from './state';
@@ -21,6 +22,10 @@ export interface OrderLine {
   declined?: 'price' | 'cold';
   /** Đã hỏi ở quầy về phần hết trên kệ (nhân viên đã kiểm kho). */
   asked?: boolean;
+  /** Tùy chọn khách gọi ở món trà (khóa tùy chọn; rỗng/thiếu = ly thường). */
+  variantId?: string;
+  /** Tùy chọn của ly thực sự đã đưa (để trả lại đúng loại nếu khách bỏ về). */
+  servedVariant?: string;
 }
 
 export type CustomerStatus = 'entering' | 'browsing' | 'waiting' | 'scanning' | 'bargain' | 'credit' | 'paying' | 'fleeing' | 'done';
@@ -148,7 +153,9 @@ export function generateCounterOrder(type: CustomerType, rng: Rng, state: GameSt
     const pool = dishes.filter((r) => !lines.some((l) => l.productId === r.output));
     const inStock = (id: string) => state.counter.some((slot) => slot.productId === id && slot.qty > 0);
     const pick = pool[rng.weightedIndex(pool.map((r) => (inStock(r.output) ? 3 : 1)))];
-    lines.push({ productId: pick.output, qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [] });
+    // Món trà: khách gọi một tùy chọn (Size L, thêm topping...) theo trọng số trong dữ liệu.
+    const variantId = orderVariantFor(pick, () => rng.next());
+    lines.push({ productId: pick.output, qty: 1, picked: 0, scanned: 0, missing: 0, counterLine: true, pickedFrom: [], ...(variantId ? { variantId } : {}) });
   }
   return lines;
 }

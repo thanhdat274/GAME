@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { askable, type Customer } from '../core/customers';
+import { orderLineName } from '../core/customCups';
 import { DATA, furniture, product, type CustomerType } from '../core/data';
 import type { DaySession } from '../core/day';
 import { findPath, fixtureCells, walkableGrid, type Cell } from '../core/layout';
@@ -1120,7 +1121,7 @@ export class LiveMap {
     if (!c) return 'Khách';
     if (a.leaving) return `${c.name ?? c.type.name}: đang về.`;
     const who = c.name ? `${c.name} (${c.type.name})` : c.type.name;
-    const list = c.order.map((l) => `${product(l.productId).name} ${l.counterLine ? '(ở quầy)' : `${l.picked}/${l.qty}`}`).join(', ');
+    const list = c.order.map((l) => `${orderLineName(l)} ${l.counterLine ? '(ở quầy)' : `${l.picked}/${l.qty}`}`).join(', ');
     const status = c.status === 'browsing' ? 'đang chọn hàng' : c.status === 'entering' ? 'đang chờ vào' : c.status === 'fleeing' ? 'đang bỏ chạy!'
       : c.status === 'waiting' && c.askLeft !== undefined && c.order.some(askable) ? 'đang hỏi món hết, chờ kiểm kho' : 'đang chờ tính tiền';
     return `🧍 ${who}: ${status}.\nGiỏ: ${list || 'chưa có gì'}`;
