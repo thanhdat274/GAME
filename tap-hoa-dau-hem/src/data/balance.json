@@ -425,7 +425,7 @@
     "minSimPortions": 20
   },
   "tax": {
-    "yearlyThreshold": 25000000,
+    "yearlyThreshold": 1000000000,
     "rates": {
       "goods": {
         "vat": 0.01,
@@ -442,9 +442,9 @@
     },
     "dueDays": 5,
     "remindDays": 2,
-    "lateInterestPerDay": 0.005,
+    "lateInterestPerDay": 0.0003,
     "enforceAfterDays": 10,
-    "enforceFine": 0.2,
+    "enforceFine": 0,
     "historyBills": 12,
     "underDeclarePct": 0.3,
     "audit": {
@@ -453,13 +453,13 @@
       "withMachineChance": 0.05,
       "evasionFineMul": 1,
       "evasionStars": 1,
-      "marketFineRate": 0.4,
+      "marketFineRate": 0,
       "noMachineFine": 500000,
       "cleanStars": 5
     },
     "invoiceMachine": {
       "cost": 1500000,
-      "requiredYearRevenue": 50000000
+      "requiredYearRevenue": 1000000000
     },
     "invoiceCustomer": {
       "type": "van_phong",
@@ -468,14 +468,10 @@
       "bonusExp": 20,
       "noInvoiceMaxStars": 3
     },
-    "staffPit": {
-      "dailyThreshold": 150000,
-      "rate": 0.05
-    },
     "company": {
       "setupCost": 3000000,
       "vatRate": 0.08,
-      "citRate": 0.2,
+      "citRate": 0.15,
       "supplierDiscount": 0.05,
       "partyRewardMul": 1.3
     },

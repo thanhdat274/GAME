@@ -223,7 +223,7 @@ export interface Balance {
 
 export type TaxKind = 'goods' | 'food' | 'service';
 
-/** Thuế hộ kinh doanh: miễn dưới ngưỡng doanh thu năm, vượt ngưỡng thì nộp VAT + TNCN theo % doanh thu. */
+/** Thuế hộ kinh doanh: vượt ngưỡng năm, VAT trực tiếp trên doanh thu; TNCN theo % phần vượt. */
 export interface TaxBalance {
   /** Ngưỡng doanh thu mỗi năm game được miễn thuế. */
   yearlyThreshold: number;
@@ -252,15 +252,13 @@ export interface TaxBalance {
     /** Phạt trốn thuế = số thuế khai thiếu × hệ số này (ngoài phần truy thu). */
     evasionFineMul: number;
     evasionStars: number;
-    /** Phạt hàng nhập không hóa đơn: tỉ lệ trên giá trị hàng. */
+    /** Dữ liệu tương thích bản lưu cũ; không tự phạt theo giá trị hàng thiếu hóa đơn. */
     marketFineRate: number;
     noMachineFine: number;
     cleanStars: number;
   };
   invoiceMachine: { cost: number; requiredYearRevenue: number };
   invoiceCustomer: { type: string; chance: number; companyChance: number; bonusExp: number; noInvoiceMaxStars: number };
-  /** Khấu trừ thuế TNCN của nhân viên có lương ngày vượt mức. */
-  staffPit: { dailyThreshold: number; rate: number };
   company: { setupCost: number; vatRate: number; citRate: number; supplierDiscount: number; partyRewardMul: number };
   /** EXP thưởng khi quyết toán năm không trễ hạn, không bị truy thu. */
   settlementExp: number;

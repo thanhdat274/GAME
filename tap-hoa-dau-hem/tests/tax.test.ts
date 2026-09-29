@@ -44,14 +44,14 @@ describe('thuế hộ kinh doanh', () => {
     expect(s.morningNotes.some((n) => n.includes('hộ kinh doanh'))).toBe(true);
   });
 
-  it('dưới ngưỡng năm miễn thuế; chỉ phần vượt ngưỡng mới chịu thuế', () => {
+  it('vượt ngưỡng năm: VAT trên toàn doanh thu, TNCN theo doanh thu trên phần vượt', () => {
     const s = registered();
     expect(recordTaxableRevenue(s, 'goods', cfg.yearlyThreshold - 1_000_000)).toBe(0);
     const tax = recordTaxableRevenue(s, 'goods', 3_000_000);
-    const rate = cfg.rates.goods.vat + cfg.rates.goods.pit;
-    expect(tax).toBeCloseTo(2_000_000 * rate);
-    expect(monthTaxEstimate(s)).toBe(Math.round(2_000_000 * rate));
-    expect(s.today.taxAccrued).toBeCloseTo(2_000_000 * rate);
+    const expected = (cfg.yearlyThreshold + 2_000_000) * cfg.rates.goods.vat + 2_000_000 * cfg.rates.goods.pit;
+    expect(tax).toBeCloseTo(expected);
+    expect(monthTaxEstimate(s)).toBe(Math.round((cfg.yearlyThreshold + 2_000_000) * cfg.rates.goods.vat) + Math.round(2_000_000 * cfg.rates.goods.pit));
+    expect(s.today.taxAccrued).toBeCloseTo(expected);
   });
 
   it('ăn uống và dịch vụ chịu tỉ lệ cao hơn bán hàng hóa', () => {
@@ -96,6 +96,7 @@ describe('thuế hộ kinh doanh', () => {
     goTo(s, 11);
     expect(s.tax.bills).toHaveLength(0);
     expect(s.morningNotes.some((n) => n.includes('chưa vượt ngưỡng'))).toBe(true);
+    expect(s.tax.onTimeStreak).toBe(1);
   });
 
   it('không đủ tiền thì không nộp được', () => {
@@ -202,6 +203,55 @@ describe('thuế hộ kinh doanh', () => {
 });
 
 describe('thuế nâng cao', () => {
+  it('bản lưu v7 xóa tờ phạt 40% hàng thiếu hóa đơn còn nợ', () => {
+    const s = registered();
+    const fine = 8_492_640;
+    const finding = 'Hàng nhập không hóa đơn 21.231.600đ: phạt 8.492.640đ';
+    s.tax.yearRevenue = 48_247_500;
+    s.tax.monthVat = 310_020;
+    s.tax.reserve = 192_307;
+    s.tax.bills.push({ id: 1, year: 1, month: 8, kind: 'audit', revenue: { goods: 0, food: 0, service: 0 }, vat: 0, pit: 0, amount: fine, dueDay: 60, interestFrom: 60, status: 'open', note: finding });
+    s.tax.audits.push({ day: 56, total: fine, findings: [finding] });
+    const beforeMoney = s.money;
+    const loaded = migrate({ version: 7, state: structuredClone(s) as unknown as Record<string, unknown> });
+    expect(loaded.tax.bills).toHaveLength(0);
+    expect(loaded.tax.audits[0]).toMatchObject({ total: 0, findings: [] });
+    expect(loaded.money).toBe(beforeMoney + 192_307);
+    expect(loaded.tax.reserve).toBe(0);
+    expect(loaded.tax.monthVat).toBe(0);
+    expect(taxOwed(loaded)).toBe(0);
+  });
+
+  it('bản lưu v7 hoàn khoản phạt hàng thiếu hóa đơn đã nộp', () => {
+    const s = registered();
+    const fine = 8_492_640;
+    s.money = 100_000;
+    s.tax.lifetimePaid = fine;
+    s.tax.yearPaid = fine;
+    s.tax.bills.push({ id: 1, year: 1, month: 8, kind: 'audit', revenue: { goods: 0, food: 0, service: 0 }, vat: 0, pit: 0, amount: 0, dueDay: 60, interestFrom: 60, status: 'paid', paidDay: 65, paidTotal: fine, note: 'Hàng nhập không hóa đơn 21.231.600đ: phạt 8.492.640đ' });
+    const loaded = migrate({ version: 7, state: structuredClone(s) as unknown as Record<string, unknown> });
+    expect(loaded.money).toBe(100_000 + fine);
+    expect(loaded.tax.lifetimePaid).toBe(0);
+    expect(loaded.tax.yearPaid).toBe(0);
+    expect(loaded.tax.bills).toHaveLength(0);
+  });
+
+  it('bản lưu v7 xóa và hoàn VAT/TNCN hộ cũ khi doanh thu năm chưa tới 1 tỷ', () => {
+    const s = registered();
+    s.tax.yearRevenue = 48_247_500;
+    s.tax.monthPit = 120_000;
+    s.tax.lifetimePaid = 200_000;
+    s.tax.yearPaid = 200_000;
+    s.tax.bills.push({ id: 1, year: 1, month: 6, kind: 'month', mode: 'household', revenue: { goods: 0, food: 0, service: 0 }, vat: 100_000, pit: 50_000, amount: 150_000, dueDay: 55, interestFrom: 55, status: 'open' });
+    s.tax.bills.push({ id: 2, year: 1, month: 7, kind: 'month', mode: 'household', revenue: { goods: 0, food: 0, service: 0 }, vat: 150_000, pit: 50_000, amount: 0, dueDay: 65, interestFrom: 65, status: 'paid', paidTotal: 200_000 });
+    const beforeMoney = s.money;
+    const loaded = migrate({ version: 7, state: structuredClone(s) as unknown as Record<string, unknown> });
+    expect(loaded.tax.bills).toHaveLength(0);
+    expect(loaded.tax.monthPit).toBe(0);
+    expect(loaded.tax.lifetimePaid).toBe(0);
+    expect(loaded.money).toBe(beforeMoney + 200_000);
+  });
+
   it('quỹ thuế: cuối ngày để riêng thuế tạm tính, nộp dùng quỹ trước, tắt thì trả về tiền mặt', () => {
     const s = registered();
     setTaxReserve(s, true);
@@ -268,7 +318,7 @@ describe('thuế nâng cao', () => {
     s.tax.unauditedMarket = 1_000_000;
     s.ratings = [];
     const total = runAudit(s);
-    expect(total).toBe(45_000 * (1 + cfg.audit.evasionFineMul) + 1_000_000 * cfg.audit.marketFineRate);
+    expect(total).toBe(45_000 * (1 + cfg.audit.evasionFineMul));
     const audit = openBills(s).find((b) => b.kind === 'audit')!;
     expect(audit.amount).toBe(total);
     expect(s.tax.unauditedMarket).toBe(0);
@@ -280,7 +330,7 @@ describe('thuế nâng cao', () => {
 
   it('thanh tra phạt chưa lắp máy tính tiền khi doanh thu đã tới mức bắt buộc', () => {
     const s = registered();
-    s.tax.yearRevenue = cfg.invoiceMachine.requiredYearRevenue;
+    s.tax.yearRevenue = cfg.invoiceMachine.requiredYearRevenue + 1;
     expect(machineRequired(s)).toBe(true);
     expect(auditChance(s)).toBeCloseTo(cfg.audit.chance + cfg.audit.noMachineExtraChance);
     expect(runAudit(s)).toBe(cfg.audit.noMachineFine);
@@ -297,18 +347,17 @@ describe('thuế nâng cao', () => {
     expect(s.tax.unauditedMarket).toBe(300_000);
   });
 
-  it('khấu trừ TNCN nhân viên lương cao: tiệm giữ lại rồi nộp cùng tờ thuế tháng', () => {
+  it('không tự khấu trừ TNCN theo lương ngày khi thiếu dữ liệu tháng và giảm trừ', () => {
     const s = registered();
     s.phase = 'open';
     s.staff = [{ id: 'a', name: 'An', personality: 'cheerful', look: {} as never, role: 'cashier', stats: {} as never, wage: 250_000, level: 1, exp: 0, mood: 80, hiredDay: 1, streak: 0, lowMoodDays: 0, quitting: false, scoldedDay: null, lifetime: { served: 0, mistakes: 0, ratingSum: 0, ratingCount: 0, jobs: 0 } }];
     s.schedule = { a: Array.from({ length: 14 }, () => true) };
     s.money = 1_000_000;
     const summary = endDay(s);
-    const expected = Math.round((250_000 - cfg.staffPit.dailyThreshold) * cfg.staffPit.rate);
-    expect(summary.staffPit).toBe(expected);
-    expect(s.tax.monthStaffPit).toBe(expected);
+    expect(summary.staffPit).toBe(0);
+    expect(s.tax.monthStaffPit).toBe(0);
     goTo(s, 11);
-    expect(openBills(s)[0].staffPit).toBe(expected);
+    expect(openBills(s)).toHaveLength(0);
   });
 
   it('doanh nghiệp: cần máy tính tiền, VAT khấu trừ đầu vào, TNDN trên lãi, chiết khấu mối có hóa đơn', () => {
@@ -357,6 +406,7 @@ describe('thuế nâng cao', () => {
   it('quyết toán năm: khen gương mẫu khi nộp đủ, không trễ, không bị truy thu', () => {
     const s = registered();
     s.tax.yearPaid = 500_000;
+    s.tax.yearRevenue = 1_000_000;
     const exp = s.exp;
     goTo(s, 121);
     expect(s.tax.years[0]).toMatchObject({ year: 1, paid: 500_000, exemplary: true });

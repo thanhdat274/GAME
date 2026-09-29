@@ -47,7 +47,7 @@ const PAGES = [
   {
     icon: '🧾',
     title: '8. Thuế (từ level 10)',
-    body: 'Tiệm lớn thì đăng ký hộ kinh doanh. Doanh thu năm dưới ngưỡng được miễn thuế; vượt ngưỡng thì mỗi tháng chốt sổ, nộp VAT + thuế TNCN ở ☰ Tiệm → Sổ thuế trước hạn. Trễ hạn bị tính tiền chậm nộp; khai bớt hay nhập hàng không hóa đơn coi chừng thanh tra!',
+    body: 'Ở level 10, game mở Sổ thuế hộ kinh doanh. Ngưỡng không chịu VAT và TNCN kinh doanh là 1 tỷ đồng doanh thu/năm. Vượt ngưỡng: VAT trực tiếp trên doanh thu, TNCN theo phương pháp doanh thu trên phần vượt. Lịch chốt và hạn nộp trong game được rút gọn. Thiếu hóa đơn đầu vào thì công ty không được khấu trừ VAT.',
   },
 ];
 

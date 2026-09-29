@@ -3,7 +3,7 @@ import calendarData from '../data/calendar.json';
 import { DATA, featureLevel, hasFeature, type TaxKind } from '../core/data';
 import { formatMoney, type TaxBill } from '../core/state';
 import {
-  TAX_KIND_NAMES, auditChance, becomeCompany, billLabel, billTotal, buyInvoiceMachine, canDeclareLess, companyCheck, daysUntilMonthEnd,
+  TAX_KIND_NAMES, auditChance, becomeCompany, billLabel, billTotal, buyInvoiceMachine, canDeclareLess, companyCheck, companyCitRate, daysUntilMonthEnd,
   declareLess, enforceDay, isCompany, lateDays, machineRequired, monthLabel, monthTaxEstimate, openBills, payAllTaxBills,
   payTaxBill, setTaxReserve, taxBillOverdue, taxFunds, taxOwed, taxRate, updateTax,
 } from '../core/tax';
@@ -25,7 +25,7 @@ function signed(v: number): string {
 
 /**
  * Màn Sổ thuế: hình thức (hộ kinh doanh / doanh nghiệp), ngưỡng miễn thuế năm, thuế tạm tính tháng này,
- * tờ thuế cần nộp, quỹ thuế, máy tính tiền, thanh tra, quyết toán năm và cách tính.
+ * tờ thuế cần nộp, quỹ thuế, máy tính tiền, kiểm tra, quyết toán năm và cách tính.
  */
 export class TaxScene extends Phaser.Scene {
   private list!: ScrollArea;
@@ -68,7 +68,7 @@ export class TaxScene extends Phaser.Scene {
     this.list.add(card(this, 8, y, W - 16, h - 6));
     this.list.add(txt(this, 18, y + 10, `📅 Năm ${s.tax.year} · doanh thu ${formatMoney(s.tax.yearRevenue)}`, { size: 13, bold: true }));
     if (isCompany(s)) {
-      this.list.add(txt(this, 18, y + 34, `🏢 Doanh nghiệp từ ngày ${s.tax.companyDay}: không còn ngưỡng miễn thuế, mọi doanh thu đều có VAT. Đã nộp năm nay ${formatMoney(s.tax.yearPaid)}.`, { size: 11, color: HEX.ink, wrap: W - 44 }));
+      this.list.add(txt(this, 18, y + 34, `🏢 Công ty từ ngày ${s.tax.companyDay}. VAT tính theo mặt hàng; game đang dùng mức 8% minh họa. Đã nộp năm nay ${formatMoney(s.tax.yearPaid)}.`, { size: 11, color: HEX.ink, wrap: W - 44 }));
       return y + h;
     }
     const over = s.tax.yearRevenue > cfg.yearlyThreshold;
@@ -80,8 +80,8 @@ export class TaxScene extends Phaser.Scene {
     if (ratio > 0) bar.fillStyle(over ? C.red : C.green, 1).fillRoundedRect(barX, y + 36, Math.max(12, barW * ratio), 12, 6);
     this.list.add(bar);
     const note = over
-      ? `Đã vượt ngưỡng ${formatMoney(cfg.yearlyThreshold)}: phần doanh thu vượt ngưỡng phải chịu thuế.`
-      : `Còn ${formatMoney(cfg.yearlyThreshold - s.tax.yearRevenue)} nữa mới tới ngưỡng miễn thuế ${formatMoney(cfg.yearlyThreshold)}/năm.`;
+      ? `Vượt ${formatMoney(cfg.yearlyThreshold)}: VAT trên toàn doanh thu năm; TNCN theo doanh thu trên phần vượt.`
+      : `Còn ${formatMoney(cfg.yearlyThreshold - s.tax.yearRevenue)} tới ngưỡng không chịu VAT, TNCN ${formatMoney(cfg.yearlyThreshold)}/năm.`;
     this.list.add(txt(this, 18, y + 56, note, { size: 11, color: over ? HEX.red : HEX.green, wrap: W - 44 }));
     return y + h;
   }
@@ -90,7 +90,7 @@ export class TaxScene extends Phaser.Scene {
     const s = G.state;
     const company = isCompany(s);
     const extra: [string, string][] = company
-      ? [['VAT phải nộp (đầu ra − đầu vào)', signed(Math.round(s.tax.monthVat))], [`TNDN tạm tính (${pct(DATA.balance.tax.company.citRate)} lãi)`, signed(Math.round(s.tax.monthPit))]]
+      ? [['VAT phải nộp (đầu ra − đầu vào)', signed(Math.round(s.tax.monthVat))], [`TNDN tạm tính (${pct(companyCitRate(s))} lãi)`, signed(Math.round(s.tax.monthPit))]]
       : [];
     if (s.tax.monthStaffPit > 0) extra.push(['TNCN giữ lại từ lương nhân viên', formatMoney(Math.round(s.tax.monthStaffPit))]);
     const h = 60 + (KINDS.length + extra.length) * 20 + 28;
@@ -173,8 +173,8 @@ export class TaxScene extends Phaser.Scene {
     const owned = s.tax.invoiceMachine;
     const required = machineRequired(s);
     const body = owned
-      ? 'Đã lắp: khách công ty xin hóa đơn được xuất ngay (thêm sao, EXP). Mọi hóa đơn được ghi lại nên không khai bớt được, thanh tra ít ghé.'
-      : `Khách văn phòng hay xin hóa đơn; chưa có máy thì họ phật ý. ${required ? '⚠️ Doanh thu năm đã tới mức bắt buộc lắp máy!' : `Bắt buộc khi doanh thu năm từ ${formatMoney(m.requiredYearRevenue)}.`}`;
+      ? 'Đã lắp: khách công ty xin hóa đơn được xuất ngay (thêm sao, EXP). Mọi hóa đơn được ghi lại nên không khai bớt được, kiểm tra ít ghé.'
+      : `Khách văn phòng hay xin hóa đơn; chưa có máy thì họ phật ý. ${required ? '⚠️ Doanh thu năm đã vượt ngưỡng hóa đơn điện tử!' : `Hộ kinh doanh phải dùng hóa đơn điện tử khi doanh thu năm trên ${formatMoney(m.requiredYearRevenue)}.`}`;
     const bodyText = txt(this, 18, y + 30, body, { size: 11, color: !owned && required ? HEX.red : HEX.muted, wrap: W - 140 });
     const h = Math.max(80, bodyText.height + 44);
     this.list.add(card(this, 8, y, W - 16, h - 6));
@@ -198,14 +198,14 @@ export class TaxScene extends Phaser.Scene {
     const s = G.state;
     const last = s.tax.audits[s.tax.audits.length - 1];
     const lines = [
-      `Khả năng bị thanh tra mỗi lần chốt tháng: ${pct(auditChance(s))}.`,
-      s.tax.unauditedMarket > 0 ? `Hàng nhập chợ không hóa đơn chưa qua thanh tra: ${formatMoney(s.tax.unauditedMarket)} (có thể bị phạt ${pct(DATA.balance.tax.audit.marketFineRate)}).` : '',
-      last ? `Lần gần nhất (ngày ${last.day}): ${last.total ? `truy thu + phạt ${formatMoney(last.total)}` : 'không vi phạm 👍'}` : 'Chưa bị thanh tra lần nào.',
+      `Khả năng bị kiểm tra mỗi lần chốt tháng (game): ${pct(auditChance(s))}.`,
+      s.tax.unauditedMarket > 0 ? `Hàng chợ thiếu chứng từ: ${formatMoney(s.tax.unauditedMarket)}. Công ty không được khấu trừ VAT đầu vào cho khoản này.` : '',
+      last ? `Lần gần nhất (ngày ${last.day}): ${last.total ? `truy thu + phạt ${formatMoney(last.total)}` : 'không vi phạm 👍'}` : 'Chưa bị kiểm tra lần nào.',
     ].filter(Boolean);
     const t = txt(this, 18, y + 30, lines.join('\n'), { size: 11, color: HEX.muted, wrap: W - 44 });
     const h = t.height + 44;
     this.list.add(card(this, 8, y, W - 16, h - 6));
-    this.list.add(txt(this, 18, y + 8, '🕵️ Thanh tra thuế', { size: 13, bold: true }));
+    this.list.add(txt(this, 18, y + 8, '🕵️ Kiểm tra thuế', { size: 13, bold: true }));
     this.list.add(t);
     return y + h;
   }
@@ -216,7 +216,7 @@ export class TaxScene extends Phaser.Scene {
     if (isCompany(s)) return y;
     const unlocked = hasFeature(s.level, 'company');
     const body = unlocked
-      ? `Phí thành lập ${formatMoney(c.setupCost)}. Mất ngưỡng miễn thuế; nộp VAT ${pct(c.vatRate)} khấu trừ (đầu ra − đầu vào có hóa đơn) + TNDN ${pct(c.citRate)} trên lãi. Được chiết khấu ${pct(c.supplierDiscount)} ở mối có hóa đơn, khách công ty ghé nhiều hơn, đơn tiệc trả thêm ${pct(c.partyRewardMul - 1)}. Không quay lại hộ kinh doanh được.`
+      ? `Chi phí mở trong game ${formatMoney(c.setupCost)}. VAT khấu trừ theo từng mặt hàng (game tạm dùng ${pct(c.vatRate)}); TNDN ${pct(companyCitRate(s))} trên thu nhập tính thuế, có ưu đãi nếu đủ điều kiện. Được chiết khấu ${pct(c.supplierDiscount)} ở mối có hóa đơn và thêm khách công ty.`
       : `Mở ở level ${featureLevel('company')}: thành lập công ty, nộp VAT khấu trừ + thuế TNDN trên lãi.`;
     const bodyText = txt(this, 18, y + 30, body, { size: 11, color: HEX.muted, wrap: W - 44 });
     const h = bodyText.height + 44 + (unlocked ? 40 : 0);
@@ -237,7 +237,7 @@ export class TaxScene extends Phaser.Scene {
     const done = s.tax.bills.filter((b) => b.status !== 'open').reverse();
     this.list.add(txt(this, 14, y + 4, `📚 Đã nộp từ trước tới nay: ${formatMoney(s.tax.lifetimePaid)}`, { size: 13, bold: true }));
     y += 26;
-    this.list.add(txt(this, 18, y, `Nộp đúng hạn liên tiếp: ${s.tax.onTimeStreak} tháng (kỷ lục ${s.tax.bestOnTimeStreak})`, { size: 11, color: HEX.green }));
+    this.list.add(txt(this, 18, y, `Tuân thủ thuế liên tiếp: ${s.tax.onTimeStreak} tháng (kỷ lục ${s.tax.bestOnTimeStreak})`, { size: 11, color: HEX.green }));
     y += 20;
     const rows = [
       ...done.map((bill) => ({ text: `${billLabel(bill)} · ${formatMoney(bill.paidTotal ?? 0)} · ${bill.status === 'enforced' ? '⚠️ bị cưỡng chế' : `✓ nộp ngày ${bill.paidDay}`}`, color: bill.status === 'enforced' ? HEX.red : HEX.muted })),
@@ -257,16 +257,21 @@ export class TaxScene extends Phaser.Scene {
   private rulesCard(y: number): number {
     const cfg = DATA.balance.tax;
     const lines = [
-      '📘 Cách tính',
-      `• Hộ kinh doanh: doanh thu cả năm dưới ${formatMoney(cfg.yearlyThreshold)} miễn thuế; chỉ phần vượt ngưỡng mới tính thuế.`,
-      ...KINDS.map((k) => `• ${TAX_KIND_NAMES[k]}: VAT ${pct(cfg.rates[k].vat)} + TNCN ${pct(cfg.rates[k].pit)}.`),
-      `• Doanh nghiệp: VAT ${pct(cfg.company.vatRate)} trên doanh thu trừ VAT hàng nhập có hóa đơn; TNDN ${pct(cfg.company.citRate)} trên lãi (lỗ trừ vào tháng sau trong năm).`,
-      `• Nhân viên lương trên ${formatMoney(cfg.staffPit.dailyThreshold)}/ngày: tiệm giữ lại ${pct(cfg.staffPit.rate)} phần vượt để nộp thuế TNCN thay.`,
+      '📘 Luật Việt Nam đối chiếu đến 29/09/2026',
+      `• Hộ kinh doanh: doanh thu năm không quá ${formatMoney(cfg.yearlyThreshold)} không chịu VAT, TNCN kinh doanh. Vượt ngưỡng: VAT trên toàn doanh thu; TNCN theo % chỉ trên phần vượt.`,
+      ...KINDS.map((k) => `• ${TAX_KIND_NAMES[k]}: VAT cơ sở ${pct(cfg.rates[k].vat)} + TNCN ${pct(cfg.rates[k].pit)}.`),
+      '• Hàng đủ điều kiện được giảm 20% tỷ lệ VAT trực tiếp và VAT 10% còn 8% tới hết 2026; game chưa tách từng mặt hàng để áp dụng tự động.',
+      `• Hộ có doanh thu trên 3 tỷ/năm: TNCN phải tính theo thu nhập (doanh thu trừ chi phí), thuế suất 17% đến 50 tỷ, 20% trên 50 tỷ. Game chưa mô phỏng lựa chọn phương pháp này.`,
+      `• Công ty: VAT khấu trừ đầu ra trừ đầu vào hợp lệ. TNDN 15% khi doanh thu kỳ trước ≤3 tỷ, 17% khi >3–50 tỷ, thông thường 20% khi >50 tỷ. Game dùng VAT ${pct(cfg.company.vatRate)} minh họa.`,
+      '• Lương nhân viên: TNCN tính theo thu nhập tháng sau bảo hiểm và giảm trừ gia cảnh (bản thân 15,5 triệu/tháng, người phụ thuộc 6,2 triệu). Game chưa đủ dữ liệu nên không tự khấu trừ.',
       '• Giá bán trên kệ đã gồm thuế, khách không phải trả thêm.',
-      `• Mỗi tháng (${calendarData.daysPerMonth} ngày) chốt sổ một lần, hạn nộp hết ngày thứ ${cfg.dueDays} của tháng sau.`,
-      `• Trễ hạn: chậm nộp ${pct(cfg.lateInterestPerDay)}/ngày. Trễ quá ${cfg.enforceAfterDays} ngày: bị cưỡng chế trừ thẳng vào tiền, phạt thêm ${pct(cfg.enforceFine)}.`,
-      `• Khai bớt: giảm ${pct(cfg.underDeclarePct)} tiền thuế, nhưng thanh tra phát hiện thì truy thu và phạt gấp ${cfg.audit.evasionFineMul + 1} lần phần đã giấu.`,
-      `• Nộp đúng hạn 6 tháng liền được Bằng khen; năm không trễ hạn, không bị truy thu được khen gương mẫu (+${cfg.settlementExp} EXP).`,
+      `• Lịch game: 1 tháng = ${calendarData.daysPerMonth} ngày; chốt sổ và hạn ngày thứ ${cfg.dueDays} là rút gọn để chơi, không phải hạn khai thuế ngoài đời.`,
+      `• Chậm nộp ${pct(cfg.lateInterestPerDay)}/ngày. Game cưỡng chế sau ${cfg.enforceAfterDays} ngày quá hạn; ngoài đời cần thủ tục theo Luật Quản lý thuế.`,
+      '• Từ 2026 không thu lệ phí môn bài. Ưu đãi TNDN 3 năm cho doanh nghiệp nhỏ và vừa đăng ký lần đầu chỉ khi đủ điều kiện; game chưa tự áp dụng.',
+      '• Giai đoạn 2026–2027 có chính sách giảm 30% TNCN kinh doanh/TNDN cho đối tượng đủ điều kiện. Lịch game dùng năm giả tưởng nên ưu đãi theo năm thật chưa được tự tính.',
+      '• Căn cứ: Luật VAT 48/2024 và sửa đổi; Luật TNCN 109/2025; Luật TNDN 67/2025; Luật Quản lý thuế 108/2025; NĐ 68, 141/2026; NQ 204/2025, 43/2026. Xem docs/thue-kinh-doanh-viet-nam-2026.md trong dự án.',
+      `• Khai bớt: giảm ${pct(cfg.underDeclarePct)} tiền thuế; nếu bị kiểm tra sẽ truy thu và phạt. Mức phạt trong game là ${pct(cfg.audit.evasionFineMul)} số thuế đã giấu; luật phân biệt khai sai và trốn thuế.`,
+      `• Tuân thủ 6 tháng liền (kể cả tháng không phát sinh thuế) được Bằng khen; năm không trễ hạn, không bị truy thu được khen gương mẫu (+${cfg.settlementExp} EXP).`,
     ];
     const t = txt(this, 18, y + 10, lines.join('\n'), { size: 11, color: HEX.ink, wrap: W - 44 });
     this.list.add(card(this, 8, y, W - 16, t.height + 20, 0xeef4ff));
@@ -300,7 +305,7 @@ export class TaxScene extends Phaser.Scene {
     dialog(this, {
       icon: '🤫',
       title: 'Khai bớt doanh thu?',
-      body: `Bớt ${formatMoney(hidden)} tiền thuế ${monthLabel(bill.year * 12 + bill.month - 1)}. Nếu bị thanh tra phát hiện: truy thu ${formatMoney(hidden)}, phạt thêm ${formatMoney(Math.round(hidden * cfg.audit.evasionFineMul))} và mất uy tín với xóm.`,
+      body: `Bớt ${formatMoney(hidden)} tiền thuế ${monthLabel(bill.year * 12 + bill.month - 1)}. Nếu bị kiểm tra phát hiện: truy thu ${formatMoney(hidden)}, phạt trong game ${formatMoney(Math.round(hidden * cfg.audit.evasionFineMul))} và mất uy tín.`,
       buttons: [
         { label: 'Khai đúng', color: C.green },
         { label: 'Khai bớt', color: C.red, onTap: () => {
@@ -319,7 +324,7 @@ export class TaxScene extends Phaser.Scene {
     dialog(this, {
       icon: '🏢',
       title: 'Thành lập công ty?',
-      body: `Trả ${formatMoney(c.setupCost)} phí thành lập. Từ nay nộp VAT khấu trừ + thuế TNDN ${pct(c.citRate)} trên lãi, không còn ngưỡng miễn thuế. Không quay lại hộ kinh doanh được.`,
+      body: `Trả ${formatMoney(c.setupCost)} chi phí mở trong game. Từ nay tính VAT khấu trừ và TNDN theo doanh thu kỳ trước (15%/17%/20%) trên thu nhập tính thuế. Việc chuyển đổi hộ sang công ty không hoàn tác trong game.`,
       buttons: [
         { label: 'Để sau', color: C.grey },
         { label: 'Thành lập', color: C.blue, onTap: () => {

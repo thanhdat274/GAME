@@ -3,19 +3,18 @@ import { calendarDate } from './calendar';
 import { DATA, hasFeature, product, supplier, type TaxKind } from './data';
 import { addPlayerExperience, recordRating } from './progression';
 import { Rng, daySeed } from './rng';
-import { shiftsOn } from './schedule';
-import { onProbation } from './staff';
 import { formatMoney, type GameState, type TaxBill } from './state';
 
 /**
  * Thuế của tiệm, mô phỏng cách tính thuế ở Việt Nam:
- * - Hộ kinh doanh: doanh thu cả năm dưới ngưỡng thì miễn thuế; phần vượt ngưỡng nộp VAT + thuế TNCN
+ * - Hộ kinh doanh: doanh thu cả năm không quá ngưỡng thì miễn thuế; vượt ngưỡng nộp VAT trên doanh thu,
+ *   còn TNCN theo phương pháp doanh thu chỉ tính trên phần vượt ngưỡng,
  *   theo tỉ lệ % doanh thu của từng nhóm ngành (bán hàng, ăn uống, dịch vụ).
  * - Doanh nghiệp (lên ở level cao, tùy chọn): VAT khấu trừ (đầu ra − đầu vào có hóa đơn) + thuế TNDN trên lãi.
  * - Thuế cộng dồn theo tháng game; sang tháng mới lập tờ thuế, hạn nộp vài ngày đầu tháng.
  *   Trễ hạn tính tiền chậm nộp; trễ lâu bị cưỡng chế trừ thẳng tiền mặt kèm tiền phạt.
- * - Khai bớt doanh thu, nhập hàng chợ không hóa đơn hay chưa lắp máy tính tiền khi bắt buộc
- *   đều có thể bị phát hiện khi thanh tra (ngẫu nhiên lúc chốt tháng).
+ * - Khai bớt doanh thu hoặc không dùng hóa đơn điện tử khi bắt buộc có thể bị phát hiện
+ *   khi kiểm tra (ngẫu nhiên lúc chốt tháng trong game).
  */
 
 export const TAX_KIND_NAMES: Record<TaxKind, string> = {
@@ -37,7 +36,7 @@ export function monthLabel(key: number): string {
 
 export function billLabel(bill: TaxBill): string {
   const month = monthLabel(bill.year * 12 + bill.month - 1);
-  return bill.kind === 'audit' ? `Truy thu thanh tra ${month}` : `Thuế ${month}`;
+  return bill.kind === 'audit' ? `Truy thu kiểm tra ${month}` : `Thuế ${month}`;
 }
 
 /** Tính thuế đã mở chưa (đăng ký hộ kinh doanh). */
@@ -58,6 +57,13 @@ export function incomeTaxName(state: GameState): string {
 export function taxRate(kind: TaxKind): number {
   const r = cfg().rates[kind];
   return r.vat + r.pit;
+}
+
+/** Thuế suất TNDN theo doanh thu kỳ trước; công ty mới trong game tạm dùng nhóm nhỏ nhất. */
+export function companyCitRate(state: GameState): number {
+  const prior = state.tax.years.at(-1)?.revenue;
+  if (prior === undefined) return cfg().company.citRate;
+  return prior <= 3_000_000_000 ? 0.15 : prior <= 50_000_000_000 ? 0.17 : 0.2;
 }
 
 /** Món chế biến (bếp, quầy nước) tính thuế theo ngành ăn uống; còn lại là bán hàng hóa. */
@@ -92,9 +98,14 @@ export function recordTaxableRevenue(state: GameState, kind: TaxKind, amount: nu
     addAccrued(state, vat);
     return vat;
   }
-  const over = Math.max(0, tax.yearRevenue - Math.max(before, cfg().yearlyThreshold));
   const rate = cfg().rates[kind];
-  const vat = over * rate.vat;
+  tax.yearVatPotential = (tax.yearVatPotential ?? 0) + amount * rate.vat;
+  const threshold = cfg().yearlyThreshold;
+  const over = Math.max(0, tax.yearRevenue - Math.max(before, threshold));
+  // VAT trực tiếp áp trên toàn bộ doanh thu năm khi vượt ngưỡng, không chỉ phần vượt.
+  const vat = before <= threshold && tax.yearRevenue > threshold
+    ? tax.yearVatPotential
+    : before > threshold ? amount * rate.vat : 0;
   const pit = over * rate.pit;
   tax.monthVat += vat;
   tax.monthPit += pit;
@@ -104,7 +115,7 @@ export function recordTaxableRevenue(state: GameState, kind: TaxKind, amount: nu
 
 /**
  * Ghi nhận một lần nhập hàng: mối có hóa đơn thì doanh nghiệp được khấu trừ VAT đầu vào;
- * mối không hóa đơn (chợ) thì cộng vào phần hàng thanh tra có thể phạt.
+ * mối không hóa đơn (chợ) thì ghi riêng giá trị thiếu chứng từ, không tự áp mức phạt.
  */
 export function recordPurchase(state: GameState, supplierId: string, total: number): void {
   const tax = state.tax;
@@ -150,16 +161,10 @@ export interface DayTaxResult {
 }
 
 /** Khấu trừ TNCN của nhân viên có lương ngày vượt mức (tiệm giữ lại, nộp thay cùng tờ thuế tháng). */
-function withholdStaffPit(state: GameState): number {
-  const c = cfg().staffPit;
-  if (state.wageDebt > 0) return 0;
-  let total = 0;
-  for (const s of state.staff) {
-    if (s.quitting || onProbation(s, state.day)) continue;
-    const paid = Math.round((s.wage * shiftsOn(state, s.id, state.day)) / 2);
-    total += Math.round(Math.max(0, paid - c.dailyThreshold) * c.rate);
-  }
-  return total;
+function withholdStaffPit(_state: GameState): number {
+  // Thuế lương phụ thuộc tổng thu nhập tháng, bảo hiểm, người phụ thuộc và loại hợp đồng.
+  // Dữ liệu nhân viên trong game chưa đủ để khấu trừ chính xác; không tạo khoản thuế giả.
+  return 0;
 }
 
 /**
@@ -177,7 +182,7 @@ export function endDayTax(state: GameState, preTaxProfit: number): DayTaxResult 
   }
   if (isCompany(state)) {
     // Lãi chịu thuế: bỏ phần VAT (thu hộ nhà nước) ra khỏi lãi.
-    const cit = (preTaxProfit - (t.taxAccrued ?? 0)) * cfg().company.citRate;
+    const cit = (preTaxProfit - (t.taxAccrued ?? 0)) * companyCitRate(state);
     tax.monthPit += cit;
     addAccrued(state, cit);
   }
@@ -288,7 +293,7 @@ export function canDeclareLess(state: GameState, bill: TaxBill): boolean {
 }
 
 /**
- * Khai bớt doanh thu: số thuế phải nộp giảm một phần, nhưng phần giấu đi sẽ bị truy thu và phạt nếu gặp thanh tra.
+ * Khai bớt doanh thu: số thuế phải nộp giảm một phần, nhưng phần giấu đi sẽ bị truy thu và phạt nếu bị kiểm tra.
  * Máy tính tiền ghi mọi hóa đơn nên đã lắp thì không khai bớt được.
  */
 export function declareLess(state: GameState, id: number): DeclareResult {
@@ -315,7 +320,7 @@ export function setTaxReserve(state: GameState, on: boolean): void {
 
 /** Doanh thu năm đã tới mức bắt buộc dùng hóa đơn điện tử từ máy tính tiền. */
 export function machineRequired(state: GameState): boolean {
-  return state.tax.yearRevenue >= cfg().invoiceMachine.requiredYearRevenue;
+  return !isCompany(state) && state.tax.yearRevenue > cfg().invoiceMachine.requiredYearRevenue;
 }
 
 export type MachineResult = 'ok' | 'owned' | 'money' | 'locked';
@@ -354,7 +359,7 @@ export function becomeCompany(state: GameState): CompanyResult {
   return 'ok';
 }
 
-// ---------- Chốt tháng, thanh tra, quyết toán ----------
+// ---------- Chốt tháng, kiểm tra, quyết toán ----------
 
 /** Chốt tháng đang cộng dồn thành tờ thuế (khi có thuế phải nộp). */
 function closeMonth(state: GameState, nextMonthStartDay: number): void {
@@ -380,6 +385,11 @@ function closeMonth(state: GameState, nextMonthStartDay: number): void {
   } else if (revenue > 0) {
     state.morningNotes.push(`🧾 Chốt thuế ${label}: không phải nộp (VAT được khấu trừ / lỗ chuyển sang tháng sau).`);
   }
+  if (revenue > 0 && vat + pit + staffPit === 0) {
+    // Tháng không phát sinh số thuế phải nộp vẫn là một tháng tuân thủ sổ sách.
+    tax.onTimeStreak++;
+    tax.bestOnTimeStreak = Math.max(tax.bestOnTimeStreak, tax.onTimeStreak);
+  }
   tax.monthRevenue = { goods: 0, food: 0, service: 0 };
   // Doanh nghiệp: VAT đầu vào dư và lỗ được chuyển sang tháng sau.
   tax.monthVat = company ? Math.min(0, rawVat) : 0;
@@ -387,17 +397,14 @@ function closeMonth(state: GameState, nextMonthStartDay: number): void {
   tax.monthStaffPit = 0;
 }
 
-/** Xác suất bị thanh tra lần chốt tháng này. */
+/** Xác suất bị kiểm tra lần chốt tháng này trong game. */
 export function auditChance(state: GameState): number {
   const a = cfg().audit;
   if (state.tax.invoiceMachine) return a.withMachineChance;
   return a.chance + (machineRequired(state) ? a.noMachineExtraChance : 0);
 }
 
-/**
- * Thanh tra thuế (ngẫu nhiên khi chốt tháng): truy thu phần khai bớt kèm phạt, phạt hàng nhập không hóa đơn,
- * phạt chưa lắp máy tính tiền khi đã bắt buộc. Sổ sách sạch thì được tiếng tốt với xóm.
- */
+/** Kiểm tra trong game: truy thu phần khai bớt, xử lý thiếu hóa đơn điện tử khi bắt buộc. */
 export function runAudit(state: GameState): number {
   const tax = state.tax;
   const a = cfg().audit;
@@ -414,9 +421,8 @@ export function runAudit(state: GameState): number {
   }
   for (const bill of tax.bills) bill.audited = true;
   if (tax.unauditedMarket > 0) {
-    const fine = Math.round(tax.unauditedMarket * a.marketFineRate);
-    total += fine;
-    findings.push(`Hàng nhập không hóa đơn ${formatMoney(tax.unauditedMarket)}: phạt ${formatMoney(fine)}`);
+    // Thiếu hóa đơn tự nó không tạo mức phạt cố định theo giá trị hàng.
+    // Khoản này không đủ điều kiện khấu trừ VAT/chi phí nếu không có chứng từ hợp lệ.
     tax.unauditedMarket = 0;
   }
   if (!tax.invoiceMachine && machineRequired(state)) {
@@ -433,10 +439,10 @@ export function runAudit(state: GameState): number {
       revenue: { goods: 0, food: 0, service: 0 }, vat: 0, pit: 0, amount: total, dueDay, interestFrom: dueDay, status: 'open',
       audited: true, note: findings.join('\n'),
     });
-    state.morningNotes.push(`🕵️ Chị Hạnh bên thuế phường ghé thanh tra: ${findings.join('; ')}. Tổng phải nộp ${formatMoney(total)} (hạn hết ngày ${dueDay}).`);
+    state.morningNotes.push(`🕵️ Chị Hạnh bên thuế ghé kiểm tra: ${findings.join('; ')}. Tổng phải nộp ${formatMoney(total)} (hạn hết ngày ${dueDay}).`);
   } else {
     recordRating(state, a.cleanStars);
-    state.morningNotes.push('🕵️ Chị Hạnh bên thuế phường ghé thanh tra: sổ sách minh bạch, không vi phạm gì. Xóm khen tiệm làm ăn đàng hoàng!');
+    state.morningNotes.push('🕵️ Chị Hạnh bên thuế ghé kiểm tra: sổ sách minh bạch, không vi phạm gì. Xóm khen tiệm làm ăn đàng hoàng!');
   }
   return total;
 }
@@ -444,7 +450,7 @@ export function runAudit(state: GameState): number {
 /** Quyết toán năm cũ: tổng kết, khen hộ/doanh nghiệp gương mẫu nếu nộp đủ, đúng hạn, không bị truy thu. */
 function settleYear(state: GameState): void {
   const tax = state.tax;
-  const exemplary = tax.yearPaid > 0 && tax.yearLate === 0 && !tax.yearEvasion;
+  const exemplary = tax.yearRevenue > 0 && tax.yearLate === 0 && !tax.yearEvasion;
   tax.years.push({ year: tax.year, revenue: tax.yearRevenue, paid: tax.yearPaid, late: tax.yearLate, evasion: tax.yearEvasion, exemplary });
   if (tax.years.length > 5) tax.years.splice(0, tax.years.length - 5);
   const who = isCompany(state) ? 'Doanh nghiệp' : 'Hộ kinh doanh';
@@ -452,9 +458,10 @@ function settleYear(state: GameState): void {
   if (exemplary) {
     addPlayerExperience(state, cfg().settlementExp);
     state.today.expGained += cfg().settlementExp;
-    state.morningNotes.push(`🏅 Phường khen ${who.toLowerCase()} nộp thuế gương mẫu năm ${tax.year}: +${cfg().settlementExp} EXP.`);
+    state.morningNotes.push(`🏅 Phường khen ${who.toLowerCase()} tuân thủ thuế năm ${tax.year}: +${cfg().settlementExp} EXP.`);
   }
   tax.yearRevenue = 0;
+  tax.yearVatPotential = 0;
   tax.yearPaid = 0;
   tax.yearLate = 0;
   tax.yearEvasion = false;
@@ -489,7 +496,7 @@ function enforceBills(state: GameState): void {
       bill.amount = total - take;
       bill.interestFrom = state.day;
     }
-    state.morningNotes.push(`⚠️ Quá hạn ${billLabel(bill).toLowerCase()}: bị cưỡng chế trừ ${formatMoney(take)} (đã gồm phạt ${Math.round(cfg().enforceFine * 100)}% và tiền chậm nộp).`);
+    state.morningNotes.push(`⚠️ Quá hạn ${billLabel(bill).toLowerCase()}: bị cưỡng chế trừ ${formatMoney(take)} (đã gồm tiền chậm nộp).`);
   }
 }
 
@@ -503,7 +510,7 @@ function trimHistory(state: GameState): void {
 
 /**
  * Chạy mỗi khi sang ngày mới (kể cả các ngày offline): đăng ký hộ kinh doanh khi mở khóa,
- * chốt tháng cũ thành tờ thuế (có thể gặp thanh tra), đổi năm thì quyết toán, cưỡng chế tờ quá hạn lâu.
+ * chốt tháng cũ thành tờ thuế (có thể gặp kiểm tra), đổi năm thì quyết toán, cưỡng chế tờ quá hạn lâu.
  */
 export function updateTax(state: GameState): void {
   const tax = state.tax;
@@ -515,7 +522,8 @@ export function updateTax(state: GameState): void {
     tax.month = key;
     tax.year = Math.floor(key / 12);
     tax.yearRevenue = 0;
-    state.morningNotes.push(`🧾 Tiệm đã đăng ký hộ kinh doanh. Doanh thu mỗi năm dưới ${formatMoney(cfg().yearlyThreshold)} được miễn thuế.`);
+    tax.yearVatPotential = 0;
+    state.morningNotes.push(`🧾 Tiệm đã đăng ký hộ kinh doanh. Doanh thu mỗi năm không quá ${formatMoney(cfg().yearlyThreshold)} được miễn VAT và TNCN kinh doanh.`);
     return;
   }
   if (key > tax.month) {
@@ -531,7 +539,7 @@ export function updateTax(state: GameState): void {
   }
   if (!tax.invoiceMachine && machineRequired(state) && tax.machineWarnedYear !== tax.year) {
     tax.machineWarnedYear = tax.year;
-    state.morningNotes.push(`🧾 Doanh thu năm đã vượt ${formatMoney(cfg().invoiceMachine.requiredYearRevenue)}: tiệm bắt buộc dùng máy tính tiền xuất hóa đơn điện tử. Lắp ở ☰ Tiệm → Sổ thuế kẻo bị phạt khi thanh tra.`);
+    state.morningNotes.push(`🧾 Doanh thu năm đã vượt ${formatMoney(cfg().invoiceMachine.requiredYearRevenue)}: tiệm bắt buộc dùng hóa đơn điện tử. Lắp máy ở ☰ Tiệm → Sổ thuế kẻo bị phạt khi kiểm tra.`);
   }
   enforceBills(state);
   trimHistory(state);
