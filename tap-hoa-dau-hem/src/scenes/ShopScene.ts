@@ -130,7 +130,6 @@ export class ShopScene extends Phaser.Scene {
   private sideNoticeBg: Phaser.GameObjects.Graphics | null = null;
   private sideNoticeText: Phaser.GameObjects.Text | null = null;
   private sideNoticeTimer: Phaser.Time.TimerEvent | null = null;
-  private sideNoticeInPanel = false;
   private sideNoticeCustomerId: number | null = null;
   private pendingPhoneOrderId: number | null = null;
 
@@ -157,7 +156,6 @@ export class ShopScene extends Phaser.Scene {
     this.sideNoticeBg = null;
     this.sideNoticeText = null;
     this.sideNoticeTimer = null;
-    this.sideNoticeInPanel = false;
     this.sideNoticeCustomerId = null;
     this.pendingPhoneOrderId = null;
     this.questsDoneSeen = new Set((G.state.quests?.list ?? []).filter((q) => q.claimed || questDone(G.state, questDef(q.id))).map((q) => q.id));
@@ -520,7 +518,7 @@ export class ShopScene extends Phaser.Scene {
       // Khách ở quầy nhân viên không được phủ lời nhắc lên bảng thao tác của người chơi.
       if (customer !== this.session.front) return;
       const names = customer.order.filter(askable).map((line) => product(line.productId).name).join(', ');
-      this.showSideNotice(`🔎 Khách hỏi ${names || 'hàng hết trên kệ'} · đang kiểm kho`, C.blue, true);
+      this.showSideNotice(`🔎 Khách hỏi ${names || 'hàng hết trên kệ'} · đang kiểm kho`, C.blue);
       this.sideNoticeCustomerId = customer.id;
     });
     e.on('stockAsked', ({ customer, productId, found, missing }) => {
@@ -529,9 +527,12 @@ export class ShopScene extends Phaser.Scene {
       if (found > 0) play('pick');
       this.sideFloat(v?.sprite.x ?? W / 2, (v?.sprite.y ?? FEET_Y) - 74,
         found > 0 ? `📦 Kho còn ${name}!${missing > 0 ? ` (thiếu ${missing})` : ''}` : `🙁 Hết ${name} thật rồi`, found > 0 ? HEX.green : HEX.red, 12);
-      this.showSideNotice(found > 0
-        ? `📦 Còn ${found} ${name} trong kho · đưa khách và bày thêm lên kệ${missing > 0 ? ` (thiếu ${missing})` : ''}`
-        : `⚠️ ${name} đã hết cả kho · mở Nhập hàng để bổ sung`, found > 0 ? C.greenDark : C.redDark);
+      if (customer === this.session.front) {
+        this.showSideNotice(found > 0
+          ? `📦 Kho còn ${found} ${name} · đưa khách, nạp kệ${missing > 0 ? ` (thiếu ${missing})` : ''}`
+          : `⚠️ ${name} đã hết cả kho · mở Nhập hàng để bổ sung`, found > 0 ? C.greenDark : C.redDark);
+        this.sideNoticeCustomerId = customer.id;
+      }
       this.queuePanel();
     });
     e.on('itemScanned', () => this.queuePanel());
@@ -1050,7 +1051,9 @@ export class ShopScene extends Phaser.Scene {
     this.ownerAvatar?.setVisible(!away);
     const managerKey = this.managerView ? `manager-${G.state.manager.speed}-${this.session.openIncidents().map((i) => i.id).join(',')}` : '';
     const mode = away && !c ? 'away' : managerKey || (!c ? (this.session.closed ? 'closed' : 'idle') : c.status === 'paying' ? `pay-${c.id}` : c.status === 'waiting' && c.askLeft !== undefined && c.order.some(askable) ? `ask-${c.id}` : c.status === 'bargain' || c.status === 'credit' ? `${c.status}-${c.id}` : `scan-${c.id}`);
-    if (this.sideNoticeInPanel && mode !== `ask-${this.sideNoticeCustomerId}`) this.hideSideNotice();
+    if (this.sideNoticeCustomerId !== null
+      && mode !== `ask-${this.sideNoticeCustomerId}`
+      && mode !== `scan-${this.sideNoticeCustomerId}`) this.hideSideNotice();
     if (!force && mode === this.panelMode) return;
     const keepPay = mode === this.panelMode && mode.startsWith('pay');
     this.panelMode = mode;
@@ -1577,8 +1580,8 @@ export class ShopScene extends Phaser.Scene {
     if (!this.topDown) floatText(this, x, y, text, color, size);
   }
 
-  /** Nhắc việc đủ lâu để đọc ở góc nhìn ngang, dùng chung cho thiếu hàng và an ninh. */
-  private showSideNotice(message: string, color: number, inPanel = false): void {
+  /** Nhắc việc trong bảng thông tin dưới quầy, dùng chung cho thiếu hàng và an ninh. */
+  private showSideNotice(message: string, color: number): void {
     if (this.topDown || this.liveMap?.visible) return;
     if (!this.sideNotice) {
       this.sideNoticeBg = this.add.graphics();
@@ -1588,14 +1591,14 @@ export class ShopScene extends Phaser.Scene {
       this.sideNotice = this.add.container(0, 0, [this.sideNoticeBg, this.sideNoticeText]).setDepth(950);
     }
     this.sideNoticeText!.setText(message);
-    this.sideNoticeInPanel = inPanel;
-    this.sideNoticeText!.setColor(inPanel ? HEX.ink : HEX.cream);
+    this.sideNoticeCustomerId = null;
+    this.sideNoticeText!.setColor(HEX.ink);
     const height = Math.max(42, this.sideNoticeText!.height + 16);
-    const top = inPanel ? Math.max(PANEL_Y + 124, H - height - 70) : HUD_H + 8;
+    const top = Math.max(PANEL_Y + 124, H - height - 70);
     this.sideNoticeText!.setPosition(W / 2, top + 8);
     this.sideNoticeBg!.clear();
-    this.sideNoticeBg!.fillStyle(inPanel ? 0xf7f1e6 : color, 0.96).fillRoundedRect(12, top, W - 24, height, 8);
-    if (inPanel) this.sideNoticeBg!.lineStyle(2, color, 1).strokeRoundedRect(12, top, W - 24, height, 8);
+    this.sideNoticeBg!.fillStyle(0xf7f1e6, 0.96).fillRoundedRect(12, top, W - 24, height, 8);
+    this.sideNoticeBg!.lineStyle(2, color, 1).strokeRoundedRect(12, top, W - 24, height, 8);
     this.sideNotice!.setVisible(true);
     this.sideNoticeTimer?.remove(false);
     this.sideNoticeTimer = this.time.delayedCall(3800, () => this.hideSideNotice());
@@ -1604,7 +1607,6 @@ export class ShopScene extends Phaser.Scene {
   private hideSideNotice(): void {
     this.sideNoticeTimer?.remove(false);
     this.sideNoticeTimer = null;
-    this.sideNoticeInPanel = false;
     this.sideNoticeCustomerId = null;
     this.sideNotice?.setVisible(false);
   }
