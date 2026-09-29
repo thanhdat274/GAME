@@ -99,16 +99,20 @@ export function ensureCityTileset(scene: Phaser.Scene): string {
   return CITY_TILESET_KEY;
 }
 
-export type BuildingKind = 'main' | 'xoi' | 'market' | 'school' | 'industrial' | 'vacant';
+/** Kiểu tòa nhà = `kind` của chi nhánh (hoặc `main`/`vacant`); kiểu lạ dùng bảng màu mặc định. */
+export type BuildingKind = string;
 
 interface Look { roof: number; roofDark: number; wall: number; trim: number; awning: number }
 
-const LOOKS: Record<BuildingKind, Look> = {
+const LOOKS: Record<string, Look> = {
   main: { roof: 0xc0503a, roofDark: 0x9a3e2c, wall: 0xf3e2bf, trim: 0x8b5a2b, awning: 0xd84a3a },
   xoi: { roof: 0xd98a2b, roofDark: 0xb06c1a, wall: 0xfbeccc, trim: 0x8b5a2b, awning: 0xf2b632 },
   market: { roof: 0x3f9a5a, roofDark: 0x2f7a45, wall: 0xf1ead2, trim: 0x6b4220, awning: 0x3aa35b },
   school: { roof: 0x3b82c4, roofDark: 0x2c66a0, wall: 0xf6efe0, trim: 0x54607a, awning: 0x3b82c4 },
   industrial: { roof: 0x7d8590, roofDark: 0x5f666f, wall: 0xd9d6cf, trim: 0x4a4f57, awning: 0xe08a2e },
+  veg: { roof: 0x8cb83a, roofDark: 0x6d9a2a, wall: 0xf6f0d4, trim: 0x5a4a20, awning: 0x8cb83a },
+  drink: { roof: 0x2fa6a0, roofDark: 0x1f8580, wall: 0xf2f7f2, trim: 0x2a5a6a, awning: 0xf28ab0 },
+  home: { roof: 0x8a5aa8, roofDark: 0x6e4488, wall: 0xf3ecf4, trim: 0x4a3060, awning: 0xe8b04a },
   vacant: { roof: 0x000000, roofDark: 0x000000, wall: 0x000000, trim: 0x8b5a2b, awning: 0x000000 },
 };
 
@@ -124,7 +128,7 @@ export function buildingTexture(scene: Phaser.Scene, kind: BuildingKind, wTiles:
   const tex = scene.textures.createCanvas(key, w, h);
   if (!tex) return key;
   const ctx = tex.getContext();
-  const L = LOOKS[kind];
+  const L = LOOKS[kind] ?? LOOKS.main;
   if (kind === 'vacant') {
     ctx.fillStyle = hex(0xa8d68a); ctx.globalAlpha = 0.35; ctx.fillRect(2, 2, w - 4, h - 4); ctx.globalAlpha = 1;
     ctx.fillStyle = hex(L.trim);

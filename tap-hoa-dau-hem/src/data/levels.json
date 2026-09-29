@@ -558,7 +558,8 @@
       "shelves": 3,
       "staffSlots": 12,
       "features": [
-        "truck"
+        "truck",
+        "shop_veg"
       ],
       "label": "Xe tải chuyển hàng · Thêm chỗ nhân viên",
       "traffic": 7.7
@@ -577,7 +578,8 @@
       "shelves": 3,
       "staffSlots": 12,
       "features": [
-        "chain_analytics"
+        "chain_analytics",
+        "shop_drink"
       ],
       "label": "Báo cáo toàn chuỗi",
       "traffic": 7.9
@@ -615,7 +617,8 @@
       "shelves": 3,
       "staffSlots": 14,
       "features": [
-        "story_chain"
+        "story_chain",
+        "shop_home"
       ],
       "label": "Chương Lên phố mở chuỗi · Thêm chỗ nhân viên",
       "traffic": 8.3

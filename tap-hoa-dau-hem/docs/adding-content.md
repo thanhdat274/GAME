@@ -24,6 +24,17 @@ Loại tiệm nào bán mặt hàng này do `categories` trong `shopTypes.json` 
 
 Cần: `fixtures` (có ít nhất một quầy thu ngân), `customers` (id trong `customers.json`), `categories`, `recipes`, `sim` (`profit_average` hoặc `production`), `dineInChance`, `densityCurve` (hoặc `null`). Nếu mở qua chi nhánh, thêm bản ghi vào `branches.json` với `shopType` và `feature` (`feature` phải có trong `features` của một level ở `levels.json`).
 
+Loại tiệm bán theo kệ (`service: "shelves"`, `sim: "profit_average"`) không cần code: id loại tiệm và `kind` của chi nhánh là chuỗi tự do, `validate:data` kiểm tra mọi tham chiếu. Ví dụ đã có: `greengrocer` (tiệm rau củ), `drink_kiosk` (quầy giải khát, dùng lại công thức đồ uống), `household` (gia dụng). Quy trình thêm một loại:
+
+1. Thêm bản ghi vào `shopTypes.json` (nhóm hàng, khách, nội thất, `densityCurve`).
+2. Thêm chi nhánh vào `branches.json` (`shopType`, `feature`, `defaultLayout` nằm trong mặt bằng đầu và chỉ dùng nội thất loại tiệm cho phép).
+3. Thêm `feature` vào `features` của một level trong `levels.json`.
+4. Thêm một lô đất có `storeId` là id chi nhánh vào bản đồ phố (`scripts/make-city-map.ts` rồi `npm run city-map`), và nếu muốn, một dòng màu trong `LOOKS` của `src/ui/cityTiles.ts` (không có thì dùng màu mặc định).
+5. Nếu số cửa hàng vượt `chain.maxStores` trong `balance.json`, tăng giá trị đó.
+6. Thêm test theo mẫu `tests/newShopTypes.test.ts` (mở theo level, bố cục, hàng bán, chạy một ngày).
+
+Loại có cơ chế riêng (quầy gọi món, sản xuất như tiệm xôi) vẫn cần code.
+
 ## Các tham chiếu được kiểm tra
 
 - quests / weeklyQuests: `soldCategory` cần `arg` là nhóm hàng, `soldProduct` cần `arg` là id mặt hàng.

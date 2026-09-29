@@ -477,8 +477,11 @@ export interface StoryChapter {
 export interface DensitySegment { from: number; to: number; mul: number }
 
 /** Loại cửa hàng (shopTypes.json): quyết định hàng, nội thất, khách, giờ cao điểm và mô phỏng khi vắng chủ. */
+/** Id loại cửa hàng (khóa trong shopTypes.json); `validateContent` kiểm tra mọi tham chiếu. */
+export type ShopTypeId = string;
+
 export interface ShopTypeDef {
-  id: 'grocery' | 'xoi';
+  id: ShopTypeId;
   name: string;
   icon: string;
   /** Nhóm hàng được bày bán trên kệ/quầy. */
@@ -511,9 +514,10 @@ export interface ShopTypeDef {
 export interface BranchDef {
   id: string;
   name: string;
-  kind: 'market' | 'school' | 'industrial' | 'xoi';
+  /** Kiểu khu/địa điểm (quyết định ngoại hình tòa nhà trên bản đồ phố). */
+  kind: string;
   /** Loại cửa hàng khi mở (mặc định grocery). */
-  shopType?: 'grocery' | 'xoi';
+  shopType?: ShopTypeId;
   /** Tính năng level cần có để thấy và mở khu này (ngoài unlockLevel). */
   feature?: string;
   icon: string;

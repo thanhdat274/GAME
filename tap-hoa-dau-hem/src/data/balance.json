@@ -405,7 +405,7 @@
     "maxExtraOrders": 2
   },
   "chain": {
-    "maxStores": 6
+    "maxStores": 8
   },
   "stickyRice": {
     "soakMinMinutes": 360,

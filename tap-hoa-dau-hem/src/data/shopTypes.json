@@ -180,5 +180,194 @@
     ],
     "landPlots": false,
     "service": "counter"
+  },
+  {
+    "id": "greengrocer",
+    "name": "Tiệm rau củ",
+    "icon": "🥬",
+    "categories": [
+      "fresh",
+      "dry"
+    ],
+    "ingredients": [],
+    "fixtures": [
+      "shelf",
+      "fridge",
+      "fridge_single",
+      "storage_rack",
+      "shelf_double",
+      "shelf_3",
+      "shelf_4",
+      "counter",
+      "counter2",
+      "generator"
+    ],
+    "customers": [
+      "noi_tro",
+      "ong_cu",
+      "ba_ban_hang",
+      "me_bim",
+      "hang_xom",
+      "van_phong"
+    ],
+    "densityCurve": [
+      {
+        "from": 480,
+        "to": 600,
+        "mul": 2.0
+      },
+      {
+        "from": 600,
+        "to": 900,
+        "mul": 0.8
+      },
+      {
+        "from": 900,
+        "to": 1080,
+        "mul": 1.4
+      },
+      {
+        "from": 1080,
+        "to": 1200,
+        "mul": 0.6
+      }
+    ],
+    "sim": "profit_average",
+    "recipes": [],
+    "supplies": [],
+    "sourcesFrom": [],
+    "dineInChance": 0,
+    "addOns": [],
+    "landPlots": true,
+    "service": "shelves"
+  },
+  {
+    "id": "drink_kiosk",
+    "name": "Quầy giải khát",
+    "icon": "🧋",
+    "categories": [
+      "drink",
+      "frozen",
+      "snack"
+    ],
+    "ingredients": [
+      "tra_tac_base",
+      "ca_phe_bot",
+      "mia",
+      "sua_tuoi",
+      "trai_cay"
+    ],
+    "fixtures": [
+      "shelf",
+      "fridge",
+      "fridge_single",
+      "freezer",
+      "storage_rack",
+      "shelf_double",
+      "counter",
+      "counter2",
+      "drink_counter",
+      "blender",
+      "sugarcane_press",
+      "drink_table_2",
+      "generator"
+    ],
+    "customers": [
+      "hoc_sinh",
+      "sinh_vien",
+      "thanh_nien",
+      "khach_du_lich",
+      "cong_nhan",
+      "shipper"
+    ],
+    "densityCurve": [
+      {
+        "from": 480,
+        "to": 660,
+        "mul": 0.6
+      },
+      {
+        "from": 660,
+        "to": 840,
+        "mul": 1.3
+      },
+      {
+        "from": 840,
+        "to": 1080,
+        "mul": 1.8
+      },
+      {
+        "from": 1080,
+        "to": 1200,
+        "mul": 1.0
+      }
+    ],
+    "sim": "profit_average",
+    "recipes": [
+      "tra_tac",
+      "ca_phe_sua",
+      "nuoc_mia",
+      "sinh_to",
+      "tra_sua"
+    ],
+    "supplies": [],
+    "sourcesFrom": [],
+    "dineInChance": 0.5,
+    "addOns": [],
+    "landPlots": true,
+    "service": "shelves"
+  },
+  {
+    "id": "household",
+    "name": "Cửa hàng gia dụng",
+    "icon": "🧹",
+    "categories": [
+      "household",
+      "dry"
+    ],
+    "ingredients": [],
+    "fixtures": [
+      "shelf",
+      "shelf_double",
+      "shelf_3",
+      "shelf_4",
+      "storage_rack",
+      "counter",
+      "counter2",
+      "generator"
+    ],
+    "customers": [
+      "noi_tro",
+      "cong_nhan",
+      "van_phong",
+      "hang_xom",
+      "ong_cu",
+      "sinh_vien"
+    ],
+    "densityCurve": [
+      {
+        "from": 480,
+        "to": 720,
+        "mul": 0.9
+      },
+      {
+        "from": 720,
+        "to": 960,
+        "mul": 0.6
+      },
+      {
+        "from": 960,
+        "to": 1200,
+        "mul": 1.5
+      }
+    ],
+    "sim": "profit_average",
+    "recipes": [],
+    "supplies": [],
+    "sourcesFrom": [],
+    "dineInChance": 0,
+    "addOns": [],
+    "landPlots": true,
+    "service": "shelves"
   }
 ]

@@ -1,5 +1,5 @@
 import {
-  DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type StaffRole, type StaffStats, type TaxKind,
+  DATA, furniture, product, refPrice, type Category, type LevelDef, type Look, type Product, type ShopTypeId, type StaffRole, type StaffStats, type TaxKind,
 } from './data';
 import type { Review } from './reviews';
 import { activeShopType } from './shopTypes';
@@ -345,12 +345,12 @@ export interface PartyOrder {
 }
 
 /** Loại cửa hàng (id trong shopTypes.json), tách khỏi `kind` là khu vực. */
-export type ShopTypeId = 'grocery' | 'xoi';
+export type { ShopTypeId };
 
 export interface StoreSnapshot {
   id: string;
   name: string;
-  kind: 'main' | 'market' | 'school' | 'industrial' | 'xoi';
+  kind: string;
   shopType: ShopTypeId;
   /** Per-store operational state. Shared money/level remain on GameState. */
   data: Record<string, unknown>;
