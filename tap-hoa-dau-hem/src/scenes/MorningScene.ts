@@ -5,7 +5,9 @@ import { activeShopType } from '../core/shopTypes';
 import { openShop, setManagerMode } from '../core/day';
 import { shiftsWithoutCashier } from '../core/schedule';
 import { letGo, retainStaff } from '../core/staff';
-import { MAX_SHELVES, formatMoney, priceOf, shelfCount, totalQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
+import { MAX_SHELVES, formatMoney, priceOf, shelfCount, storeView, totalQty, unlockedProducts, warehouseQty, warehouseTotals } from '../core/state';
+import { visitStore } from '../core/branches';
+import { card, ScrollArea } from '../ui/page';
 import {
   assignCounterSlot, assignSlot, autoArrange, bulkDiscounted, buyStock, checkCart, costTrend, hasPlaceFor, refillCounterSlot,
   isPerishable, refillSlot, setClearance, slotFreshness, suggestCart, clearSlot, supplierUnlocked, unitCost, warehouseCapacity,
@@ -45,8 +47,8 @@ const TUTORIALS: Record<string, { icon: string; title: string; body: string }> =
   decor: { icon: '🪴', title: 'Trang trí', body: 'Đồ trang trí tăng thu hút, khách tới đông hơn. Mua ở ☰ Tiệm → Trang trí.' },
   freezer: { icon: '❄️', title: 'Tủ đông', body: 'Kem, xúc xích, há cảo... chỉ bày được trong tủ đông (8.000đ điện/ngày).' },
   bargain: { icon: '🙏', title: 'Khách mặc cả', body: 'Bà nội trợ có thể xin bớt 5–15%. Bớt thì khách vui; không bớt thì có thể bỏ về.' },
-  company: { icon: '🏢', title: 'Lên doanh nghiệp', body: 'Có thể thành lập công ty ở ☰ Tiệm → Sổ thuế: mất ngưỡng miễn thuế, nộp VAT khấu trừ + thuế TNDN trên lãi; đổi lại được chiết khấu 5% ở mối có hóa đơn, khách công ty ghé nhiều hơn, đơn tiệc trả cao hơn.' },
-  tax: { icon: '🧾', title: 'Đăng ký hộ kinh doanh', body: 'Tiệm đã lớn, phải đóng thuế như ngoài đời! Doanh thu mỗi năm dưới ngưỡng thì miễn thuế; vượt ngưỡng thì nộp VAT + thuế TNCN theo % doanh thu, chốt mỗi tháng. Xem ở ☰ Tiệm → Sổ thuế. Có thêm mối Chợ đầu mối: rẻ nhưng không có hóa đơn.' },
+  company: { icon: '🏢', title: 'Mở lựa chọn công ty', body: 'Đã mở lựa chọn chuyển sang công ty tại ☰ Tiệm → Sổ thuế. Công ty áp dụng VAT, TNDN trên thu nhập chịu thuế; còn phải kê khai lương, bảo hiểm, hóa đơn và sổ sách. Đây là nhánh phát triển trong game, không phải cấp pháp lý bắt buộc.' },
+  tax: { icon: '🧾', title: 'Đăng ký hộ kinh doanh', body: 'Tiệm mở tính năng sổ thuế và đăng ký hộ kinh doanh. Năm 2026, doanh thu năm đến 1 tỷ đồng không chịu VAT và không phải nộp TNCN; phần trên ngưỡng chịu thuế theo quy định. Xem chi tiết ở ☰ Tiệm → Sổ thuế.' },
   staff: { icon: '👥', title: 'Thuê nhân viên', body: 'Tiệm đông rồi! Vào ☰ Tiệm → Nhân sự để thuê thu ngân. Bé Lan đang chờ ở bảng tuyển dụng.' },
   warehouse_big: { icon: '🏬', title: 'Kho tổng', body: 'Nâng kho lên 120 ô ở ☰ Tiệm → Kho hàng.' },
   refill_staff: { icon: '🧺', title: 'Nhân viên bổ sung kệ', body: 'Thêm chỗ thứ 2. Nhân viên bổ sung kệ tự nạp ô vơi dưới 40%.' },
@@ -173,30 +175,66 @@ export class MorningScene extends Phaser.Scene {
   private counterShop = false;
   private xoiPanel!: Phaser.GameObjects.Container;
   private pauseLayer: Phaser.GameObjects.Container | null = null;
+  private orientationReflow: { tab: Tab; cart: Cart; filter: ProductFilter; supplierId: string; selected: string | null; paused: boolean } | null = null;
   private supplierId = 'co_tu';
   private supplierBtns: Record<string, Button> = {};
   private supplierNote: Phaser.GameObjects.Text | null = null;
   private listTop = LIST_TOP;
   private menuBtn!: Button;
 
+  private get landscape(): boolean {
+    return W > H;
+  }
+  private get sidePad(): number {
+    return this.landscape ? (W >= 700 ? 36 : 8) : 8;
+  }
+  private get colGap(): number {
+    return this.landscape ? (W >= 700 ? 12 : 8) : 8;
+  }
+  private get colW(): number {
+    if (!this.landscape) return W;
+    const availableW = W - 2 * this.sidePad;
+    return Math.floor((availableW - this.colGap) / 2);
+  }
+  private get shelfLeft(): number {
+    return this.landscape ? this.sidePad : 0;
+  }
   private get shelfRows(): number {
-    return SHELF_VIEW_ROWS;
+    return this.landscape ? 3 : SHELF_VIEW_ROWS;
   }
   private get shelfTop(): number {
-    return 104;
+    return this.landscape ? 112 : 104;
+  }
+  private get whLeft(): number {
+    return this.landscape ? this.sidePad + this.colW + this.colGap : 0;
+  }
+  private get whWidth(): number {
+    return this.colW;
   }
   private get whTop(): number {
-    return this.shelfTop + this.shelfRows * ROW_PITCH + 14;
+    return this.landscape ? 82 : this.shelfTop + this.shelfRows * ROW_PITCH + 14;
+  }
+  private get chipViewBottom(): number {
+    return this.landscape ? 312 : CHIP_VIEW_BOTTOM;
+  }
+  private get whHeight(): number {
+    return this.landscape ? 232 : H - this.whTop;
   }
   private get chipViewTop(): number {
-    return this.whTop + 50;
+    return this.landscape ? 134 : this.whTop + 50;
   }
   /** Dải ô sau quầy nằm dưới dòng hướng dẫn (whTop + 34…48), không đè lên nó. */
   private get counterSlotY(): number {
-    return this.whTop + 78;
+    return this.landscape ? 136 : this.whTop + 78;
   }
   private get counterChipY(): number {
-    return this.whTop + 138;
+    return this.landscape ? 190 : this.whTop + 138;
+  }
+  private get buyPaneW(): number {
+    return this.landscape ? Math.floor(W * 0.58) - this.sidePad : W;
+  }
+  private get listBottom(): number {
+    return this.landscape ? H - 14 : LIST_BOTTOM;
   }
 
   constructor() {
@@ -204,6 +242,8 @@ export class MorningScene extends Phaser.Scene {
   }
 
   create(data: { gift?: number }): void {
+    const reflow = this.orientationReflow;
+    this.orientationReflow = null;
     setPlayClockRunning(true);
     scheduleEvents(G.state);
     setupCamera(this);
@@ -215,34 +255,62 @@ export class MorningScene extends Phaser.Scene {
     };
     window.addEventListener('thdh-live-updated', onLiveUpdated);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.removeEventListener('thdh-live-updated', onLiveUpdated));
-    this.cart = {};
-    this.categoryFilter = 'all';
+    this.cart = reflow?.cart ?? {};
+    this.categoryFilter = reflow?.filter ?? 'all';
     this.filterRows = [];
     this.visibleFilterRows = [];
     this.visibleWindowKey = '';
     this.categoryBtns = [];
-    this.selected = null;
+    this.selected = reflow?.selected ?? null;
     this.pauseLayer = null;
     const g = this.add.graphics();
     g.fillStyle(C.wall, 1).fillRect(0, HUD_H, W, H - HUD_H);
+    if (this.landscape) {
+      g.fillStyle(0x1e130c, 0.95).fillRect(0, HUD_H, W, 38);
+      g.fillStyle(0x452d1c, 1).fillRect(0, HUD_H + 37, W, 1);
+    }
     this.hud = new Hud(this, G.state, { subtitle: 'Buổi sáng', onPause: () => this.pause() });
 
     const phase2 = G.state.level >= 5;
     this.counterShop = activeShopType(G.state).def.service === 'counter';
+    const tabY = this.landscape ? 59 : 68;
+    const tabH = this.landscape ? 28 : 34;
+    const buyX = this.landscape ? this.shelfLeft + 62 : (phase2 ? 68 : 90);
+    const arrangeX = this.landscape ? this.shelfLeft + 192 : (phase2 ? 192 : 270);
+    const menuX = this.landscape ? this.whLeft + this.colW - 46 : 305;
     this.tabBtns = {
-      buy: new Button(this, phase2 ? 68 : 90, 68, { w: phase2 ? 116 : 156, h: 34, radius: 5, label: '🛒 Nhập hàng', size: 13.5, onTap: () => this.setTab('buy') }),
-      arrange: new Button(this, phase2 ? 192 : 270, 68, { w: phase2 ? 116 : 156, h: 34, radius: 5, label: this.counterShop ? '🍙 Quầy xôi' : '🧺 Bày kệ', size: 13.5, onTap: () => this.setTab('arrange') }),
+      buy: new Button(this, buyX, tabY, { w: this.landscape ? 120 : (phase2 ? 116 : 156), h: tabH, radius: 5, label: '🛒 Nhập hàng', size: this.landscape ? 12 : 13.5, onTap: () => this.setTab('buy') }),
+      arrange: new Button(this, arrangeX, tabY, { w: this.landscape ? 120 : (phase2 ? 116 : 156), h: tabH, radius: 5, label: this.counterShop ? '🍙 Quầy xôi' : '🧺 Bày kệ', size: this.landscape ? 12 : 13.5, onTap: () => this.setTab('arrange') }),
     };
-    this.menuBtn = new Button(this, 305, 68, { w: 90, h: 34, radius: 5, label: '☰ Tiệm', size: 13.5, color: C.blue, onTap: () => this.openShopMenu() });
+    const curStore = G.state.stores.find((st) => st.id === G.state.activeStoreId);
+    const storeShort = curStore && G.state.stores.length > 1 ? curStore.name.replace('Chi nhánh ', '').replace('Cửa hàng ', '') : 'Tiệm';
+    this.menuBtn = new Button(this, menuX, tabY, { w: this.landscape ? 92 : 90, h: tabH, radius: 5, label: `☰ ${storeShort}`, size: this.landscape ? 12 : 12.5, color: C.blue, onTap: () => this.openShopMenu() });
     this.menuBtn.setVisible(phase2);
 
     this.buildBuy();
     this.buildArrange();
     // Có hàng trong kho mà kệ còn trống thì mở thẳng tab bày kệ.
     const hasStock = G.state.warehouse.length > 0;
-    this.setTab(hasStock ? 'arrange' : 'buy');
+    this.setTab(reflow?.tab ?? (hasStock ? 'arrange' : 'buy'));
+    if (reflow) {
+      this.supplierId = reflow.supplierId;
+      this.setProductFilter(reflow.filter);
+      this.selected = reflow.selected;
+      this.refresh();
+      if (reflow.paused) this.time.delayedCall(0, () => this.pause());
+    } else this.time.delayedCall(250, () => this.showMorningPopups(data?.gift ?? 0));
+  }
 
-    this.time.delayedCall(250, () => this.showMorningPopups(data?.gift ?? 0));
+  /** Redraw the morning screen after a virtual orientation change, keeping the cart. */
+  reflowForOrientation(): void {
+    this.orientationReflow = {
+      tab: this.tab, cart: { ...this.cart }, filter: this.categoryFilter,
+      supplierId: this.supplierId, selected: this.selected, paused: !!this.pauseLayer,
+    };
+    this.pauseLayer?.destroy();
+    this.pauseLayer = null;
+    this.game.scene.stop('Morning');
+    this.game.scene.start('Morning');
   }
 
   /** Hướng dẫn tính năng mới mở (mỗi tính năng 1 lần) kèm mũi tên chỉ nút ☰ Tiệm. */
@@ -373,25 +441,59 @@ export class MorningScene extends Phaser.Scene {
     if (hasFeature(s.level, 'branches') || hasFeature(s.level, 'shop_xoi')) items.push({ label: '🗺️ Bản đồ thành phố', color: C.blue, onTap: go('City') });
     items.push({ label: '📖 Hành trình', color: C.blue, onTap: go('Story') });
     if (hasFeature(s.level, 'prestige')) items.push({ label: '🏆 Danh hiệu', color: C.yellow, onTap: go('Prestige') });
+    if (s.stores.length > 1) {
+      items.push({ label: `🏪 Đổi tiệm (${s.stores.length})`, color: C.green, onTap: () => { close(); this.openStoreSwitcher(); } });
+    }
     const L = this.add.container(0, 0).setDepth(2000);
     const close = () => L.destroy();
     L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55).setInteractive().on('pointerup', close));
-    const rows = Math.ceil(items.length / 2);
+    const landscape = W > H;
+    const cols = landscape ? 4 : 2;
+    const rows = Math.ceil(items.length / cols);
     const manager = hasFeature(s.level, 'manager');
-    const h = 96 + rows * 48 + (manager ? 58 : 0) + 50;
-    const top = H / 2 - h / 2;
-    L.add(this.add.rectangle(W / 2, top + h / 2, W - 40, h, 0xffffff, 0.001).setInteractive());
-    L.add(panel(this, 20, top, W - 40, h));
-    L.add(txt(this, W / 2, top + 22, '☰ Quản lý tiệm', { size: 18, bold: true, origin: [0.5, 0.5] }));
+    const rowPitch = landscape ? 36 : rows > 8 ? 42 : 48;
+    const panelW = landscape ? Math.min(680, W - 20) : W - 40;
+    const panelX = Math.round((W - panelW) / 2);
+    const panelH = landscape ? H - 16 : 96 + rows * rowPitch + (manager ? 58 : 0) + 50;
+    const top = landscape ? 8 : H / 2 - panelH / 2;
+    L.add(this.add.rectangle(W / 2, top + panelH / 2, panelW, panelH, 0xffffff, 0.001).setInteractive());
+    L.add(panel(this, panelX, top, panelW, panelH));
+    const curStore = s.stores.find((store) => store.id === s.activeStoreId);
+    L.add(txt(this, W / 2, top + (landscape ? 16 : 22), curStore ? `☰ ${curStore.name}` : '☰ Quản lý tiệm', { size: landscape ? 14 : 17, bold: true, origin: [0.5, 0.5] }));
+    L.add(new Button(this, panelX + panelW - 24, top + (landscape ? 16 : 22), { w: 32, h: 26, label: '✕', size: 13, color: C.grey, onTap: close }));
     const next = DATA.levels.levels.find((l) => l.level === s.level + 1);
-    L.add(txt(this, W / 2, top + 46, next ? `Level ${next.level}: ${next.label}` : 'Đã mở mọi tính năng giai đoạn 3.', { size: 11, color: HEX.muted, origin: [0.5, 0.5], align: 'center', wrap: W - 70 }));
+    L.add(txt(this, W / 2, top + (landscape ? 33 : 46), next ? `Level ${next.level}: ${next.label}` : 'Đã mở mọi tính năng giai đoạn 3.', { size: landscape ? 9.5 : 11, color: HEX.muted, origin: [0.5, 0.5], align: 'center', wrap: panelW - 60 }));
+
+    let gridY = top + (landscape ? 48 : 86);
+    if (manager && landscape) {
+      const label = () => (s.manager.enabled ? '🧑‍💼 Để nhân viên lo: BẬT' : '🧑‍💼 Để nhân viên lo: tắt');
+      const btn = new Button(this, W / 2, gridY + 12, {
+        w: Math.min(320, panelW - 40), h: 28, label: label(), size: 11, color: s.manager.enabled ? C.green : C.grey,
+        onTap: () => {
+          setManagerMode(s, !s.manager.enabled);
+          persist();
+          btn.setText(label()).setColor(s.manager.enabled ? C.green : C.grey);
+          const empty = shiftsWithoutCashier(s, s.day);
+          if (s.manager.enabled && empty.length) toast(this, `⚠️ ${empty.map((sh) => DATA.balance.staff.shifts[sh].name).join(', ')} hôm nay không có thu ngân — bạn phải tự đứng quầy.`, H * 0.25, C.red);
+        },
+      });
+      L.add(btn);
+      gridY += 32;
+    }
+
+    const itemGap = landscape ? 6 : 8;
+    const itemW = landscape ? Math.floor((panelW - 24 - (cols - 1) * itemGap) / cols) : 144;
+    const itemH = landscape ? 32 : 40;
     items.forEach((it, i) => {
-      const x = W / 2 + (i % 2 === 0 ? -76 : 76);
-      const y = top + 86 + Math.floor(i / 2) * 48;
-      L.add(new Button(this, x, y, { w: 144, h: 40, label: it.label, size: 13, color: it.color, onTap: () => { close(); it.onTap(); } }));
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = landscape ? panelX + 12 + itemW / 2 + col * (itemW + itemGap) : W / 2 + (col === 0 ? -76 : 76);
+      const y = gridY + (landscape ? itemH / 2 : 0) + row * rowPitch;
+      L.add(new Button(this, x, y, { w: itemW, h: itemH, label: it.label, size: landscape ? 11 : 13, color: it.color, onTap: () => { close(); it.onTap(); } }));
     });
-    let y = top + 86 + rows * 48;
-    if (manager) {
+
+    let y = gridY + rows * rowPitch;
+    if (manager && !landscape) {
       const label = () => (s.manager.enabled ? '🧑‍💼 Để nhân viên lo: BẬT' : '🧑‍💼 Để nhân viên lo: tắt');
       const btn = new Button(this, W / 2, y + 4, {
         w: W - 80, h: 42, label: label(), size: 14, color: s.manager.enabled ? C.green : C.grey,
@@ -406,7 +508,65 @@ export class MorningScene extends Phaser.Scene {
       L.add(btn);
       y += 58;
     }
-    L.add(new Button(this, W / 2, y + 4, { w: 140, h: 38, label: 'Đóng', size: 14, color: C.grey, onTap: close }));
+    if (!landscape) {
+      L.add(new Button(this, W / 2, y + 4, { w: 140, h: 38, label: 'Đóng', size: 14, color: C.grey, onTap: close }));
+    }
+  }
+
+  /** Bảng đổi chi nhánh trực tiếp ngay trong Buổi sáng (hỗ trợ chuỗi lên tới 11 tiệm). */
+  private openStoreSwitcher(): void {
+    const s = G.state;
+    const landscape = W > H;
+    const overlay = this.add.container(0, 0).setDepth(2000);
+    const panelW = landscape ? Math.min(420, W - 40) : W - 28;
+    const panelH = landscape ? H - 20 : Math.min(480, H - 70);
+    const panelX = Math.round((W - panelW) / 2);
+    const panelTop = Math.round((H - panelH) / 2);
+
+    overlay.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive().on('pointerup', () => overlay.destroy()));
+    overlay.add(panel(this, panelX, panelTop, panelW, panelH));
+    overlay.add(txt(this, panelX + 16, panelTop + 14, `🏪 Chuỗi cửa hàng (${s.stores.length}/11)`, { size: 14, bold: true }));
+    overlay.add(txt(this, panelX + 16, panelTop + 32, 'Chọn tiệm để ghé thăm và quản lý sáng nay.', { size: 9.5, color: HEX.muted }));
+    overlay.add(new Button(this, panelX + panelW - 20, panelTop + 18, {
+      w: 28, h: 26, label: '✕', size: 12, color: C.grey, onTap: () => overlay.destroy(),
+    }));
+
+    const listTop = panelTop + 48;
+    const listBottom = panelTop + panelH - 8;
+    const scroll = new ScrollArea(this, listTop, listBottom, undefined, { x: panelX + 8, width: panelW - 16 });
+    overlay.add(scroll.content);
+
+    let y = 4;
+    const rowH = 50;
+    s.stores.forEach((store) => {
+      const isCurrent = store.id === s.activeStoreId;
+      const data = storeView(s, store.id);
+      const stockCount = data.warehouse.filter((l) => l.qty > 0).length;
+      const cx = panelX + 10;
+      const cardW = panelW - 20;
+
+      scroll.add(card(this, cx, y, cardW, rowH - 4, isCurrent ? 0xfff0d0 : C.panel));
+      scroll.add(txt(this, cx + 12, y + 7, `${isCurrent ? '📍 ' : ''}${store.name}`, { size: 12.5, bold: true }));
+      scroll.add(txt(this, cx + 12, y + 26, isCurrent ? 'Đang ở tiệm này' : `${data.staff.length} nhân viên · ${stockCount} món kho`, {
+        size: 9.5, color: isCurrent ? HEX.green : HEX.muted,
+      }));
+
+      scroll.add(new Button(this, cx + cardW - 46, y + (rowH - 4) / 2, {
+        w: 78, h: 28, label: isCurrent ? 'Đang ở' : 'Ghé tiệm', size: 10.5,
+        color: isCurrent ? C.grey : C.blue,
+        onTap: () => {
+          overlay.destroy();
+          if (!isCurrent) {
+            visitStore(s, store.id);
+            persist();
+            this.scene.restart();
+          }
+        },
+      }).setEnabled(!isCurrent));
+
+      y += rowH;
+    });
+    scroll.setHeight(y + 8);
   }
 
   private showLoginPrompt(): void {
@@ -439,7 +599,15 @@ export class MorningScene extends Phaser.Scene {
 
   private buildBuy(): void {
     this.buyLayer = this.add.container(0, 0);
-    const supplierLabel = txt(this, 14, 94, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay', { size: 12, color: HEX.muted });
+    const landscape = this.landscape;
+    const paneW = this.buyPaneW;
+    if (landscape) {
+      const leftBg = this.add.graphics();
+      leftBg.fillStyle(0x23160e, 0.95).fillRoundedRect(this.shelfLeft, 82, paneW, H - 96, 10);
+      leftBg.lineStyle(1.5, 0x6e4526, 0.9).strokeRoundedRect(this.shelfLeft, 82, paneW, H - 96, 10);
+      this.buyLayer.add(leftBg);
+    }
+    const supplierLabel = txt(this, this.shelfLeft + 14, landscape ? 96 : 94, '🧑‍🌾 Mối sỉ Cô Tư · giao ngay', { size: 12, color: HEX.muted });
     const hasInternalSuppliers = internalSuppliers(G.state).length > 0;
     this.supplierBtns = {};
     this.supplierNote = null;
@@ -447,14 +615,14 @@ export class MorningScene extends Phaser.Scene {
     if (hasWholesaleTabs) {
       supplierLabel.setVisible(false);
       const unlocked = DATA.suppliers.filter((sp) => supplierUnlocked(G.state, sp.id));
-      const row = rowLayout(unlocked.length, { gap: 8 });
+      const row = rowLayout(unlocked.length, { left: landscape ? this.shelfLeft + 12 : 8, right: landscape ? this.shelfLeft + paneW - 12 : undefined, gap: 6, width: paneW });
       unlocked.forEach((sp, i) => {
-        const b = new Button(this, row.x(i), 106, { w: row.w, h: 28, size: 11, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => { this.supplierId = sp.id; this.refresh(); } });
+        const b = new Button(this, row.x(i), landscape ? 98 : 106, { w: row.w, h: landscape ? 24 : 28, size: landscape ? 10 : 11, radius: 5, label: `${sp.icon} ${sp.name}`, color: C.wood, onTap: () => { this.supplierId = sp.id; this.refresh(); } });
         this.supplierBtns[sp.id] = b;
         this.buyLayer.add(b);
       });
       // Dòng ghi chú mối đang chọn nằm dưới hàng nút mối sỉ (có giới hạn độ rộng để tự xuống dòng nếu dài).
-      this.supplierNote = txt(this, 14, 126, '', { size: 10, color: HEX.muted, wrap: W - 28 });
+      this.supplierNote = txt(this, this.shelfLeft + 14, landscape ? 116 : 126, '', { size: landscape ? 9.5 : 10, color: HEX.muted, wrap: paneW - 28 });
       this.buyLayer.add(this.supplierNote);
     }
     const filters: { id: ProductFilter; label: string }[] = [
@@ -463,15 +631,15 @@ export class MorningScene extends Phaser.Scene {
       { id: 'frozen', label: 'Đông lạnh' }, { id: 'counter', label: 'Sau quầy' }, { id: 'food', label: 'Đồ ăn' },
       { id: 'beverage', label: 'Pha chế' },
     ];
-    const gridTop = hasWholesaleTabs ? 164 : 132;
+    const gridTop = hasWholesaleTabs ? (landscape ? 128 : 164) : (landscape ? 110 : 132);
     const cols = 5;
     const gap = 3;
-    const buttonW = (W - 20 - gap * (cols - 1)) / cols;
+    const buttonW = (paneW - 20 - gap * (cols - 1)) / cols;
     filters.forEach(({ id, label }, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
-      const button = new Button(this, 10 + buttonW / 2 + col * (buttonW + gap), gridTop + row * 27, {
-        w: buttonW, h: 24, radius: 4, label, size: 10,
+      const button = new Button(this, (landscape ? this.shelfLeft + 10 : 10) + buttonW / 2 + col * (buttonW + gap), gridTop + row * (landscape ? 22 : 27), {
+        w: buttonW, h: landscape ? 20 : 24, radius: 4, label, size: landscape ? 9 : 10,
         color: id === this.categoryFilter ? C.red : C.wood,
         onTap: () => this.setProductFilter(id),
       });
@@ -479,14 +647,14 @@ export class MorningScene extends Phaser.Scene {
       this.buyLayer.add(button);
     });
     if (hasInternalSuppliers) {
-      this.buyLayer.add(new Button(this, W / 2, gridTop + 66, { w: 160, h: 26, radius: 5, label: '🏪 Hàng nhà mình', size: 11, color: C.blue, onTap: () => this.scene.start('Internal', { back: 'Morning' }) }));
+      this.buyLayer.add(new Button(this, this.shelfLeft + paneW / 2, gridTop + (landscape ? 48 : 66), { w: 160, h: landscape ? 22 : 26, radius: 5, label: '🏪 Hàng nhà mình', size: 11, color: C.blue, onTap: () => this.scene.start('Internal', { back: 'Morning' }) }));
     }
     // Supplier note, category filters, and internal supply each get their own row.
-    this.listTop = gridTop + 2 * 27 + (hasInternalSuppliers ? 48 : 14);
-    this.list = this.add.container(0, this.listTop + 16);
-    const maskG = this.make.graphics({}, false).fillRect(0, this.listTop + 14, W, LIST_BOTTOM - this.listTop - 14);
+    this.listTop = gridTop + 2 * (landscape ? 22 : 27) + (hasInternalSuppliers ? (landscape ? 28 : 48) : 6);
+    this.list = this.add.container(this.shelfLeft, this.listTop + 16);
+    const maskG = this.make.graphics({}, false).fillRect(landscape ? this.shelfLeft : 0, this.listTop + 14, paneW, this.listBottom - this.listTop - 14);
     this.list.setMask(maskG.createGeometryMask());
-    this.filterEmptyText = txt(this, W / 2, 30, 'Không có mặt hàng trong nhóm này.', { size: 12, color: HEX.muted, origin: [0.5, 0.5] }).setVisible(false);
+    this.filterEmptyText = txt(this, paneW / 2, 30, 'Không có mặt hàng trong nhóm này.', { size: 12, color: HEX.muted, origin: [0.5, 0.5] }).setVisible(false);
     this.list.add(this.filterEmptyText);
     this.buyLayer.add([supplierLabel, this.list]);
 
@@ -507,30 +675,54 @@ export class MorningScene extends Phaser.Scene {
     this.listH = y + 10;
     this.enableListScroll();
 
-    const foot = this.add.graphics();
-    foot.fillStyle(C.hud, 1).fillRoundedRect(0, FOOT_Y, W, FOOT_H, { tl: 8, tr: 8, bl: 0, br: 0 });
-    foot.fillStyle(C.woodLight, 1).fillRect(0, FOOT_Y, W, 4);
-    foot.fillStyle(0x1a120b, 0.4).fillRect(0, FOOT_Y + 4, W, 2);
-    foot.lineStyle(1.5, 0x24150b, 1).strokeRoundedRect(0, FOOT_Y, W, FOOT_H, { tl: 8, tr: 8, bl: 0, br: 0 });
+    if (landscape) {
+      const rightX = this.shelfLeft + paneW + 12;
+      const rightW = W - rightX - this.sidePad;
+      const rightPanel = this.add.graphics();
+      rightPanel.fillStyle(0x23160e, 0.95).fillRoundedRect(rightX, 82, rightW, H - 96, 10);
+      rightPanel.lineStyle(1.5, 0x6e4526, 0.9).strokeRoundedRect(rightX, 82, rightW, H - 96, 10);
+      rightPanel.fillStyle(C.woodDark, 1).fillRoundedRect(rightX, 82, rightW, 28, { tl: 10, tr: 10, bl: 0, br: 0 });
 
-    this.cartText = txt(this, 12, FOOT_Y + 9, '', { size: 12.5, bold: true, color: HEX.cream });
-    this.cartWarn = txt(this, 12, FOOT_Y + 28, '', { size: 10.5, color: '#ffb4a8', wrap: W - 24 });
-    const suggest = new Button(this, 49, H - 28, {
-      w: 78,
-      h: 38,
-      radius: 5,
-      label: '🪄 Gợi ý',
-      color: C.blue,
-      size: 12.5,
-      onTap: () => {
-        this.cart = suggestCart(G.state, this.supplierId);
-        if (Object.keys(this.cart).length === 0) toast(this, 'Hàng còn đủ, hoặc hết tiền/chỗ kho rồi!', H * 0.5);
-        this.refresh();
-      },
-    });
-    const clear = new Button(this, 126, H - 28, { w: 64, h: 38, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11.5, onTap: () => this.clearCart() });
-    this.buyBtn = new Button(this, 256, H - 28, { w: 172, h: 40, radius: 5, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => this.buy() });
-    this.buyLayer.add([foot, this.cartText, this.cartWarn, suggest, clear, this.buyBtn]);
+      const cartHead = txt(this, rightX + 12, 96, '🛒 GIỎ HÀNG', { size: 11.5, bold: true, color: HEX.white, origin: [0, 0.5] });
+      this.cartText = txt(this, rightX + 12, 118, '', { size: 12, bold: true, color: HEX.cream, wrap: rightW - 24 });
+      this.cartWarn = txt(this, rightX + 12, 172, '', { size: 10, color: '#ffb4a8', wrap: rightW - 24 });
+
+      const suggest = new Button(this, rightX + rightW / 2, 216, {
+        w: rightW - 24, h: 32, radius: 5, label: '🪄 Gợi ý giỏ', color: C.blue, size: 12,
+        onTap: () => {
+          this.cart = suggestCart(G.state, this.supplierId);
+          if (Object.keys(this.cart).length === 0) toast(this, 'Hàng còn đủ, hoặc hết tiền/chỗ kho rồi!', H * 0.5);
+          this.refresh();
+        },
+      });
+      const clearW = 68;
+      const buyW = rightW - 24 - clearW - 6;
+      const clearX = rightX + 12 + clearW / 2;
+      const buyX = rightX + 12 + clearW + 6 + buyW / 2;
+      const clear = new Button(this, clearX, H - 32, { w: clearW, h: 34, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11, onTap: () => this.clearCart() });
+      this.buyBtn = new Button(this, buyX, H - 32, { w: buyW, h: 34, radius: 5, label: 'Nhập hàng', color: C.green, size: 13.5, onTap: () => this.buy() });
+      this.buyLayer.add([rightPanel, cartHead, this.cartText, this.cartWarn, suggest, clear, this.buyBtn]);
+    } else {
+      const foot = this.add.graphics();
+      foot.fillStyle(C.hud, 1).fillRoundedRect(0, FOOT_Y, W, FOOT_H, { tl: 8, tr: 8, bl: 0, br: 0 });
+      foot.fillStyle(C.woodLight, 1).fillRect(0, FOOT_Y, W, 4);
+      foot.fillStyle(0x1a120b, 0.4).fillRect(0, FOOT_Y + 4, W, 2);
+      foot.lineStyle(1.5, 0x24150b, 1).strokeRoundedRect(0, FOOT_Y, W, FOOT_H, { tl: 8, tr: 8, bl: 0, br: 0 });
+
+      this.cartText = txt(this, 12, FOOT_Y + 9, '', { size: 12.5, bold: true, color: HEX.cream });
+      this.cartWarn = txt(this, 12, FOOT_Y + 28, '', { size: 10.5, color: '#ffb4a8', wrap: W - 24 });
+      const suggest = new Button(this, 49, H - 28, {
+        w: 78, h: 38, radius: 5, label: '🪄 Gợi ý', color: C.blue, size: 12.5,
+        onTap: () => {
+          this.cart = suggestCart(G.state, this.supplierId);
+          if (Object.keys(this.cart).length === 0) toast(this, 'Hàng còn đủ, hoặc hết tiền/chỗ kho rồi!', H * 0.5);
+          this.refresh();
+        },
+      });
+      const clear = new Button(this, 126, H - 28, { w: 64, h: 38, radius: 5, label: 'Xóa giỏ', color: C.grey, size: 11.5, onTap: () => this.clearCart() });
+      this.buyBtn = new Button(this, 256, H - 28, { w: 172, h: 40, radius: 5, label: 'Nhập hàng', color: C.green, size: 15, onTap: () => this.buy() });
+      this.buyLayer.add([foot, this.cartText, this.cartWarn, suggest, clear, this.buyBtn]);
+    }
   }
 
   private enableListScroll(): void {
@@ -541,15 +733,15 @@ export class MorningScene extends Phaser.Scene {
     const setList = (offset: number) => {
       this.list.y = snap(top - offset);
       this.renderVisibleProductRows(false, offset);
-      culler.cull(this.list, viewTop, LIST_BOTTOM);
+      culler.cull(this.list, viewTop, this.listBottom);
     };
     this.resetListCuller = () => { culler.reset(); this.visibleWindowKey = ''; setList(0); };
     this.listScroll = new KineticScroll(this, {
-      inView: (y) => y > this.listTop && y < LIST_BOTTOM,
+      inView: (y) => y > this.listTop && y < this.listBottom,
       enabled: () => this.tab === 'buy',
       get: () => top - this.list.y,
       set: setList,
-      max: () => Math.max(0, this.listH - (LIST_BOTTOM - top)),
+      max: () => Math.max(0, this.listH - (this.listBottom - top)),
     });
     setList(0);
   }
@@ -559,7 +751,7 @@ export class MorningScene extends Phaser.Scene {
    * Món vẫn còn trong khung giữ nguyên hàng của nó; chỉ món mới trượt vào mới đổi chữ / icon.
    */
   private renderVisibleProductRows(force: boolean, offset = this.listTop + 16 - this.list.y): void {
-    const viewport = LIST_BOTTOM - (this.listTop + 16);
+    const viewport = this.listBottom - (this.listTop + 16);
     const startY = Math.max(0, offset - ROW_H * 2);
     const endY = offset + viewport + ROW_H * 2;
     let start = 0;
@@ -601,7 +793,7 @@ export class MorningScene extends Phaser.Scene {
     const iconHolder = this.add.container(0, 0);
     const name = txt(this, 58, 0, '', { size: 13.5, bold: true });
     const price = txt(this, 58, 0, '', { size: 10.5, color: HEX.muted });
-    const info = txt(this, 58, 0, '', { size: 10, color: HEX.green, wrap: W - 160 });
+    const info = txt(this, 58, 0, '', { size: 10, color: HEX.green, wrap: this.buyPaneW - 160 });
     const lack = txt(this, 58, 0, 'thiếu 0', { size: 9.5, bold: true, color: HEX.white });
     lack.setBackgroundColor(HEX.red).setPadding(4, 1, 4, 1).setVisible(false);
 
@@ -637,16 +829,17 @@ export class MorningScene extends Phaser.Scene {
     const centerY = rowH / 2 - 1;
     row.model = model;
     this.placeRow(row, model);
-    row.root.setSize(W, rowH);
+    row.root.setSize(this.buyPaneW, rowH);
 
     const bgKey = `${rowH}:${locked}`;
     if (row.bgKey !== bgKey) {
       row.bgKey = bgKey;
       row.bg.clear();
-      row.bg.fillStyle(0x1a120b, 0.15).fillRoundedRect(8, 3.5 - centerY, W - 16, rowH - 6, 6);
-      row.bg.fillStyle(locked ? 0xeadbc3 : C.panel, 1).fillRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
-      row.bg.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(9, 3 - centerY, W - 18, rowH - 8, 5);
-      row.bg.lineStyle(1.5, C.panelEdge, 0.95).strokeRoundedRect(8, 2 - centerY, W - 16, rowH - 6, 6);
+      const rowW = this.buyPaneW;
+      row.bg.fillStyle(0x1a120b, 0.15).fillRoundedRect(8, 3.5 - centerY, rowW - 16, rowH - 6, 6);
+      row.bg.fillStyle(locked ? 0xeadbc3 : C.panel, 1).fillRoundedRect(8, 2 - centerY, rowW - 16, rowH - 6, 6);
+      row.bg.lineStyle(1, 0xffffff, 0.25).strokeRoundedRect(9, 3 - centerY, rowW - 18, rowH - 8, 5);
+      row.bg.lineStyle(1.5, C.panelEdge, 0.95).strokeRoundedRect(8, 2 - centerY, rowW - 16, rowH - 6, 6);
       row.name.setY(10 - centerY);
       row.price.setY(29 - centerY);
       row.info.setY(47 - centerY);
@@ -777,6 +970,25 @@ export class MorningScene extends Phaser.Scene {
 
   private buildArrange(): void {
     this.arrangeLayer = this.add.container(0, 0);
+    const landscape = W > H;
+    const g = this.add.graphics();
+    let shelfTitle: Phaser.GameObjects.Text | null = null;
+    if (landscape) {
+      // Khung Kệ trưng bày (Bên trái)
+      g.fillStyle(0x23160e, 0.95).fillRoundedRect(this.shelfLeft, 82, this.colW, 232, 10);
+      g.lineStyle(1.5, 0x6e4526, 0.9).strokeRoundedRect(this.shelfLeft, 82, this.colW, 232, 10);
+      g.fillStyle(C.woodDark, 1).fillRoundedRect(this.shelfLeft, 82, this.colW, 28, { tl: 10, tr: 10, bl: 0, br: 0 });
+      shelfTitle = txt(this, this.shelfLeft + 12, 96, '🏪 KỆ TRƯNG BÀY', { size: 11.5, bold: true, color: HEX.white, origin: [0, 0.5] });
+
+      // Khung Kho hàng & Sau quầy (Bên phải)
+      g.fillStyle(0x23160e, 0.95).fillRoundedRect(this.whLeft, this.whTop, this.whWidth, this.whHeight, 10);
+      g.lineStyle(1.5, 0x6e4526, 0.9).strokeRoundedRect(this.whLeft, this.whTop, this.whWidth, this.whHeight, 10);
+      g.fillStyle(C.woodDark, 1).fillRoundedRect(this.whLeft, this.whTop, this.whWidth, 28, { tl: 10, tr: 10, bl: 0, br: 0 });
+    } else {
+      g.fillStyle(C.floorB, 1).fillRect(0, this.whTop, W, H - this.whTop);
+      g.fillStyle(C.woodDark, 1).fillRect(0, this.whTop, W, 4);
+    }
+
     this.shelves = new ShelfView(this, this.shelfTop, {
       onSlotTap: (r, c) => this.onSlotTap(r, c),
       onRefill: (r, c) => {
@@ -791,13 +1003,11 @@ export class MorningScene extends Phaser.Scene {
         play('tap');
         this.afterArrange();
       },
-    }, G.state, this.shelfRows);
-    const g = this.add.graphics();
-    g.fillStyle(C.floorB, 1).fillRect(0, this.whTop, W, H - this.whTop);
-    g.fillStyle(C.woodDark, 1).fillRect(0, this.whTop, W, 4);
-    this.whLabel = txt(this, 12, this.whTop + 10, '', { size: 14, bold: true, color: HEX.white });
+    }, G.state, this.shelfRows, this.shelfLeft);
+
+    this.whLabel = txt(this, this.whLeft + 12, this.whTop + (landscape ? 14 : 10), '', { size: landscape ? 11.5 : 14, bold: true, color: HEX.white, origin: [0, 0.5] });
     // Dòng hướng dẫn nằm riêng dưới tiêu đề kho để không bị nút "Sau quầy" che.
-    this.hint = txt(this, 12, this.whTop + 34, '', { size: 11, color: HEX.cream });
+    this.hint = txt(this, this.whLeft + 12, this.whTop + (landscape ? 36 : 34), '', { size: landscape ? 10 : 11, color: '#f3dfbd', wrap: landscape ? this.whWidth - 24 : W - 24 });
     this.counterPanel = this.add.container(0, 0);
     this.chips = this.add.container(0, 0);
     this.chipViews = new Map();
@@ -808,7 +1018,7 @@ export class MorningScene extends Phaser.Scene {
     this.chipCuller = new Culler(this.cameras.main);
     this.chipOffset = 0;
     this.chipScroll = new KineticScroll(this, {
-      inView: (y) => y >= this.chipTop && y <= CHIP_VIEW_BOTTOM,
+      inView: (y, x) => y >= this.chipTop && y <= this.chipViewBottom && (landscape && x !== undefined ? x >= this.whLeft : true),
       enabled: () => this.tab === 'arrange' && !this.chipDrag,
       get: () => this.chipOffset,
       set: (v) => this.setChipOffset(v),
@@ -823,12 +1033,12 @@ export class MorningScene extends Phaser.Scene {
       this.chipDrag = null;
       this.dropChip(id, ptr);
     });
-    this.counterTabBtn = new Button(this, W - 58, this.whTop + 18, {
-      w: 104,
-      h: 30,
-      radius: 5,
+    this.counterTabBtn = new Button(this, this.whLeft + this.whWidth - (landscape ? 48 : 58), this.whTop + (landscape ? 14 : 18), {
+      w: landscape ? 84 : 104,
+      h: landscape ? 22 : 30,
+      radius: 4,
       label: '🔐 Sau quầy',
-      size: 11,
+      size: landscape ? 10 : 11,
       color: C.wood,
       onTap: () => {
         if (G.state.level < 3) return;
@@ -840,17 +1050,21 @@ export class MorningScene extends Phaser.Scene {
     this.counterTabBtn.setVisible(G.state.level >= 3);
 
     const foot = this.add.graphics();
-    foot.fillStyle(C.hud, 1).fillRect(0, LIST_BOTTOM + 4, W, H - LIST_BOTTOM - 4);
-    foot.fillStyle(C.woodLight, 1).fillRect(0, LIST_BOTTOM + 4, W, 4);
-    foot.fillStyle(0x1a120b, 0.4).fillRect(0, LIST_BOTTOM + 8, W, 2);
+    const footH = landscape ? 44 : H - LIST_BOTTOM - 4;
+    const footY = H - footH;
+    foot.fillStyle(C.hud, 1).fillRect(0, footY, W, footH);
+    foot.fillStyle(C.woodLight, 1).fillRect(0, footY, W, 2);
+    foot.fillStyle(0x1a120b, 0.4).fillRect(0, footY + 2, W, 2);
 
-    const auto = new Button(this, 86, H - 38, {
-      w: 148,
-      h: 46,
+    const autoX = landscape ? this.shelfLeft + this.colW / 2 : 86;
+    const autoY = landscape ? H - 22 : H - 38;
+    const auto = new Button(this, autoX, autoY, {
+      w: landscape ? 150 : 148,
+      h: landscape ? 34 : 46,
       radius: 5,
       label: this.counterShop ? '🍙 Bếp xôi' : '✨ Tự bày',
       color: C.blue,
-      size: 14,
+      size: landscape ? 13 : 14,
       onTap: () => {
         if (this.counterShop) { this.scene.start('Kitchen'); return; }
         if (G.liveSnapshot) { void this.liveCommand({ type: 'autoArrange' }); return; }
@@ -863,31 +1077,46 @@ export class MorningScene extends Phaser.Scene {
         }
       },
     });
-    const open = new Button(this, 264, H - 38, { w: 172, h: 48, radius: 5, label: 'Mở cửa ▶', color: C.red, size: 16.5, onTap: () => this.tryOpen() });
+    const openX = landscape ? this.whLeft + this.colW / 2 : 264;
+    const openY = landscape ? H - 22 : H - 38;
+    const open = new Button(this, openX, openY, {
+      w: landscape ? 170 : 172,
+      h: landscape ? 36 : 48,
+      radius: 5,
+      label: 'Mở cửa ▶',
+      color: C.red,
+      size: landscape ? 14.5 : 16.5,
+      onTap: () => this.tryOpen(),
+    });
     this.xoiPanel = this.add.container(0, 0);
     this.shelves.setVisible(!this.counterShop);
-    this.arrangeLayer.add([this.shelves, this.xoiPanel, g, this.whLabel, this.hint, this.counterTabBtn, this.counterPanel, this.chips, foot, auto, open]);
+    const elements: Phaser.GameObjects.GameObject[] = [g];
+    if (shelfTitle) elements.push(shelfTitle);
+    elements.push(this.shelves, this.xoiPanel, this.whLabel, this.hint, this.counterTabBtn, this.counterPanel, this.chips, foot, auto, open);
+    this.arrangeLayer.add(elements);
   }
 
   /** Tiệm xôi: vùng kệ thay bằng tóm tắt quầy xôi, nếp chín và mẻ ngâm, kèm nút vào Bếp xôi. */
   private renderXoiPanel(): void {
     const s = G.state;
     this.xoiPanel.removeAll(true);
-    const top = this.shelfTop;
-    const h = this.whTop - top - 10;
-    this.xoiPanel.add(panel(this, 10, top, W - 20, h));
-    this.xoiPanel.add(txt(this, 22, top + 12, '🍙 QUẦY XÔI', { size: 13, bold: true, color: HEX.muted }));
+    const top = this.landscape ? 82 : this.shelfTop;
+    const h = this.landscape ? 232 : this.whTop - top - 10;
+    const pw = this.landscape ? this.colW : W - 20;
+    const px = this.landscape ? this.shelfLeft : 10;
+    this.xoiPanel.add(panel(this, px, top, pw, h));
+    this.xoiPanel.add(txt(this, px + 12, top + 12, '🍙 QUẦY XÔI', { size: 13, bold: true, color: HEX.muted }));
     const dishes = new Map<string, number>();
     for (const slot of s.counter) if (slot.productId && slot.qty > 0) dishes.set(slot.productId, (dishes.get(slot.productId) ?? 0) + slot.qty);
     const dishText = dishes.size
       ? [...dishes.entries()].map(([id, qty]) => `${product(id).icon} ${product(id).name} ×${qty}`).join(' · ')
       : 'Quầy chưa có món nào · khách gọi sẽ phải chờ';
-    this.xoiPanel.add(txt(this, 22, top + 36, dishText, { size: 12, bold: dishes.size > 0, color: dishes.size ? HEX.ink : HEX.red, wrap: W - 44 }));
+    this.xoiPanel.add(txt(this, 22, top + 36, dishText, { size: 12, bold: dishes.size > 0, color: dishes.size ? HEX.ink : HEX.red, wrap: pw - 24 }));
     const menu = s.activeRecipes.filter((id) => activeShopType(s).allowsRecipe(id) && !DATA.recipes.find((r) => r.id === id)?.packaged).length;
     const soak = s.soakBatches.length ? s.soakBatches.map((b) => soakLabel(b, s.day, s.clock)).join('\n') : 'Chưa có mẻ nếp nào đang ngâm';
     const info = `Món đang mở bán: ${menu} · Nếp chín: ${cookedPortions(s)} phần\n${soak}`;
-    this.xoiPanel.add(txt(this, 22, top + 78, info, { size: 11, color: HEX.muted, wrap: W - 44 }));
-    this.xoiPanel.add(new Button(this, W / 2, top + h - 30, { w: 200, h: 40, radius: 5, label: '🍙 Vào Bếp xôi', color: C.green, size: 14, onTap: () => this.scene.start('Kitchen') }));
+    this.xoiPanel.add(txt(this, 22, top + 78, info, { size: 11, color: HEX.muted, wrap: pw - 24 }));
+    this.xoiPanel.add(new Button(this, 10 + pw / 2, top + h - 28, { w: Math.min(200, pw - 30), h: 36, radius: 5, label: '🍙 Vào Bếp xôi', color: C.green, size: 13.5, onTap: () => this.scene.start('Kitchen') }));
   }
 
   private onSlotTap(r: number, c: number): void {
@@ -966,14 +1195,14 @@ export class MorningScene extends Phaser.Scene {
     const items = Object.entries(warehouseTotals(G.state)).filter(([id, q]) => q > 0 && !!product(id).behindCounter === this.counterMode);
     if (items.length === 0) {
       const message = this.counterMode ? 'Chưa có hàng sau quầy trong kho.' : 'Kho trống. Qua tab "Nhập hàng" để mua hàng.';
-      this.chipEmpty ??= txt(this, W / 2, 0, '', { size: 13, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: 300 });
+      this.chipEmpty ??= txt(this, W > H ? this.whLeft + this.whWidth / 2 : W / 2, 0, '', { size: 13, color: HEX.cream, origin: [0.5, 0.5], align: 'center', wrap: W > H ? this.whWidth - 24 : 300 });
       this.chips.add(this.chipEmpty);
-      this.chipEmpty.setText(message).setY(this.counterMode ? this.counterChipY + 20 : this.whTop + 70).setVisible(true);
+      this.chipEmpty.setText(message).setPosition(W > H ? this.whLeft + this.whWidth / 2 : W / 2, this.counterMode ? this.counterChipY + 20 : this.whTop + 70).setVisible(true);
       this.dropUnusedChips(used);
       this.counterPanel.setVisible(G.state.level >= 3 && this.counterMode);
       this.chipTop = this.counterMode ? this.counterChipY - 36 : this.chipViewTop;
       this.chipMax = 0;
-      this.chipMask?.clear().fillStyle(0xffffff).fillRect(0, this.chipTop, W, CHIP_VIEW_BOTTOM - this.chipTop);
+      this.chipMask?.clear().fillStyle(0xffffff).fillRect(this.whLeft, this.chipTop, this.whWidth, this.chipViewBottom - this.chipTop);
       this.chipCuller?.reset();
       this.setChipOffset(0);
       if (this.counterMode) this.renderCounterSlots();
@@ -981,9 +1210,9 @@ export class MorningScene extends Phaser.Scene {
     }
     this.chipEmpty?.setVisible(false);
     // Chế độ sau quầy: hàng ô quầy chiếm phần trên nên chip trong kho nhỏ hơn, 6 cột.
-    const cols = this.counterMode ? 6 : 5;
-    const ch = this.counterMode ? 60 : 66;
-    const pitch = this.counterMode ? 66 : 72;
+    const cols = W > H ? (this.counterMode ? 5 : 4) : (this.counterMode ? 6 : 5);
+    const ch = W > H ? 58 : (this.counterMode ? 60 : 66);
+    const pitch = W > H ? 64 : (this.counterMode ? 66 : 72);
     // Kho thường: tiêu đề nhóm đầu tiên bắt đầu ngay dưới mép khung cuộn, không bị dòng hướng dẫn che.
     const firstY = this.counterMode ? this.counterChipY : this.chipViewTop + 4 + ch / 2;
     // Chia theo nhóm hàng (tươi sống, đông lạnh, đồ uống, đồ khô...), mỗi nhóm một tiêu đề; trong nhóm xếp theo tên.
@@ -1011,20 +1240,28 @@ export class MorningScene extends Phaser.Scene {
         let h = this.chipHeads.get(key);
         if (!h) {
           const line = this.add.graphics();
-          line.fillStyle(0x000000, 0.18).fillRect(8, GROUP_H - 5, W - 16, 1.5);
-          h = { head: txt(this, 12, 0, title, { size: 11, bold: true, color: g?.color ?? HEX.cream }), line, title };
+          line.fillStyle(0x000000, 0.18).fillRect(W > H ? this.whLeft + 8 : 8, GROUP_H - 5, (W > H ? this.whWidth : W) - 16, 1.5);
+          h = { head: txt(this, W > H ? this.whLeft + 12 : 12, 0, title, { size: 11, bold: true, color: g?.color ?? HEX.cream }), line, title };
           this.chipHeads.set(key, h);
           this.chips.add([h.line, h.head]);
-        } else if (h.title !== title) {
-          h.title = title;
-          h.head.setText(title);
+        } else {
+          if (h.title !== title) {
+            h.title = title;
+            h.head.setText(title);
+          }
+          if (W > H) {
+            h.line.clear().fillStyle(0x000000, 0.18).fillRect(this.whLeft + 8, GROUP_H - 5, this.whWidth - 16, 1.5);
+          }
         }
-        h.head.setY(top + 2);
+        h.head.setPosition(W > H ? this.whLeft + 12 : 12, top + 2);
         h.line.setY(top);
         top += GROUP_H;
       }
       list.forEach(([id, q], i) => {
-        const x = this.counterMode ? 31 + (i % cols) * 59.5 : 42 + (i % cols) * 69;
+        const step = (this.whWidth - 16) / cols;
+        const x = W > H
+          ? this.whLeft + 8 + step / 2 + (i % cols) * step
+          : this.counterMode ? 31 + (i % cols) * 59.5 : 42 + (i % cols) * 69;
         const y = top + ch / 2 + Math.floor(i / cols) * pitch;
         const key = `${mode}:${id}`;
         used.add(key);
@@ -1036,8 +1273,8 @@ export class MorningScene extends Phaser.Scene {
     // Khung cuộn: phần trên là ô quầy khi ở chế độ sau quầy.
     this.chipTop = this.counterMode ? this.counterChipY - 36 : this.chipViewTop;
     const bottom = top - (pitch - ch) + 8;
-    this.chipMax = Math.max(0, bottom - CHIP_VIEW_BOTTOM);
-    this.chipMask?.clear().fillStyle(0xffffff).fillRect(0, this.chipTop, W, CHIP_VIEW_BOTTOM - this.chipTop);
+    this.chipMax = Math.max(0, bottom - this.chipViewBottom);
+    this.chipMask?.clear().fillStyle(0xffffff).fillRect(this.whLeft, this.chipTop, this.whWidth, this.chipViewBottom - this.chipTop);
     this.chipCuller?.reset();
     this.setChipOffset(this.chipOffset);
     this.renderCounterSlots();
@@ -1052,19 +1289,23 @@ export class MorningScene extends Phaser.Scene {
   /** Dựng một ô món trong lưới kho (chỉ khi món mới xuất hiện); số lượng / nhãn hạn / viền chọn cập nhật ở updateChip. */
   private createChip(key: string, id: string): MorningChip {
     const p = product(id);
-    const cw = this.counterMode ? 54 : 60;
-    const ch = this.counterMode ? 60 : 66;
+    const cw = W > H ? (this.counterMode ? 52 : 56) : (this.counterMode ? 54 : 60);
+    const ch = W > H ? 58 : (this.counterMode ? 60 : 66);
     const bg = this.add.graphics();
-    const iconSize = this.counterMode ? 26 : 30;
+    const iconSize = W > H ? 24 : (this.counterMode ? 26 : 30);
     const icon = productIcon(this, 0, -ch / 2 + iconSize / 2 + 3, p, iconSize);
-    const qty = txt(this, cw / 2 - 3, -ch / 2 + iconSize + 3, '', { size: 10, bold: true, color: HEX.white, origin: [1, 1] })
+    const qty = txt(this, cw / 2 - 3, -ch / 2 + iconSize + 3, '', { size: W > H ? 9 : 10, bold: true, color: HEX.white, origin: [1, 1] })
       .setBackgroundColor('#3b2618cc').setPadding(3, 0, 3, 0);
-    const name = productName(this, 0, ch / 2 - 1, p, cw - 4, { size: this.counterMode ? 8 : 9, origin: [0.5, 1] });
+    const name = productName(this, 0, ch / 2 - 1, p, cw - 4, { size: this.counterMode ? 8 : (W > H ? 8.5 : 9), origin: [0.5, 1] });
     const root = this.add.container(0, 0, [bg, icon, name, qty]).setSize(cw, ch);
     let hold: Phaser.Time.TimerEvent | null = null;
     // Món đã cuộn ra ngoài khung (bị che) thì không nhận chạm, và cũng không chặn chạm vào kệ / nút phía trên.
-    const inFrameY = (worldY: number) => worldY >= this.chipTop && worldY <= CHIP_VIEW_BOTTOM;
-    const inFrame = (ptr: Phaser.Input.Pointer) => inFrameY(ptr.worldY);
+    const inFrameY = (worldY: number, worldX?: number) => {
+      const yOk = worldY >= this.chipTop && worldY <= this.chipViewBottom;
+      const xOk = W > H && worldX !== undefined ? worldX >= this.whLeft : true;
+      return yOk && xOk;
+    };
+    const inFrame = (ptr: Phaser.Input.Pointer) => inFrameY(ptr.worldY, ptr.worldX);
     clipInteractive(root, inFrameY);
     root.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
       hold?.remove();
@@ -1123,7 +1364,7 @@ export class MorningScene extends Phaser.Scene {
   private setChipOffset(v: number): void {
     this.chipOffset = Phaser.Math.Clamp(v, 0, this.chipMax);
     this.chips.y = snap(-this.chipOffset);
-    this.chipCuller?.cull(this.chips, this.chipTop, CHIP_VIEW_BOTTOM);
+    this.chipCuller?.cull(this.chips, this.chipTop, this.chipViewBottom);
   }
 
   /** Thả món đang kéo: lên ô kệ, hoặc lên ô quầy khi ở chế độ sau quầy. */
@@ -1146,7 +1387,10 @@ export class MorningScene extends Phaser.Scene {
       play('pick');
       this.afterArrange();
     } else if (p.behindCounter && this.counterMode && Math.abs(ptr.worldY - this.counterSlotY) <= 26) {
-      const counterSlot = Math.round((ptr.worldX - COUNTER_X0) / COUNTER_DX);
+      const count = G.state.counter.length;
+      const counterSlot = W > H
+        ? Math.floor((ptr.worldX - (this.whLeft + 52)) / Math.min(52, (this.whWidth - 56) / Math.max(1, count)))
+        : Math.round((ptr.worldX - COUNTER_X0) / COUNTER_DX);
       if (counterSlot >= 0 && counterSlot < G.state.counter.length) {
         if (G.liveSnapshot) { void this.liveCommand({ type: 'assignCounter', slot: counterSlot, productId: id }); return; }
         assignCounterSlot(G.state, counterSlot, id);
@@ -1161,6 +1405,49 @@ export class MorningScene extends Phaser.Scene {
     this.counterPanel.setVisible(unlocked && this.counterMode);
     if (!unlocked) return;
     const band = this.add.graphics();
+    if (W > H) {
+      band.fillStyle(C.woodDark, 0.45).fillRoundedRect(this.whLeft + 6, this.counterSlotY - 24, this.whWidth - 12, 48, 8);
+      band.fillStyle(C.woodDark, 1).fillRect(this.whLeft + 10, this.counterChipY - 36, this.whWidth - 20, 2);
+      this.counterPanel.add(band);
+      this.counterPanel.add(txt(this, this.whLeft + 24, this.counterSlotY, 'SAU\nQUẦY', { size: 9, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center' }));
+      const count = G.state.counter.length;
+      const step = Math.min(52, (this.whWidth - 56) / Math.max(1, count));
+      G.state.counter.forEach((slot, i) => {
+        const x = this.whLeft + 52 + step / 2 + i * step;
+        const y = this.counterSlotY;
+        const bg = this.add.graphics();
+        bg.fillStyle(C.slot, 1).fillRoundedRect(x - 23, y - 21, 46, 42, 6);
+        bg.lineStyle(1, C.slotEdge, 1).strokeRoundedRect(x - 23, y - 21, 46, 42, 6);
+        this.counterPanel.add(bg);
+        if (slot.productId) {
+          const p = product(slot.productId);
+          this.counterPanel.add(productIcon(this, x, y - 7, p, 20));
+          this.counterPanel.add(productName(this, x, y + 19, p, 44, { lines: 1, origin: [0.5, 1], size: 8 }));
+          this.counterPanel.add(txt(this, x + 21, y - 19, `x${slot.qty}`, { size: 8.5, bold: true, color: slot.qty > 0 ? HEX.white : HEX.cream, origin: [1, 0] })
+            .setBackgroundColor(slot.qty > 0 ? '#3b2618cc' : '#c0392bcc').setPadding(2, 0, 2, 0));
+        } else {
+          this.counterPanel.add(txt(this, x, y, '+', { size: 16, bold: true, color: HEX.muted, origin: [0.5, 0.5] }));
+        }
+        const hit = this.add.zone(x, y, 48, 44).setInteractive({ useHandCursor: true });
+        hit.on('pointerup', () => {
+          if (this.selected) {
+            if (!product(this.selected).behindCounter) {
+              toast(this, 'Chỉ đặt hàng sau quầy vào đây.');
+              return;
+            }
+            if (G.liveSnapshot) { void this.liveCommand({ type: 'assignCounter', slot: i, productId: this.selected }); return; }
+            assignCounterSlot(G.state, i, this.selected);
+            if (warehouseQty(G.state, this.selected) <= 0) this.selected = null;
+          } else if (slot.productId) {
+            if (G.liveSnapshot) { void this.liveCommand({ type: 'refillCounter', slot: i }); return; }
+            refillCounterSlot(G.state, i);
+          }
+          this.afterArrange();
+        });
+        this.counterPanel.add(hit);
+      });
+      return;
+    }
     band.fillStyle(C.woodDark, 0.35).fillRoundedRect(6, this.counterSlotY - 27, W - 12, 54, 10);
     band.fillStyle(C.woodDark, 1).fillRect(12, this.counterChipY - 42, W - 24, 2);
     this.counterPanel.add(band);
@@ -1304,73 +1591,112 @@ export class MorningScene extends Phaser.Scene {
     setPlayClockRunning(false);
     persist();
     const L = this.add.container(0, 0).setDepth(3000);
-    L.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive());
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.65).setInteractive();
+    backdrop.on('pointerdown', () => this.resume());
+    L.add(backdrop);
 
+    const landscape = W > H;
     const hasCloud = cloudSaveEnabled();
-    const panelH = (hasCloud ? 470 : 414) + 50;
-    const panelY = H / 2 - panelH / 2;
 
-    L.add(panel(this, 50, panelY, W - 100, panelH));
-    L.add(txt(this, W / 2, panelY + 30, '⏸ Tạm dừng', { size: 22, bold: true, origin: [0.5, 0.5] }));
+    const modalW = landscape ? Math.min(520, W - 48) : Math.min(320, W - 28);
+    const modalH = landscape ? Math.min(280, H - 20) : Math.min(480, H - 36);
+    const modalX = Math.round((W - modalW) / 2);
+    const modalY = Math.round((H - modalH) / 2);
 
-    let y = panelY + 76;
-    L.add(
-      new Button(this, W / 2, y, {
-        w: 220,
-        h: 46,
+    L.add(panel(this, modalX, modalY, modalW, modalH));
+    const blocker = this.add.zone(modalX + modalW / 2, modalY + modalH / 2, modalW, modalH).setInteractive();
+    L.add(blocker);
+
+    // Header bar
+    const headerH = 34;
+    const headerG = this.add.graphics();
+    headerG.fillStyle(C.woodDark, 1).fillRoundedRect(modalX + 2, modalY + 2, modalW - 4, headerH, { tl: 6, tr: 6, bl: 0, br: 0 });
+    headerG.lineStyle(1.5, C.panelEdge, 0.9).strokeLineShape(new Phaser.Geom.Line(modalX + 2, modalY + headerH + 2, modalX + modalW - 2, modalY + headerH + 2));
+    L.add(headerG);
+
+    // Header Title
+    L.add(txt(this, modalX + modalW / 2, modalY + headerH / 2 + 1, '⏸ TẠM DỪNG', { size: 15, bold: true, color: '#fef3c7', origin: [0.5, 0.5] }));
+
+    // Header Close [✕] Button
+    const topCloseBtn = new Button(this, modalX + modalW - 20, modalY + headerH / 2 + 1, {
+      w: 26,
+      h: 24,
+      size: 13,
+      label: '✕',
+      color: C.woodDark,
+      onTap: () => this.resume(),
+    });
+    L.add(topCloseBtn);
+
+    if (landscape) {
+      const padX = 14;
+      const gap = 12;
+      const colW = Math.floor((modalW - 2 * padX - gap) / 2);
+      const col0X = modalX + padX + colW / 2;
+      const col1X = modalX + padX + colW + gap + colW / 2;
+
+      const rowH = 36;
+      const rowGap = 8;
+      const startY = modalY + headerH + 12;
+      const rowY = (r: number) => startY + rowH / 2 + r * (rowH + rowGap);
+
+      // Cột 0: Tiếp tục, Tự thối tiền, Mã sao lưu
+      L.add(new Button(this, col0X, rowY(0), {
+        w: colW,
+        h: rowH,
         label: '▶ Tiếp tục',
+        size: 13,
         color: C.green,
         onTap: () => this.resume(),
-      }),
-    );
+      }));
 
-    y += 54;
-    const sound = new Button(this, W / 2, y, {
-      w: 220,
-      h: 42,
-      label: G.state.settings.sound ? '🔊 Âm thanh: Bật' : '🔇 Âm thanh: Tắt',
-      color: C.wood,
-      onTap: () => {
-        G.state.settings.sound = !G.state.settings.sound;
-        setSoundEnabled(G.state.settings.sound);
-        sound.setText(G.state.settings.sound ? '🔊 Âm thanh: Bật' : '🔇 Âm thanh: Tắt');
-        persist();
-      },
-    });
-    L.add(sound);
+      const autoLabel = () => (G.state.settings.autoChange ? '🧮 Tự thối tiền: Bật' : '✋ Tự thối tiền: Tắt');
+      const autoBtn = new Button(this, col0X, rowY(1), {
+        w: colW,
+        h: rowH,
+        label: autoLabel(),
+        size: 12,
+        color: G.state.settings.autoChange ? C.woodDark : C.grey,
+        onTap: () => {
+          G.state.settings.autoChange = !G.state.settings.autoChange;
+          autoBtn.setText(autoLabel()).setColor(G.state.settings.autoChange ? C.woodDark : C.grey);
+          if (G.liveSnapshot) void this.liveCommand({ type: 'setPreference', key: 'autoChange', value: G.state.settings.autoChange });
+          else persist();
+        },
+      });
+      L.add(autoBtn);
 
-    y += 50;
-    const autoLabel = () => (G.state.settings.autoChange ? '🧮 Tự thối tiền: Bật' : '✋ Tự thối tiền: Tắt');
-    const autoBtn = new Button(this, W / 2, y, {
-      w: 220,
-      h: 42,
-      label: autoLabel(),
-      color: C.woodDark,
-      onTap: () => {
-        G.state.settings.autoChange = !G.state.settings.autoChange;
-        autoBtn.setText(autoLabel());
-        if (G.liveSnapshot) void this.liveCommand({ type: 'setPreference', key: 'autoChange', value: G.state.settings.autoChange });
-        else persist();
-      },
-    });
-    L.add(autoBtn);
+      L.add(new Button(this, col0X, rowY(2), {
+        w: colW,
+        h: rowH,
+        label: '💾 Mã sao lưu',
+        size: 12,
+        color: C.woodDark,
+        onTap: () => openBackupMenu(this, () => this.scene.start(sceneForPhase())),
+      }));
 
-    y += 50;
-    L.add(new Button(this, W / 2, y, {
-      w: 220,
-      h: 42,
-      label: '🔄 Kiểm tra cập nhật',
-      color: C.woodDark,
-      onTap: () => { void checkForUpdate().then((r) => toast(this, manualCheckMessage(r))); },
-    }));
+      // Cột 1: Âm thanh, Tài khoản / Cập nhật, Về màn chính
+      const soundBtn = new Button(this, col1X, rowY(0), {
+        w: colW,
+        h: rowH,
+        size: 12,
+        label: G.state.settings.sound ? '🔊 Âm thanh: Bật' : '🔇 Âm thanh: Tắt',
+        color: G.state.settings.sound ? C.wood : C.grey,
+        onTap: () => {
+          G.state.settings.sound = !G.state.settings.sound;
+          setSoundEnabled(G.state.settings.sound);
+          soundBtn.setText(G.state.settings.sound ? '🔊 Âm thanh: Bật' : '🔇 Âm thanh: Tắt').setColor(G.state.settings.sound ? C.wood : C.grey);
+          persist();
+        },
+      });
+      L.add(soundBtn);
 
-    if (hasCloud) {
-      y += 50;
-      L.add(
-        new Button(this, W / 2, y, {
-          w: 220,
-          h: 42,
+      if (hasCloud) {
+        L.add(new Button(this, col1X, rowY(1), {
+          w: colW,
+          h: rowH,
           label: '☁️ Tài khoản và đồng bộ',
+          size: 12,
           color: C.blue,
           onTap: () => {
             persist();
@@ -1378,19 +1704,154 @@ export class MorningScene extends Phaser.Scene {
             stopMusic();
             this.scene.start('Title', { login: false });
           },
-        }),
-      );
-    }
+        }));
 
-    y += 50;
-    L.add(new Button(this, W / 2, y, { w: 220, h: 42, label: '💾 Mã sao lưu', color: C.woodDark, onTap: () => openBackupMenu(this, () => this.scene.start(sceneForPhase())) }));
+        L.add(new Button(this, col0X, rowY(3), {
+          w: colW,
+          h: rowH,
+          label: '🔄 Kiểm tra cập nhật',
+          size: 12,
+          color: C.woodDark,
+          onTap: () => { void checkForUpdate().then((r) => toast(this, manualCheckMessage(r))); },
+        }));
 
-    y += 52;
-    L.add(
-      new Button(this, W / 2, y, {
-        w: 220,
-        h: 44,
+        L.add(new Button(this, col1X, rowY(2), {
+          w: colW,
+          h: rowH,
+          label: '🏠 Về màn chính',
+          size: 12,
+          color: C.grey,
+          onTap: () => {
+            persist();
+            if (G.liveSnapshot) suspendLiveShop();
+            stopMusic();
+            this.scene.start('Title');
+          },
+        }));
+      } else {
+        L.add(new Button(this, col1X, rowY(1), {
+          w: colW,
+          h: rowH,
+          label: '🔄 Kiểm tra cập nhật',
+          size: 12,
+          color: C.woodDark,
+          onTap: () => { void checkForUpdate().then((r) => toast(this, manualCheckMessage(r))); },
+        }));
+
+        L.add(new Button(this, col1X, rowY(2), {
+          w: colW,
+          h: rowH,
+          label: '🏠 Về màn chính',
+          size: 12,
+          color: C.grey,
+          onTap: () => {
+            persist();
+            if (G.liveSnapshot) suspendLiveShop();
+            stopMusic();
+            this.scene.start('Title');
+          },
+        }));
+      }
+
+      L.add(txt(this, modalX + modalW / 2, modalY + modalH - 12, '💾 Tiến trình đã được lưu an toàn.', {
+        size: 11,
+        color: HEX.muted,
+        origin: [0.5, 0.5],
+        align: 'center',
+      }));
+    } else {
+      const padX = 14;
+      const colW = modalW - 2 * padX;
+      const halfGap = 6;
+      const halfW = Math.floor((colW - halfGap) / 2);
+      const cx = modalX + modalW / 2;
+      const rowH = 40;
+      const rowGap = 8;
+      let currY = modalY + headerH + 14 + rowH / 2;
+
+      L.add(new Button(this, cx, currY, {
+        w: colW,
+        h: rowH,
+        label: '▶ Tiếp tục',
+        size: 14,
+        color: C.green,
+        onTap: () => this.resume(),
+      }));
+      currY += rowH + rowGap;
+
+      // Cặp đôi: Âm thanh & đổi bố cục màn hình
+      const soundBtn = new Button(this, cx - (halfW + halfGap) / 2, currY, {
+        w: halfW,
+        h: rowH,
+        size: 11,
+        label: G.state.settings.sound ? '🔊 Âm: Bật' : '🔇 Âm: Tắt',
+        color: G.state.settings.sound ? C.wood : C.grey,
+        onTap: () => {
+          G.state.settings.sound = !G.state.settings.sound;
+          setSoundEnabled(G.state.settings.sound);
+          soundBtn.setText(G.state.settings.sound ? '🔊 Âm: Bật' : '🔇 Âm: Tắt').setColor(G.state.settings.sound ? C.wood : C.grey);
+          persist();
+        },
+      });
+      L.add(soundBtn);
+
+      if (hasCloud) {
+        L.add(new Button(this, cx, currY, {
+          w: colW,
+          h: rowH,
+          label: '☁️ Tài khoản và đồng bộ',
+          size: 12,
+          color: C.blue,
+          onTap: () => {
+            persist();
+            if (G.liveSnapshot) suspendLiveShop();
+            stopMusic();
+            this.scene.start('Title', { login: false });
+          },
+        }));
+        currY += rowH + rowGap;
+      }
+
+      const autoLabel = () => (G.state.settings.autoChange ? '🧮 Thối: Bật' : '✋ Thối: Tắt');
+      const autoBtn = new Button(this, cx - (halfW + halfGap) / 2, currY, {
+        w: halfW,
+        h: rowH,
+        label: autoLabel(),
+        size: 11,
+        color: G.state.settings.autoChange ? C.woodDark : C.grey,
+        onTap: () => {
+          G.state.settings.autoChange = !G.state.settings.autoChange;
+          autoBtn.setText(autoLabel()).setColor(G.state.settings.autoChange ? C.woodDark : C.grey);
+          if (G.liveSnapshot) void this.liveCommand({ type: 'setPreference', key: 'autoChange', value: G.state.settings.autoChange });
+          else persist();
+        },
+      });
+      L.add(autoBtn);
+      L.add(new Button(this, cx + (halfW + halfGap) / 2, currY, {
+        w: halfW,
+        h: rowH,
+        label: '💾 Sao lưu',
+        size: 11,
+        color: C.woodDark,
+        onTap: () => openBackupMenu(this, () => this.scene.start(sceneForPhase())),
+      }));
+      currY += rowH + rowGap;
+
+      L.add(new Button(this, cx, currY, {
+        w: colW,
+        h: rowH,
+        label: '🔄 Kiểm tra cập nhật',
+        size: 12,
+        color: C.woodDark,
+        onTap: () => { void checkForUpdate().then((r) => toast(this, manualCheckMessage(r))); },
+      }));
+      currY += rowH + rowGap;
+
+      L.add(new Button(this, cx, currY, {
+        w: colW,
+        h: rowH,
         label: '🏠 Về màn chính',
+        size: 12,
         color: C.grey,
         onTap: () => {
           persist();
@@ -1398,17 +1859,16 @@ export class MorningScene extends Phaser.Scene {
           stopMusic();
           this.scene.start('Title');
         },
-      }),
-    );
+      }));
+      currY += rowH + 18;
 
-    L.add(
-      txt(this, W / 2, y + 36, 'Tiến trình đã được lưu an toàn.', {
+      L.add(txt(this, cx, currY, 'Tiến trình đã được lưu an toàn.', {
         size: 11,
         color: HEX.muted,
         origin: [0.5, 0.5],
         align: 'center',
-      }),
-    );
+      }));
+    }
 
     this.pauseLayer = L;
   }

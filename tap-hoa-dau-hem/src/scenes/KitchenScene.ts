@@ -324,12 +324,15 @@ export class CookScene extends Phaser.Scene {
     this.add.rectangle(this.meterX + this.meterW / 2, H * 0.58, this.meterW, 24, 0x543c2e).setStrokeStyle(2, 0x2b1d14);
   }
   private renderVariantControls(variants: NonNullable<(typeof DATA.recipes)[number]['variants']>): void {
-    txt(this, W / 2, 91, 'TÙY CHỌN MÓN', { size: 10, bold: true, color: HEX.muted, origin: [0.5, 0.5] });
+    const landscape = W > H;
+    const labelY = landscape ? 66 : 91;
+    const buttonsY = landscape ? 86 : 116;
+    txt(this, W / 2, labelY, 'TÙY CHỌN MÓN', { size: 10, bold: true, color: HEX.muted, origin: [0.5, 0.5] });
     const options = [{ id: undefined, label: 'Mặc định' }, ...variants.map((variant) => ({ id: variant.id, label: variant.name }))];
     const width = Math.min(104, (W - 28) / options.length - 6);
     options.forEach((option, index) => {
       const selected = option.id === this.variantId;
-      const button = new Button(this, W / 2 + (index - (options.length - 1) / 2) * (width + 6), 116, {
+      const button = new Button(this, W / 2 + (index - (options.length - 1) / 2) * (width + 6), buttonsY, {
         w: width, h: 30, label: option.label, size: 10, color: selected ? C.green : C.wood,
         onTap: () => {
           this.variantId = option.id;

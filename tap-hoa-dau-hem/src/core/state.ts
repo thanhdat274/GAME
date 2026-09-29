@@ -313,6 +313,8 @@ export interface Settings {
   idleAutoPlay?: number;
   /** Góc nhìn lúc bán: 'side' = nhìn ngang (mặc định), 'topdown' = sơ đồ trên xuống, tự đi lại. */
   viewMode?: 'side' | 'topdown';
+  carryStock?: boolean;
+  orderAtPhone?: boolean;
   /** Thợ nấu xôi làm đơn nội bộ trước hàng bán lẻ (mặc định bật). */
   xoiOrderPriority?: boolean;
   /** Báo công an khi bị trộm đột nhập / phát hiện tiền giả (mặc định bật). Tắt: tự xử, trả lại tờ giả. */
@@ -535,7 +537,7 @@ export interface ActiveEvent {
 }
 
 export interface GameState {
-  version: 7;
+  version: 8;
   day: number;
   phase: Phase;
   /** Phút trong ngày (480 = 08:00) khi đang mở cửa. */
@@ -678,7 +680,7 @@ export function createNewGame(): GameState {
   const b = DATA.balance;
   const fixtures = defaultFixtures();
   const state: GameState = {
-    version: 7,
+    version: 8,
     day: 1,
     phase: 'morning',
     clock: b.openMinute,

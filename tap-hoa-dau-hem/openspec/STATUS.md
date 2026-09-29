@@ -1,5 +1,12 @@
 # Rà soát triển khai (cập nhật 27/09/2026)
 
+## Chọn bố cục Dọc/Ngang khi điện thoại khóa xoay (29/09/2026)
+
+- Menu Tạm dừng có nút đổi màn dọc/ngang. Khi iPhone vẫn ở tư thế dọc và khóa xoay, game xoay riêng vùng canvas 90°; chạm nút lần nữa để về dọc. Lựa chọn được lưu cục bộ, không đổi `GameState` hoặc `settings.viewMode`.
+- Phaser dùng `setGameSize` cho `Scale.FIT`; Shop dựng lại phần trình bày bằng cùng `DaySession`, giữ ngày/giờ bán và mở lại menu Tạm dừng. Tọa độ chạm được đổi theo canvas xoay.
+- Đã thử trong trình duyệt tích hợp với viewport dọc trên desktop: Shop dọc → ngang ảo → dọc, menu và nút chạm hoạt động, không về Title. Chưa xác minh trên iPhone thật, Dynamic Island/safe-area hoặc màn Restock/Kitchen đang phủ Shop.
+- Production build qua. Full Vitest 918/919, một benchmark `baristaBrew.test.ts` timeout 5 giây khi chạy toàn bộ; chạy riêng file qua 8/8. Đây không phải test của bố cục.
+
 Đối chiếu `config.yaml`, toàn bộ `tasks.md` và các capability spec với mã hiện tại. Dấu `[x]` trong task là trạng thái ghi nhận của change, không tự động xác nhận kiểm thử trên thiết bị hay triển khai production.
 
 | Change | Đã đánh dấu | Chưa đánh dấu | Trạng thái tiếp theo |
@@ -120,3 +127,82 @@ Không đánh dấu hoàn thành các task yêu cầu thiết bị thật, Conso
 - Lỗi đã sửa: ghi chú "Thợ nấu xôi đã ngâm N kg" bị ghi đè ở `endDay`; thông báo "nếp đã nguội" hiện cả khi nếp còn nóng (nay phân biệt nếp nguội và mẻ hấp chưa đều); tiệm xôi dùng lời nhắc tạp hóa ("nạp kệ", "nhập & bày hàng", "Nhập thêm những món này", "Khu hay hết nhất", mẹo hàng tươi); nút "Về bếp" đè nút "GIỮ LỬA" sau khi hấp.
 - Cần quyết định cân bằng: khách tới tiệm xôi đứng chơi (~97/ngày) vượt xa số phần 1 thợ + người chơi làm kịp (~45–50). Không làm sẵn trước giờ mở thì chỉ ~41% khách được phục vụ và sao tụt từ 3,3 xuống 1,0 trong một ngày; làm sẵn 8 phần thì cao điểm phục vụ ~72%.
 - Đã sửa tiếp: ở tiệm xôi, tab "Bày kệ" buổi sáng thành "🍙 Quầy xôi" (thẻ tóm tắt món ở quầy, nếp chín, mẻ ngâm, nút vào Bếp xôi; nút "Tự bày" thành "Bếp xôi"; kho chỉ để xem, không chọn/kéo món). Nút "Nhập & bày hàng" giữa giờ thành "Nhập nguyên liệu", màn nhập bỏ tab bày kệ, và liệt kê đủ nguyên liệu (trước đó danh sách trống vì lọc theo chỗ trên kệ). Tạp hóa giữ nguyên.
+
+## Responsive ngang — tiến độ ban đầu (28/09/2026)
+
+- `landscape-responsive-layout` và `topdown-carry-stock` là thay đổi chưa commit do người dùng chuẩn bị; giữ nguyên trạng thái này.
+- Thêm `src/ui/layout.ts` với profile/bounds, hàm `effectiveViewMode` theo D8 và test thuần. Shop có listener resize dọn đúng vòng đời; lựa chọn tường minh đổi góc nhìn không restart scene/ghi thêm vào `settings.viewMode`. Mặc định top-down ngang vẫn được chặn cho tới khi có kết quả FPS thật của 4.2.
+- Góc trên xuống có adapter WASD/mũi tên đi theo hit-test chạm, E/Space tương tác gần nội thất, điện thoại bàn chỉ vẽ trong map, nhắc đơn giao sắp tới, xe ba gác trình bày, dấu hàng chờ chạm xem lô và dấu thùng trên nhân viên có task `receive`.
+- Màn nhập thêm ETA theo mối và số ô kho còn trống dự kiến sau giỏ hàng.
+- `npm run build`, `npm run test -- --run tests/layout.test.ts` (3 test) và `npm run compare:views` đều qua; compare cho lãi top-down/side 100.0%. `openspec validate landscape-responsive-layout --strict` hợp lệ.
+- Rà lại sau các bổ sung UI: `npm run build` qua; `npm test` qua 30 file / 716 test; `npm run compare:views` hai góc nhìn cùng kết quả; validator strict qua. Môi trường: Windows, Node 20.19, trình duyệt desktop 1536×864 CSS px, DPR 1.25. Chỉ quan sát Title/Morning trong phép đo FPS; chưa đo Shop hoặc responsive landscape.
+- Chưa xác minh các thao tác UI mới trực tiếp trong trình duyệt.
+- FPS trình duyệt tích hợp khi ở Title/Morning trên desktop giả lập: khoảng 25 FPS, DPR 1–1.25, không có khách. Đây không phải phép đo 4.2: chưa vào được Shop trong phiên tự động hóa và không có điện thoại tầm trung thật; 4.2/4.3 cùng điều kiện trước D8 vẫn mở.
+- D12 còn thiếu hotbar bố trí đúng hàng, hộp thoại Restock 2 cột/compact tab, và cảnh hẻm đầy đủ; shell responsive cho các scene khác cũng còn mở. Không dùng số đo Title/Morning để kết luận hiệu năng góc trên xuống.
+
+## Responsive ngang — tiếp tục triển khai (29/09/2026)
+
+- Bỏ lớp phủ “Xoay dọc” trên điện thoại ngang và listener chỉ phát cảnh báo xoay; viewport landscape không còn bị che.
+- Menu tiêu đề có bố cục gọn bên phải ở canvas ngang để vào được save; đã mở save max-level trong trình duyệt ngang và đi từ Title → Morning → Shop.
+- Khung canvas khởi tạo theo hướng/vùng khả dụng. Màn Nhập hàng có panel hai cột khi `landscape-wide`; còn thiếu bố cục tab một cột cho `landscape-compact` và tab Bày kệ trong panel ngang.
+- Xác minh: `npm run build`, toàn bộ 30 file / 717 test, `npx openspec validate landscape-responsive-layout --strict`, `npm run compare:views` qua; mô phỏng so sánh vẫn 100% lãi hai góc nhìn.
+- Giới hạn hiện tại: đổi hướng khi đang chơi chưa cập nhật kích thước Phaser và dựng lại toàn bộ scene; Morning/Shop cùng các màn quản lý còn nhiều tọa độ dọc cố định. Shop ngang đang dùng bố cục cũ, nên đây chưa phải giao diện ngang hoàn chỉnh.
+- Đo UI trong browser desktop 1536×864 CSS px / DPR 1.25 chỉ ghi nhận FPS Shop nhìn ngang qua perf overlay, kết quả dao động khoảng 24–38 FPS, p1 khoảng 17–35 FPS trong các cửa sổ ngắn. Chưa đo góc trên xuống khi đông khách và chưa có điện thoại tầm trung thật; không dùng các mẫu này làm cổng hiệu năng 4.2.
+- Cần người chơi thử thao tác thật và đo trên điện thoại tầm trung trước khi đóng 4.2/4.3/5.6; D8 vẫn giữ mặc định ngang nhìn ngang cho tới khi đủ phép đo.
+
+## Responsive ngang — nhập hàng compact và lượt đo bổ sung (29/09/2026)
+
+- Restock ở `landscape-compact` dùng một cột với nút chuyển Danh mục/Giỏ; giỏ hiện tổng, tiền, số ô kho còn trống sau đơn, cảnh báo/giờ giao và nút mua. Ở profile ngang, nền Restock trong suốt một phần để Shop đang tạm dừng còn thấy mờ phía sau. Task 3.4c được đánh dấu hoàn tất.
+- `npm run build` qua; `npm test` qua 30 file / 717 test; `openspec validate landscape-responsive-layout --strict` hợp lệ.
+- Đo overlay trên Codex In-app Browser tại desktop Windows: WebGL, 1536×864 màn hình, DPR 1.25; khoảng 24–25 FPS ở Title/Morning. Đây không phải điện thoại tầm trung, không có khách đông, và chưa đo được cảnh Shop/top-down trong lượt này nên không dùng làm kết quả topdown-store-view 4.2.
+- Chưa có phản hồi người chơi thật. topdown-store-view 4.3, responsive 5.6 và cổng FPS 4.2 vẫn mở; D8 vẫn giữ mặc định ngang nhìn ngang.
+
+## Responsive ngang — phím điều hướng Shop (29/09/2026)
+
+- Shop nhận `Esc` để đóng Sơ đồ/menu Tạm dừng hoặc mở menu Tạm dừng, `M` để mở/đóng Sơ đồ, và `2` để vào Nhập hàng/Bếp ở cả hai góc nhìn. Phím di chuyển vẫn chỉ hoạt động ở góc trên xuống; mọi shortcut bỏ qua khi đang nhập text.
+- `npm run build`, 4 test layout và `openspec validate landscape-responsive-layout --strict` qua.
+- Chưa có điện thoại tầm trung hay người chơi thật trong lượt này. Không đánh dấu `topdown-store-view` 4.2/4.3 hoặc điều kiện bật mặc định D8 hoàn tất; các task shell ngang còn mở.
+
+## Responsive ngang — tinh chỉnh Shop compact (29/09/2026)
+
+- Bảng quầy trong Shop top-down ngang compact dùng drawer nổi bên phải, nằm trên hotbar; ngang wide dùng rail phải có chiều rộng giới hạn thay vì kéo hết phần trống. Hotbar compact tăng chiều cao nút để dễ chạm. Các thay đổi này chỉ chạy ở landscape; nhánh portrait không đổi.
+- Xác minh sau chỉnh sửa: `npm run build` thành công; `npm test` thành công (31 file, 736 test).
+- Chưa hoàn tất toàn bộ `landscape-responsive-layout`: resize/reflow xuyên scene, bố cục nhìn ngang, Morning/Summary và các scene quản lý, kiểm tra clipping trên viewport nhiều cỡ, cùng test thiết bị thật vẫn còn mở. Không đánh dấu các task đó hoàn tất khi chưa triển khai và kiểm chứng.
+- Bổ sung viền sáng theo ô dưới con trỏ chuột ở LiveMap khi chơi top-down; touch vẫn dùng vòng đánh dấu sau khi chạm. Đây là chỉ báo trình bày, không đổi hit-test hoặc gameplay.
+- Xác minh lại sau chỉ báo hover: `npm run build` thành công; `npm test` thành công (31 file, 736 test).
+
+## Thử nghiệm Web Worker cho save cloud (29/09/2026)
+
+- Thêm `src/workers/save.worker.ts`; `compressSave`/`decompressSave` trong `src/core/compress.ts` thử chạy stringify/parse và LZString ở worker module. Nếu Worker không được hỗ trợ, không khởi tạo được, lỗi hoặc hết 30 giây, API quay về implementation hiện tại trên main thread. Không đổi schema/version save.
+- `npm run build` tạo được `dist/assets/save.worker-*.js`; `npm test` qua 31 file / 736 test (test runner dùng fallback vì không có browser Worker).
+- Chưa đo thời gian/độ giật thực tế trong trình duyệt với save lớn; structured clone khi gửi object qua worker vẫn có chi phí. Đây là tối ưu thử nghiệm cho lưu/đọc cloud, không áp dụng mô phỏng frame-by-frame.
+
+## Kế hoạch đo hiệu năng và worker save (29/09/2026)
+
+- Thêm `docs/performance-modernization-plan.md` với các giai đoạn baseline → worker → tối ưu đường nóng → ranh giới hệ thống → lưu trữ, tiêu chí chấp nhận và quyết định dùng IndexedDB theo nhu cầu.
+- Overlay `?perf=1` nhận phép đo end-to-end nén/giải nén, mode worker/fallback và kích thước chuỗi. Có thể ép đối chứng fallback bằng `?perf=1&save-worker=0`; luồng xuất/nhập mã backup cũng dùng cùng compression API.
+- Firebase/Firestore vẫn là save đồng bộ giữa thiết bị; localStorage là save cục bộ đọc đồng bộ lúc khởi động. Chưa chuyển dữ liệu sang IndexedDB vì save bị giới hạn nhỏ và không có lịch sử lớn cần query; không tạo bản sao lưu trùng giữa hai storage.
+- Kiểm chứng cần làm tiếp trong browser với cùng save ở cả hai URL để so thời gian và frame pacing; không suy ra worker nhanh hơn chỉ từ build/test.
+
+## Baseline save browser sơ bộ (29/09/2026)
+
+- Đo ba lượt mỗi chế độ trong Codex In-app Browser, Windows desktop, viewport thực 677×312 CSS px, DPR 1.2, WebGL, scene Title, save max. Mỗi payload có 6 mẫu timed sau warm-up; không ghi save. Payload hiện tại ~31 KB; stress tổng hợp 30 ngày analytics/900 log/120 SKU ~69.7 KB.
+- Median của ba p50 theo ms, thứ tự nén/giải nén: payload hiện tại fallback 42.9/25.9, worker 37.3/15.2; payload stress fallback 67.3/27.5, worker 63.5/14.9. Dải giữa ba lượt lần lượt: hiện tại fallback 42.9–64.2/25.9–35.0, worker 32.9–48.3/8.4–19.7; stress fallback 67.3–73.2/26.2–27.5, worker 61.0–130.9/14.3–31.2. Nén stress bằng worker biến thiên lớn.
+- FPS Title trong cửa sổ ngắn 33.2–37.8 TB; chưa đo Shop đông khách, landscape đa viewport hay điện thoại thật. Đây là baseline save sơ bộ, không phải bằng chứng worker cải thiện gameplay. Giai đoạn 0 còn mở cho baseline frame pacing đại diện; chưa chuyển mô phỏng sang worker hoặc thêm IndexedDB.
+
+## Profiling Shop và tối ưu tái sử dụng khay tiền (29/09/2026)
+
+- Vào được Shop từ save max riêng và đo trực tiếp chế độ nhìn trên xuống tại cửa sổ 1920×1080/DPR 1 trên desktop. Khi đang chạy mô phỏng đông khách, một cửa sổ ổn định ghi ~32.7 FPS, `sim/map/ui/actors` lần lượt ~0.8/0.6/1.6/0.0 ms; có 87 khách đã phục vụ và 1 người chờ. Số liệu một phiên ngắn, không đại diện điện thoại.
+- Từ code inspection thấy `renderTray()` hủy toàn bộ tiền vẽ và cấp phát lại Graphics/Text/Container mỗi sự kiện khay đổi. Đã thêm pool tối đa 8 tờ tiền, cập nhật texture/hình/chữ trên object hiện có và ẩn slot dư. Không đổi gameplay, save schema hoặc layout portrait.
+- Xác minh `vite build` thành công và toàn bộ Vitest 31 file / 736 test qua. Chưa có A/B benchmark tái lập hoặc phép đo trên máy điện thoại; chưa tuyên bố mức tăng FPS. Scene construction, responsive ngang các viewport, điện thoại thật và benchmark worker vẫn còn trong plan.
+
+## Điều hướng page ngang và Lịch landscape (29/09/2026)
+
+- `pageFrame` có nút drawer điều hướng ngang dùng chung, chia tab Tiệm / Quản lý / Sổ sách / Mở rộng. Các route ghi save trước khi rời màn; drawer tự ẩn nếu Shop đang chạy, pause hoặc sleep để không làm mất phiên `DaySession`. Portrait không tạo drawer.
+- `CalendarScene` giữ nguyên nhánh dọc; ở landscape chuyển sang hai cột lịch 10 ngày và các hạn thuế/sự kiện sắp tới để vừa canvas thấp.
+- `DiningScene` chuyển thành lưới hai cột khi landscape thấp (tối đa 6 bàn); `KitchenScene` dời hàng tùy chọn món để không đè prompt. `HowToScene` landscape dùng cùng drawer điều hướng.
+- `Button` có phản hồi hover sáng nhẹ riêng khi khởi tạo ở profile landscape; pressed/disabled hiện có được giữ. Portrait giữ nguyên màu khi hover.
+- Đã đánh dấu OpenSpec 1.6, 3.1, 3.3, 3.4, 4.1 và 4.2 hoàn tất theo phần code. Sau đợt sửa cuối sẽ chạy lại build/test/validate.
+- Sau sửa đổi cuối: production build qua; Vitest 31 file / 736 test qua; `openspec validate landscape-responsive-layout --strict` hợp lệ; `git diff --check` sạch.
+- Cần kiểm tra trực quan ngang trên viewport phù hợp và hoàn thành các nhóm scene còn lại trước khi đóng change.
+- `landscape-responsive-layout` vẫn còn hạng mục lớn: Phaser resize/reflow xuyên orientation mà không mất Shop session (1.4/1.7/2.5), desktop cửa sổ hẹp (3.5), focus order/độ tương phản hoàn chỉnh (4.4), rà clipping toàn scene (4.5). 2.0/2.6, 5.2–5.4a và 5.6 cần ma trận viewport, pha chơi, tải save và thiết bị/người chơi thật; chưa thể khép change bằng build đơn thuần.

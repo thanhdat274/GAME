@@ -18,6 +18,7 @@ import { activeShopType } from './shopTypes';
 import { cookedPortions, discardSpoiledSoaks, soakStatus, spoilRiceEndOfDay, startSoak, steamBatch, suggestSoakKg } from './stickyRice';
 import { fillOrder, orderRemaining, pendingOrdersFrom, runInternalSupplyMorning } from './internalSupply';
 import { counterFixture, counterFixtures, maxQueueFor, maxShoppersFor, walkTiles, walkableGrid } from './layout';
+import { carryAvailable, dropStack, pickUp, type CarryStack } from './carry';
 import { canGiveCredit, collectDebt, markBadDebts, recordDebt, repaymentsToday } from './ledger';
 import { cheapSpawnMultiplier, keepChance } from './pricing';
 import { addPlayerExperience, applyLevelUps, averageRating, isAtCap, ratingSpawnMultiplier, recordRating, saleExpMultiplier, trafficMultiplier } from './progression';
@@ -38,7 +39,7 @@ import {
 } from './state';
 import {
   assignSlot, canRefill, electricityCost, refillCounterSlot, expireLots, putIntoSlot, receiveDeliveries, refillSlot, shelfCapacity, slotUnitPrice, stowHolding,
-  findSlotWith, takeLots, takeOneFromSlot, zoneOf, type DeliveryResult,
+  findSlotWith, takeLots, takeOneFromSlot, zoneOf, refillSlotLimited, assignSlotLimited, placeError, type DeliveryResult,
   spoilFrozenStock,
 } from './stock';
 import { maintenancePatienceRate, maintenanceTrafficMul, wearOvernight } from './maintenance';
@@ -158,7 +159,7 @@ export interface DayEvents {
   dayEnded: void;
 }
 
-interface Refill { shelf: number; slot: number; left: number }
+interface Refill { shelf: number; slot: number; left: number; fromHand?: string }
 interface ZoneRefill { zone: Exclude<Category, 'counter'>; slots: { shelf: number; slot: number }[]; left: number; index: number }
 
 export interface DaySessionSnapshot {
@@ -187,6 +188,7 @@ export interface DaySessionSnapshot {
   fleeing?: Customer[];
   playerAway?: number;
   playerAtCounter?: boolean;
+  carrying?: CarryStack[];
   counters?: { nextOrderId: number; nextIncidentId: number; nextLaneId: number; taskAcc: number; missedAlerted: string[]; nextTicket?: number };
   /** RNG riêng cho hành vi khách (chen hàng, phá phách) để không làm lệch mô phỏng chính. */
   socialRngState?: number;
@@ -220,6 +222,7 @@ export class DaySession {
    * Khi rời quầy, khách đầu hàng đứng chờ (vẫn mất kiên nhẫn) cho tới khi người chơi quay lại.
    */
   playerAtCounter = true;
+  carrying: CarryStack[] = [];
   /** Tự phục vụ quầy người chơi (bỏ qua ngày, mô phỏng): quét, thối tiền tự động. */
   autoPlayer = false;
   /** Giây giữa hai thao tác của người chơi tự động (0 = tức thì). */
@@ -282,6 +285,7 @@ export class DaySession {
     session.fleeing.push(...structuredClone(snapshot.fleeing ?? []));
     session.playerAway = snapshot.playerAway ?? 0;
     session.playerAtCounter = snapshot.playerAtCounter ?? true;
+    session.carrying = structuredClone(snapshot.carrying ?? []);
     if (snapshot.counters) {
       session.nextOrderId = snapshot.counters.nextOrderId;
       session.nextIncidentId = snapshot.counters.nextIncidentId;
@@ -321,6 +325,7 @@ export class DaySession {
       fleeing: structuredClone(this.fleeing),
       playerAway: this.playerAway,
       playerAtCounter: this.playerAtCounter,
+      carrying: structuredClone(this.carrying),
       counters: {
         nextOrderId: this.nextOrderId, nextIncidentId: this.nextIncidentId, nextLaneId: this.nextLaneId,
         taskAcc: this.taskAcc, missedAlerted: [...this.missedAlerted], nextTicket: this.nextTicket,
@@ -360,6 +365,7 @@ export class DaySession {
       this.state.clock = Math.min(b.closeMinute, this.state.clock + dt * DaySession.minutesPerSecond());
       if (this.state.clock >= b.closeMinute) {
         this.closed = true;
+        this.clearCarrying();
         this.events.emit('closing', undefined);
       }
     }
@@ -385,7 +391,7 @@ export class DaySession {
       if (r.left <= 0) {
         this.refills.splice(this.refills.indexOf(r), 1);
         if (this.tasks.get(`refill:${r.shelf}:${r.slot}`)?.claimedBy === PLAYER) this.tasks.complete(`refill:${r.shelf}:${r.slot}`);
-        const qty = refillSlot(this.state, r.shelf, r.slot);
+        const qty = r.fromHand ? this.finishRefillFromHand(r.shelf, r.slot, r.fromHand) : refillSlot(this.state, r.shelf, r.slot);
         this.events.emit('refillDone', { shelf: r.shelf, slot: r.slot, qty });
       }
     }
@@ -440,6 +446,7 @@ export class DaySession {
     if (this.closed && this.customers.length === 0 && !this.ended) {
       this.finishOrders();
       this.ended = true;
+      this.clearCarrying();
       this.events.emit('dayEnded', undefined);
     }
   }
@@ -493,6 +500,7 @@ export class DaySession {
   closeEarly(): boolean {
     if (this.closed || this.ended) return false;
     this.closed = true;
+    this.clearCarrying();
     this.state.today.closedEarlyAt = Math.floor(this.state.clock);
     this.log(`🚪 Đóng cửa sớm lúc ${formatClock(this.state.clock)}`);
     this.events.emit('closing', undefined);
@@ -1066,6 +1074,37 @@ export class DaySession {
     return true;
   }
 
+  pickUpStock(productId: string): number { return pickUp(this.state, this.carrying, productId); }
+  dropCarriedStock(productId: string): void { dropStack(this.carrying, productId); }
+  clearCarrying(): void { this.carrying.length = 0; }
+  carriedQty(productId: string): number { return this.carrying.find((stack) => stack.productId === productId)?.qty ?? 0; }
+
+  startRefillFromHand(shelf: number, slot: number, productId: string): boolean {
+    const target = this.state.shelves[shelf]?.[slot];
+    if (!target || this.isRefilling(shelf, slot) !== null || this.carriedQty(productId) <= 0 || carryAvailable(this.state, [], productId) <= 0) return false;
+    if (target.productId !== productId && (target.qty > 0 || placeError(this.state, shelf, productId))) return false;
+    if (target.productId === productId && !canRefill(this.state, shelf, slot)) return false;
+    this.tasks.upsert(`refill:${shelf}:${slot}`, 'refill', 1);
+    this.tasks.claimKey(PLAYER, `refill:${shelf}:${slot}`);
+    this.refills.push({ shelf, slot, left: DATA.balance.refillSeconds, fromHand: productId });
+    this.events.emit('refillStarted', { shelf, slot });
+    return true;
+  }
+
+  private finishRefillFromHand(shelf: number, slot: number, productId: string): number {
+    const stack = this.carrying.find((entry) => entry.productId === productId);
+    if (!stack) return 0;
+    const available = Math.min(stack.qty, warehouseQty(this.state, productId));
+    const target = this.state.shelves[shelf]?.[slot];
+    if (!target || (target.productId !== productId && target.qty > 0)) return 0;
+    const qty = target.productId === productId
+      ? refillSlotLimited(this.state, shelf, slot, available)
+      : assignSlotLimited(this.state, shelf, slot, productId, available);
+    stack.qty = Math.min(stack.qty - qty, warehouseQty(this.state, productId));
+    if (stack.qty <= 0) dropStack(this.carrying, productId);
+    return qty;
+  }
+
   refillZone(zone: Exclude<Category, 'counter'>): boolean {
     if (this.zoneRefills.some((r) => r.zone === zone)) return false;
     const slots: { shelf: number; slot: number }[] = [];
@@ -1397,23 +1436,26 @@ export class DaySession {
   }
 
   /**
-   * Khách tiếp theo pha chế viên nên pha cho: khách đang xếp hàng (chưa tới lượt) hoặc khách đầu hàng đang chờ ly,
+   * Khách tiếp theo phù hợp trạm của nhân viên: khách đang xếp hàng hoặc khách đầu hàng đang chờ ly,
    * gọi ly pha ngay được và chưa có ai đang pha. Ưu tiên theo thứ tự hàng của người chơi rồi tới hàng thu ngân.
    */
-  private brewTarget(): { customer: Customer; line: OrderLine; recipe: RecipeDef; variant: string } | null {
+  private brewTarget(s: Staff): { customer: Customer; line: OrderLine; recipe: RecipeDef; variant: string } | null {
     for (const c of [...this.queue, ...this.lanes.flatMap((lane) => lane.queue)]) {
       const waiting = c.status === 'waiting' || (c === this.front && c.status === 'scanning' && !c.counterRequestResolved);
       if (!waiting || this.prebrewed.has(c.id) || this.isBrewingFor(c.id)) continue;
       const line = c.order.find((l) => l.counterLine && l.picked === 0 && l.missing === 0);
       if (!line || !this.canBrewLine(line)) continue;
-      return { customer: c, line, recipe: recipeByOutput(line.productId)!, variant: line.variantId ?? BASE_VARIANT };
+      const recipe = recipeByOutput(line.productId)!;
+      if (s.role === 'foam_specialist' && recipe.station !== 'foam_machine') continue;
+      if (s.role === 'tea_barista' && recipe.station !== 'tea_bar') continue;
+      return { customer: c, line, recipe, variant: line.variantId ?? BASE_VARIANT };
     }
     return null;
   }
 
   /** Pha chế viên nhận pha một ly cho khách đang chờ: trừ nguyên liệu ngay, ly xong sau thời gian pha của người đó. */
   private startStaffBrew(s: Staff, w: Worker): boolean {
-    const target = this.brewTarget();
+    const target = this.brewTarget(s);
     if (!target || !brewCup(this.state, target.recipe.id, target.variant || undefined).ok) return false;
     const total = target.recipe.prepSeconds * timeFactor(s, w.tired);
     w.task = `brew:${target.customer.id}`;
@@ -1890,14 +1932,16 @@ export class DaySession {
       if (!this.closed && !this.isOnShift(s)) continue;
       w.idle -= dt;
       if (w.idle > 0) continue;
-      if (s.role === 'barista' && this.startStaffBrew(s, w)) continue;
-      if (s.role === 'chef' || s.role === 'barista') {
+      if ((s.role === 'barista' || s.role === 'tea_barista' || s.role === 'foam_specialist') && this.startStaffBrew(s, w)) continue;
+      if (s.role === 'chef' || s.role === 'barista' || s.role === 'tea_barista' || s.role === 'foam_specialist') {
         const category = s.role === 'chef' ? 'food' : 'beverage';
         const recipe = DATA.recipes.find((item) => item.category === category && item.unlockLevel <= this.state.level
-          && !isMadeToOrder(item) && this.state.activeRecipes.includes(item.id) && this.state.fixtures.some((f) => f.type === item.station)
+          && !isMadeToOrder(item) && (s.role !== 'foam_specialist' || item.station === 'foam_machine')
+          && (s.role !== 'tea_barista' || item.station === 'tea_bar')
+          && this.state.activeRecipes.includes(item.id) && this.state.fixtures.some((f) => f.type === item.station)
           && Object.entries(item.ingredients).every(([id, qty]) => this.state.warehouse.reduce((n, lot) => n + (lot.productId === id ? lot.qty : 0), 0) >= qty));
         // Pha chế viên kiểm tra khách chờ ly thường xuyên hơn để kịp pha theo đơn.
-        if (!recipe) { w.idle = s.role === 'barista' ? Math.min(DATA.balance.staff.refillCheckSeconds, 1) : DATA.balance.staff.refillCheckSeconds; continue; }
+        if (!recipe) { w.idle = s.role === 'barista' || s.role === 'tea_barista' || s.role === 'foam_specialist' ? Math.min(DATA.balance.staff.refillCheckSeconds, 1) : DATA.balance.staff.refillCheckSeconds; continue; }
         w.task = `cook:${recipe.id}`;
         w.left = recipe.prepSeconds * timeFactor(s, w.tired);
         continue;

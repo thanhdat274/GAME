@@ -148,8 +148,8 @@ describe('mở tiệm theo loại, giới hạn chuỗi', () => {
     expect(unlockedProducts(state.level, state).length).toBeGreaterThan(20);
   });
 
-  it('giới hạn số tiệm đọc từ balance.json › chain.maxStores (mặc định 12)', () => {
-    expect(DATA.balance.chain.maxStores).toBe(12);
+  it('giới hạn số tiệm đọc từ balance.json › chain.maxStores (mặc định 11)', () => {
+    expect(DATA.balance.chain.maxStores).toBe(11);
     const before = DATA.balance.chain.maxStores;
     DATA.balance.chain.maxStores = 2;
     try {

@@ -5,6 +5,8 @@
 
 import { unreachableDoors } from './cityWalk';
 
+export const ACTIVE_CITY_BRANCH_IDS = ['market', 'school', 'industrial'] as const;
+
 export interface TiledProperty { name: string; type?: string; value: string | number | boolean }
 
 export interface TiledTileLayer { name: string; type: 'tilelayer'; width: number; height: number; data: number[] }
@@ -81,6 +83,7 @@ export function parseCityMap(json: TiledMap): CityMap {
     if (t.properties?.some((p) => p.name === 'promenade' && p.value === true)) promenade.add(tileset.firstgid + t.id);
     if (t.properties?.some((p) => p.name === 'light' && p.value === true)) lights.add(tileset.firstgid + t.id);
   }
+  const activeIds = new Set<string>(['main', ...ACTIVE_CITY_BRANCH_IDS]);
   return {
     cols: json.width,
     rows: json.height,
@@ -91,7 +94,7 @@ export function parseCityMap(json: TiledMap): CityMap {
     promenade,
     lights,
     maxGid: tileset ? tileset.firstgid + tileset.tilecount - 1 : 0,
-    lots: lots.objects.map((o) => ({
+    lots: lots.objects.filter((o) => activeIds.has(String(prop(o, 'storeId') ?? '')) || !prop(o, 'storeId')).map((o) => ({
       id: o.id,
       name: o.name,
       storeId: String(prop(o, 'storeId') ?? ''),

@@ -5,6 +5,7 @@
 import type { CityMap } from './cityMap';
 import type { Cell } from './cityWalk';
 import { DATA, product, type Category, type CustomerType } from './data';
+import { ACTIVE_BRANCH_IDS } from './branches';
 import { shopTypeOf } from './shopTypes';
 import { storeView, type GameState, type Slot } from './state';
 
@@ -54,7 +55,9 @@ export function stockRatio(slots: readonly Slot[]): number {
 /** Các tiệm đã mở và có lô đất trên bản đồ, kèm thông tin để tính mức thu hút. */
 export function cityShops(state: GameState, map: CityMap): ShopTarget[] {
   const shops: ShopTarget[] = [];
+  const allowed = new Set<string>(['main', ...ACTIVE_BRANCH_IDS]);
   for (const store of state.stores) {
+    if (!allowed.has(store.id)) continue;
     const lot = map.lots.find((l) => l.storeId === store.id);
     if (!lot) continue;
     const view = storeView(state, store.id);

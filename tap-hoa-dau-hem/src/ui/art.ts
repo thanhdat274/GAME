@@ -308,7 +308,27 @@ export function bill(scene: Phaser.Scene, x: number, y: number, v: number, w = 7
   g.lineStyle(2, 0xffffff, 0.55).strokeRoundedRect(-w / 2 + 3, -h / 2 + 3, w - 6, h - 6, 3);
   g.fillStyle(0xffffff, 0.35).fillCircle(-w / 2 + 14, 0, h / 4);
   const t = txt(scene, 6, 0, billLabel(v), { size: Math.round(h * 0.42), bold: true, color: HEX.white, origin: [0.5, 0.5], stroke: '#00000055' });
-  return scene.add.container(x, y, [g, t]).setSize(w, h);
+  return scene.add.container(x, y, [g, t]).setSize(w, h).setData('billSignature', `${v}:${w}:${h}`);
+}
+
+/** Pooled variant for frequently refreshed gameplay UI such as the cash tray. */
+export function updateBill(target: Phaser.GameObjects.Container, v: number, w = 76, h = 38): void {
+  const signature = `${v}:${w}:${h}`;
+  if (target.getData('billSignature') === signature) {
+    target.setVisible(true);
+    return;
+  }
+  const g = target.getAt(0) as Phaser.GameObjects.Graphics | undefined;
+  const t = target.getAt(1) as Phaser.GameObjects.Text | undefined;
+  if (!g || !t) return;
+  const c = BILL_COLORS[v] ?? C.grey;
+  g.clear();
+  g.fillStyle(0x000000, 0.2).fillRoundedRect(-w / 2, -h / 2 + 2, w, h, 5);
+  g.fillStyle(c, 1).fillRoundedRect(-w / 2, -h / 2, w, h, 5);
+  g.lineStyle(2, 0xffffff, 0.55).strokeRoundedRect(-w / 2 + 3, -h / 2 + 3, w - 6, h - 6, 3);
+  g.fillStyle(0xffffff, 0.35).fillCircle(-w / 2 + 14, 0, h / 4);
+  t.setText(billLabel(v)).setFontSize(Math.round(h * 0.42)).setPosition(6, 0);
+  target.setSize(w, h).setVisible(true).setData('billSignature', signature);
 }
 
 /** Tường, sàn, cửa ra vào của tiệm (bên trong). */
@@ -636,7 +656,7 @@ export function drawStorefront(scene: Phaser.Scene, cx = W / 2, baseY = 352, min
   streetLight.fillGradientStyle(0xffe599, 0xffe599, 0x473b35, 0x473b35, 0.12).fillRect(doorX - 20, baseY, doorW + 40, 90);
 
   // 8. Chậu cây kiểng trầu bà xanh mát bên góc trái
-  const plantX = 46;
+  const plantX = cx - 134;
   const plantY = porchY - 6;
   g.fillStyle(0xc2623e, 1).fillTriangle(plantX - 10, plantY, plantX + 10, plantY, plantX, plantY + 18);
   g.fillStyle(0xd97550, 1).fillRoundedRect(plantX - 12, plantY - 4, 24, 5, 2);
@@ -657,7 +677,7 @@ export function drawStorefront(scene: Phaser.Scene, cx = W / 2, baseY = 352, min
   });
 
   // 9. Chú mèo tam thể ngủ trước thềm (Interactive Sleeping Calico Cat)
-  const catX = 302;
+  const catX = cx + 122;
   const catY = porchY - 2;
 
   g.fillStyle(0xccbb90, 1).fillRoundedRect(catX - 22, catY - 4, 44, 20, 6);

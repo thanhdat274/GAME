@@ -8,7 +8,7 @@ import { ZOOM } from './theme';
  */
 export interface KineticOptions {
   /** Điểm chạm (tọa độ thế giới) có nằm trong vùng cuộn không. */
-  inView: (worldY: number) => boolean;
+  inView: (worldY: number, worldX?: number) => boolean;
   /** Vị trí cuộn hiện tại (0 = đầu danh sách). */
   get: () => number;
   set: (value: number) => void;
@@ -30,13 +30,13 @@ export class KineticScroll {
     const input = scene.input;
     const enabled = () => (o.enabled ? o.enabled() : true);
     const axis = (p: Phaser.Input.Pointer) => (o.horizontal ? p.worldX : p.worldY);
-    const down = (p: Phaser.Input.Pointer) => this.core.down(axis(p), eventTime(p, 'down'), enabled() && o.inView(p.worldY));
+    const down = (p: Phaser.Input.Pointer) => this.core.down(axis(p), eventTime(p, 'down'), enabled() && o.inView(p.worldY, p.worldX));
     // Dùng thời điểm của sự kiện chạm (không phải lúc xử lý): trình duyệt có thể gom nhiều lần chạm vào một khung hình.
     const move = (p: Phaser.Input.Pointer) => { if (p.isDown) this.core.move(axis(p), eventTime(p, 'move')); };
     const up = (p: Phaser.Input.Pointer) => this.core.up(eventTime(p, 'up'));
     const wheel = (p: Phaser.Input.Pointer, _o: unknown, dx: number, dy: number) => {
       // Cuộn ngang: lăn chuột thường (dy) cũng kéo dải sang ngang; vuốt ngang trên touchpad (dx) cũng được.
-      if (enabled() && o.inView(p.worldY)) this.core.wheel(o.horizontal && Math.abs(dx) > Math.abs(dy) ? dx : dy);
+      if (enabled() && o.inView(p.worldY, p.worldX)) this.core.wheel(o.horizontal && Math.abs(dx) > Math.abs(dy) ? dx : dy);
     };
     const update = (_t: number, deltaMs: number) => this.core.tick(deltaMs);
     input.on('pointerdown', down);
@@ -89,13 +89,15 @@ function eventTime(p: Phaser.Input.Pointer, kind: 'down' | 'move' | 'up'): numbe
  * Mask chỉ che hình chứ không che vùng chạm: không cắt thì món đã cuộn ra ngoài khung vẫn nuốt chạm
  * của nút nằm cùng chỗ (vd. tab Nhập hàng / Bày kệ / Tiệm phía trên kệ).
  */
-export function clipInteractive(obj: Phaser.GameObjects.Container, inView: (worldY: number) => boolean): void {
+export function clipInteractive(obj: Phaser.GameObjects.Container, inView: (worldY: number, worldX?: number) => boolean): void {
   obj.setInteractive({
     hitArea: new Phaser.Geom.Rectangle(0, 0, obj.width, obj.height),
     hitAreaCallback: (area: Phaser.Geom.Rectangle, x: number, y: number) => {
       if (!Phaser.Geom.Rectangle.Contains(area, x, y)) return false;
       const m = obj.getWorldTransformMatrix();
-      return inView(m.ty + (y - obj.displayOriginY) * m.scaleY);
+      const wy = m.ty + (y - obj.displayOriginY) * m.scaleY;
+      const wx = m.tx + (x - obj.displayOriginX) * m.scaleX;
+      return inView(wy, wx);
     },
     useHandCursor: true,
   });

@@ -3,7 +3,7 @@ import { askable, type Customer } from '../core/customers';
 import { orderLineName } from '../core/customCups';
 import { DATA, furniture, product, type CustomerType } from '../core/data';
 import type { DaySession } from '../core/day';
-import { findPath, fixtureCells, walkableGrid, type Cell } from '../core/layout';
+import { findPath, fixtureCells, footprint, walkableGrid, type Cell } from '../core/layout';
 import { clampCam, maxZoom, panBy, toLocal, toScreen, zoomAt, type MapCam, type Rect } from '../core/mapView';
 import { customerGoal, goalCells, goalKey, laneCounter, queueLine, staffGoal, type Goal } from '../core/liveMap';
 import { roleDef } from '../core/staff';
@@ -15,8 +15,8 @@ import { customerLook, customerSprite, productIcon, productName, setWalkFrame, s
 import { cellAt, drawFixture, drawFloor, type FloorGeom } from './floorPlan';
 import { ZONE_NAMES } from './shelves';
 import { play } from './sound';
-import { Button, panel } from './widgets';
-import { C, H, HEX, W, ZOOM, txt } from './theme';
+import { Button, dialog, panel } from './widgets';
+import { C, H, HEX, W, ZOOM, txt, emoji } from './theme';
 
 /** Tốc độ đi trên sơ đồ (ô/giây, theo thời gian game). */
 const SPEED = { customer: 3.2, staff: 3.6, player: DATA.balance.topDown.playerTilesPerSecond, flee: 6 } as const;
@@ -45,6 +45,8 @@ export interface LiveMapOptions {
   onSwitchMode?: () => void;
   /** Nấu kỹ bằng mini-game (màn Bếp phủ lên, tiệm tạm dừng). */
   onCook?: (recipeId: string) => void;
+  /** Optional interaction for the presentation-only phone drawn on the counter. */
+  onRestock?: () => void;
 }
 
 interface Agent {
@@ -71,6 +73,7 @@ interface Agent {
   spread: { x: number; y: number };
   customer?: Customer;
   staffId?: string;
+  receivedFromDoor?: boolean;
 }
 
 interface SlotView {
@@ -118,6 +121,12 @@ export class LiveMap {
   private sheetFor: number | null = null;
   /** Kệ người chơi vừa tự đóng bảng nạp (không mở lại cho tới khi đi chỗ khác). */
   private sheetDismissed: number | null = null;
+  private phoneTarget = false;
+  private holdingMarker: Phaser.GameObjects.Text | null = null;
+  private holdingMarkerCount = -1;
+  private hoverTip: Phaser.GameObjects.Container | null = null;
+  private hoverTipUid: number | null = null;
+  private hoverOutline!: Phaser.GameObjects.Graphics;
   private slotViews: SlotView[] = [];
   private note = '';
   private noteLeft = 0;
@@ -142,23 +151,34 @@ export class LiveMap {
     this.mode = opts.mode;
     const top = opts.top ?? 50;
     const bottom = opts.bottom ?? H;
+    const landscape = W > H;
     if (this.mode === 'watch') {
-      const cell = 40;
-      this.geom = { gx: (W - DATA.land.cols * cell) / 2, gy: 64, cell };
-      this.personH = 30;
+      const cell = landscape ? 26 : 40;
+      this.geom = { gx: (W - DATA.land.cols * cell) / 2, gy: landscape ? 42 : 64, cell };
+      this.personH = landscape ? 22 : 30;
     } else {
-      // Chừa cột phải cho các nút nổi của màn bán (nhiệm vụ, điện thoại) và dải trạng thái phía dưới.
-      const cell = Math.floor(Math.min((W - 52) / DATA.land.cols, (bottom - top - 44) / DATA.land.rows));
-      this.geom = { gx: 6, gy: top + 4, cell };
-      this.personH = Math.round(cell * 0.75);
+      if (landscape) {
+        // Landscape D10: Alley on left (0..124), Map grid in center (124..394), Rail on right (404..W)
+        const cell = Math.floor(Math.min(27, (bottom - top - 12) / DATA.land.rows));
+        const gy = top + Math.floor((bottom - top - DATA.land.rows * cell) / 2);
+        const gx = 124;
+        this.geom = { gx, gy, cell };
+        this.personH = Math.round(cell * 0.78);
+      } else {
+        // Chừa cột phải cho các nút nổi của màn bán (nhiệm vụ, điện thoại) và dải trạng thái phía dưới.
+        const cell = Math.floor(Math.min((W - 52) / DATA.land.cols, (bottom - top - 44) / DATA.land.rows));
+        this.geom = { gx: 6, gy: top + 4, cell };
+        this.personH = Math.round(cell * 0.75);
+      }
     }
     this.infoY = this.geom.gy + DATA.land.rows * this.geom.cell + 6;
     const { gx, gy, cell } = this.geom;
-    this.content = { x: gx, y: gy, w: DATA.land.cols * cell, h: DATA.land.rows * cell };
+    this.content = { x: landscape ? 0 : gx, y: gy, w: (landscape ? gx : 0) + DATA.land.cols * cell, h: DATA.land.rows * cell };
     this.view = this.mode === 'watch'
       ? { x: 10, y: gy - 2, w: W - 20, h: DATA.land.rows * cell + 4 }
-      // Cột phải (46 điểm) dành cho nút nổi; dải trạng thái ngay dưới sơ đồ.
-      : { x: 0, y: top, w: W - 46, h: this.infoY - 3 - top };
+      : landscape
+        ? { x: 0, y: top, w: 404, h: bottom - top }
+        : { x: 0, y: top, w: W - 46, h: this.infoY - 3 - top };
     this.camMax = maxZoom(cell);
     this.root = s.add.container(0, 0).setDepth(opts.depth ?? 5000).setVisible(false);
     if (this.mode === 'watch') {
@@ -180,13 +200,15 @@ export class LiveMap {
       bg.on('pointerdown', (p: Phaser.Input.Pointer) => this.touchDown(p));
       bg.on('pointerup', (p: Phaser.Input.Pointer) => { if (!this.gestured && p.getDistance() < 12) this.tapScreen(p.worldX, p.worldY); });
       this.root.add(bg);
-      if (opts.onSwitchMode) {
+      if (opts.onSwitchMode && !landscape) {
         this.root.add(new Button(s, W - 42, bottom - 20, { w: 76, h: 28, label: '👀 Nhìn ngang', size: 10, color: C.wood, onTap: () => opts.onSwitchMode?.() }));
       }
     }
     this.fixtureLayer = s.add.container(0, 0);
     this.people = s.add.container(0, 0);
     this.fx = s.add.container(0, 0);
+    this.hoverOutline = s.add.graphics().setDepth(20);
+    this.fx.add(this.hoverOutline);
     this.info = s.add.container(0, 0);
     this.sheet = s.add.container(0, 0);
     this.world = s.add.container(0, 0, [this.fixtureLayer, this.people, this.fx]);
@@ -195,12 +217,13 @@ export class LiveMap {
     this.root.add([this.world, this.info, this.sheet]);
     if (this.mode === 'play') {
       // Nút phóng cho ai không tiện kéo 2 ngón / lăn chuột.
-      const bx = W - 23;
-      const mk = (y: number, label: string, onTap: () => void) => new Button(s, bx, y, { w: 38, h: 30, label, size: 14, color: C.wood, onTap });
+      // Bản ngang đặt ở mép hành lang hẻm (x = 104) để không che kệ hàng và khách mua bên trong tiệm.
+      const bx = landscape ? 104 : W - 23;
+      const mk = (y: number, label: string, onTap: () => void) => new Button(s, bx, y, { w: landscape ? 30 : 38, h: landscape ? 24 : 30, label, size: landscape ? 11 : 14, color: C.wood, onTap });
       this.zoomBtns = [
-        mk(top + 22, '+', () => this.zoomBy(1.4)),
-        mk(top + 58, '−', () => this.zoomBy(1 / 1.4)),
-        mk(top + 94, '1x', () => this.setCam({ zoom: 1, tx: 0, ty: 0 })),
+        mk(top + 16, '+', () => this.zoomBy(1.4)),
+        mk(top + 42, '−', () => this.zoomBy(1 / 1.4)),
+        mk(top + 68, '1x', () => this.setCam({ zoom: 1, tx: 0, ty: 0 })),
       ];
       this.root.add(this.zoomBtns);
     }
@@ -287,6 +310,7 @@ export class LiveMap {
   /** Gọi mỗi khung hình từ ShopScene. `gameDt` = giây mô phỏng đã chạy (đã nhân tốc độ quản lý). */
   update(gameDt: number): void {
     if (!this.root.visible) return;
+    if (this.mode === 'play') this.updateHoldingMarker();
     this.sync(gameDt, false);
     this.walkAcc += gameDt;
     if (this.walkAcc >= 0.15) {
@@ -341,9 +365,22 @@ export class LiveMap {
       if (!a) a = this.addAgent(id, customerLook(c), SPEED.customer, snap ? null : DATA.land.door);
       a.customer = c;
       a.speed = c.status === 'fleeing' ? SPEED.flee : SPEED.customer;
-      if (c.status === 'fleeing' && !a.tag) {
-        a.tag = txt(this.scene, 0, 0, this.mode === 'play' ? '🚨' : '🏃', { size: 12, emoji: true, origin: [0.5, 1] });
-        this.people.add(a.tag);
+      if (c.status === 'fleeing') {
+        if (!a.tag) {
+          a.tag = txt(this.scene, 0, 0, this.mode === 'play' ? '🚨' : '🏃', { size: 12, emoji: true, origin: [0.5, 1] });
+          this.people.add(a.tag);
+        } else {
+          a.tag.setText(this.mode === 'play' ? '🚨' : '🏃');
+        }
+      } else if (c.patience / Math.max(1, c.patienceMax) < 0.28) {
+        if (!a.tag) {
+          a.tag = txt(this.scene, 0, 0, '😤', { size: 11, emoji: true, origin: [0.5, 1] });
+          this.people.add(a.tag);
+        } else {
+          a.tag.setText('😤');
+        }
+      } else if (a.tag?.text === '😤') {
+        a.tag.setText('');
       }
       this.setGoal(a, customerGoal(this.session, c), snap);
     }
@@ -359,10 +396,24 @@ export class LiveMap {
       a.staffId = st.id;
       const lane = this.session.lanes.findIndex((l) => l.staffId === st.id);
       const task = this.session.workerOf(st.id)?.task ?? null;
+      if (task !== 'receive') {
+        a.receivedFromDoor = false;
+      } else if (!a.receivedFromDoor) {
+        const door = DATA.land.door;
+        if (Math.hypot(a.pos.x - door.x, a.pos.y - door.y) <= 1.0) {
+          a.receivedFromDoor = true;
+        }
+      }
+      a.tag?.setText(task === 'receive' ? '📦' : roleDef(st.role).icon);
       const fetchedCustomer = task?.startsWith('fetch:')
         ? [...this.session.queue, ...this.session.lanes.flatMap((entry) => entry.queue)].find((c) => c.id === Number(task.slice(6)))
         : undefined;
-      this.setGoal(a, fetchedCustomer ? customerGoal(this.session, fetchedCustomer) : staffGoal(state, task, lane >= 0 ? lane + 1 : null, st.role), snap);
+      const goal = fetchedCustomer
+        ? customerGoal(this.session, fetchedCustomer)
+        : task === 'receive' && !a.receivedFromDoor
+          ? { kind: 'door' as const }
+          : staffGoal(state, task, lane >= 0 ? lane + 1 : null, st.role);
+      this.setGoal(a, goal, snap);
     }
     // Người chơi.
     const playerId = 'player';
@@ -421,6 +472,10 @@ export class LiveMap {
       this.toCounter = false;
       this.playerGoal = { kind: 'behind', lane: 0 };
       this.setGoal(me, this.playerGoal, false);
+      if (this.phoneTarget) {
+        this.phoneTarget = false;
+        this.opts.onRestock?.();
+      }
       return;
     }
     if (this.sheetFor !== f.uid && this.sheetDismissed !== f.uid) this.openSheet(f);
@@ -625,28 +680,99 @@ export class LiveMap {
     // WebGL draws one texture instead of a Graphics + image + label per fixture
     // on every frame (which becomes costly in expanded stores).
     const layers: Phaser.GameObjects.GameObject[] = [];
+    const counters: Fixture[] = [];
     const floor = drawFloor(this.scene, this.geom, state.land).setScale(ZOOM);
     layers.push(floor);
     const view = storeView(state)!;
     for (const f of state.fixtures) {
       const sel = this.selected?.kind === 'fixture' && this.selected.uid === f.uid;
-      const stock = sellsGoods(furniture(f.type).kind) ? fixtureStockLevel(fixtureInfo(view, f)) : null;
-      const fixture = drawFixture(this.scene, this.geom, f, { selected: sel, stock });
+      const info = fixtureInfo(view, f);
+      const stock = sellsGoods(furniture(f.type).kind) ? fixtureStockLevel(info) : null;
+      const alert = stock === 'empty' || (info && 'lines' in info && info.lines.some((line) => {
+        const slot = f.shelf === undefined ? null : state.shelves[f.shelf]?.find((entry) => entry.productId === line.productId);
+        return slot?.qty && slotFreshness(slot, state.day) === 'today';
+      }));
+      const fixture = drawFixture(this.scene, this.geom, f, { selected: sel, stock, alert });
+      if (this.mode === 'play' && furniture(f.type).kind === 'counter') counters.push(f);
       // Keep world coordinates in the doubled-resolution bake texture.
       fixture.setPosition(fixture.x * ZOOM, fixture.y * ZOOM).setScale(ZOOM);
       layers.push(fixture);
     }
-    const textureW = DATA.land.cols * this.geom.cell * ZOOM;
+    const landscape = W > H;
+    const originX = landscape ? 0 : this.geom.gx;
+    const textureW = (landscape ? this.geom.gx + DATA.land.cols * this.geom.cell : DATA.land.cols * this.geom.cell) * ZOOM;
     const textureH = DATA.land.rows * this.geom.cell * ZOOM;
-    const baked = this.scene.add.renderTexture(this.geom.gx, this.geom.gy, textureW, textureH)
+
+    if (landscape) {
+      const alleyG = this.scene.add.graphics();
+      const gy = this.geom.gy * ZOOM;
+      const gx = this.geom.gx * ZOOM;
+      const totalH = textureH;
+      alleyG.fillStyle(0x28201a, 1).fillRect(0, gy, 48 * ZOOM, totalH);
+      alleyG.fillStyle(0x7c432d, 1).fillRect(48 * ZOOM, gy, gx - 48 * ZOOM, totalH);
+      alleyG.fillStyle(0x4a453f, 1).fillRect(46 * ZOOM, gy, 3 * ZOOM, totalH);
+      alleyG.lineStyle(1, 0x5a2d1d, 0.4);
+      for (let y = gy; y < gy + totalH; y += 14 * ZOOM) alleyG.lineBetween(48 * ZOOM, y, gx, y);
+      for (let x = 48 * ZOOM; x < gx; x += 18 * ZOOM) alleyG.lineBetween(x, gy, x, gy + totalH);
+      const doorY = (this.geom.gy + DATA.land.door.y * this.geom.cell) * ZOOM;
+      const cellH = this.geom.cell * ZOOM;
+      alleyG.fillStyle(0xb53b2a, 1).fillRect(gx - 14 * ZOOM, doorY + 2 * ZOOM, 14 * ZOOM, cellH - 4 * ZOOM);
+      layers.unshift(alleyG);
+
+      const plant1 = emoji(this.scene, 108 * ZOOM, (this.geom.gy + 14) * ZOOM, '🪴', 13 * ZOOM);
+      const plant2 = emoji(this.scene, 108 * ZOOM, (this.geom.gy + DATA.land.rows * this.geom.cell - 16) * ZOOM, '🪴', 13 * ZOOM);
+      const moto = emoji(this.scene, 24 * ZOOM, (this.geom.gy + 110) * ZOOM, '🛵', 18 * ZOOM);
+      const lamp = emoji(this.scene, 22 * ZOOM, (this.geom.gy + 24) * ZOOM, '🏮', 15 * ZOOM);
+      layers.push(plant1, plant2, moto, lamp);
+    }
+
+    const baked = this.scene.add.renderTexture(originX, this.geom.gy, textureW, textureH)
       .setOrigin(0, 0)
       .setScale(1 / ZOOM);
     // Keep the texture to the map bounds; a screen-sized transparent texture
     // would trade draw calls for unnecessary full-screen overdraw.
-    const content = this.scene.add.container(-this.geom.gx * ZOOM, -this.geom.gy * ZOOM, layers);
+    const content = this.scene.add.container(-originX * ZOOM, -this.geom.gy * ZOOM, layers);
     baked.draw(content);
     content.destroy(true);
     this.fixtureLayer.add(baked);
+    for (const f of counters) {
+      const { w } = footprint(f.type, f.rot);
+      const phone = this.scene.add.text(this.geom.gx + (f.x + w) * this.geom.cell - 12, this.geom.gy + (f.y + 0.5) * this.geom.cell, '☎️', { fontFamily: 'sans-serif', fontSize: '12px', padding: { top: 2, bottom: 2 } })
+        .setOrigin(0.5).setDepth(3).setInteractive({ useHandCursor: true });
+      phone.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        if (pointer.getDistance() >= 10 || this.session.paused) return;
+        this.phoneTarget = true;
+        const { x, y } = fixtureCells(f)[0];
+        this.onTapPlay(this.geom.gx + (x + 0.5) * this.geom.cell, this.geom.gy + (y + 0.5) * this.geom.cell);
+      });
+      this.fixtureLayer.add(phone);
+    }
+  }
+
+  /** Presentation-only pile for stock that the existing receiveDeliveries flow leaves in holding. */
+  private updateHoldingMarker(): void {
+    const lots = this.session.state.holding;
+    const count = lots.reduce((sum, lot) => sum + lot.qty, 0);
+    if (count === this.holdingMarkerCount && (count === 0 || this.holdingMarker?.active)) return;
+    this.holdingMarkerCount = count;
+    this.holdingMarker?.destroy();
+    this.holdingMarker = null;
+    if (!count) return;
+    const door = DATA.land.door;
+    const x = this.geom.gx + (door.x + 0.65) * this.geom.cell;
+    const y = this.geom.gy + (door.y + 0.65) * this.geom.cell;
+    const marker = txt(this.scene, x, y, `📦 ×${count}`, { size: 9, bold: true, color: HEX.cream, origin: [0.5, 0.5] })
+      .setBackgroundColor('#6b4220dd').setPadding(3, 2, 3, 2).setDepth(5).setInteractive({ useHandCursor: true });
+    marker.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.getDistance() >= 10) return;
+      const lines = this.session.state.holding.map((lot) => {
+        const expiry = lot.exp === null ? 'không hạn' : `hạn ngày ${lot.exp}`;
+        return `📦 ${product(lot.productId).name} ×${lot.qty} · ${expiry}`;
+      });
+      dialog(this.scene, { icon: '📦', title: 'Hàng chờ cạnh cửa', body: lines.join('\n'), buttons: [{ label: 'Đóng', color: C.grey, onTap: () => undefined }], width: 300 });
+    });
+    this.holdingMarker = marker;
+    this.fx.add(marker);
   }
 
   private agentNear(worldX: number, worldY: number): Agent | null {
@@ -737,7 +863,12 @@ export class LiveMap {
 
   private bindCamInput(): void {
     const input = this.scene.input;
-    const move = (p: Phaser.Input.Pointer) => { if (this.root.visible) this.touchMove(p); };
+    const move = (p: Phaser.Input.Pointer) => {
+      if (!this.root.visible) return;
+      this.touchMove(p);
+      if (this.mode === 'play' && !p.isDown && !p.wasTouch) this.showHoverCell(p.worldX, p.worldY);
+      if (this.mode === 'play' && !p.isDown && !p.wasTouch) this.showFixtureTooltip(p.worldX, p.worldY);
+    };
     const up = (p: Phaser.Input.Pointer) => this.touchUp(p);
     const wheel = (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
       if (!this.root.visible || !this.inView(p.worldX, p.worldY)) return;
@@ -755,6 +886,46 @@ export class LiveMap {
       input.off('pointerupoutside', up);
       input.off('wheel', wheel);
     });
+  }
+
+  /** Pixel crisp pointer target for desktop; touch uses the short-lived tap marker instead. */
+  private showHoverCell(screenX: number, screenY: number): void {
+    const g = this.hoverOutline;
+    g.clear();
+    if (!this.inView(screenX, screenY)) return;
+    const local = toLocal(this.cam, screenX, screenY);
+    const cell = cellAt(this.geom, local.x, local.y);
+    if (!cell || cell.x < 0 || cell.y < 0 || cell.x >= DATA.land.cols || cell.y >= DATA.land.rows) return;
+    const { gx, gy, cell: size } = this.geom;
+    g.lineStyle(1.5, 0xffd35a, 0.95).strokeRect(gx + cell.x * size + 1, gy + cell.y * size + 1, size - 2, size - 2);
+    g.fillStyle(0xffd35a, 0.09).fillRect(gx + cell.x * size + 1, gy + cell.y * size + 1, size - 2, size - 2);
+  }
+
+  private showFixtureTooltip(screenX: number, screenY: number): void {
+    if (!this.inView(screenX, screenY)) { this.hoverTip?.destroy(); this.hoverTip = null; this.hoverTipUid = null; return; }
+    const local = toLocal(this.cam, screenX, screenY);
+    const cell = cellAt(this.geom, local.x, local.y);
+    const fixture = cell ? this.fixtureAtCell(cell) : null;
+    if (!fixture) { this.hoverTip?.destroy(); this.hoverTip = null; this.hoverTipUid = null; return; }
+    if (fixture.uid === this.hoverTipUid) { this.hoverTip?.setPosition(Math.min(screenX + 12, W - 190), Math.max(54, screenY - 70)); return; }
+    this.hoverTip?.destroy();
+    const info = fixtureInfo(storeView(this.session.state)!, fixture);
+    const title = info.shelf !== undefined ? `${info.kind === 'shelf' ? 'Kệ' : info.name} ${info.shelf + 1}` : info.name;
+    const details = info.lines.slice(0, 3).map((line) => {
+      const slot = fixture.shelf === undefined ? null : this.session.state.shelves[fixture.shelf]?.find((entry) => entry.productId === line.productId);
+      const freshness = slot?.qty ? slotFreshness(slot, this.session.state.day) : null;
+      const expiry = freshness === 'today' ? ' · hạn hôm nay' : '';
+      return `${line.name} ×${line.qty} · ${formatMoney(line.price)}${expiry}`;
+    });
+    const content = details.length ? details.join('\n') : info.note ?? 'Chưa có món';
+    const tip = this.scene.add.container(Math.min(screenX + 12, W - 190), Math.max(54, screenY - 70));
+    tip.add(this.scene.add.rectangle(0, 0, 178, 62, C.panel, 0.98).setOrigin(0).setStrokeStyle(2, C.wood));
+    tip.add(txt(this.scene, 7, 4, `${info.icon} ${title}`, { size: 10, bold: true, wrap: 164 }));
+    tip.add(txt(this.scene, 7, 21, content, { size: 8.5, color: HEX.muted, wrap: 164 }));
+    tip.setDepth(9000);
+    this.root.add(tip);
+    this.hoverTip = tip;
+    this.hoverTipUid = fixture.uid;
   }
 
   private onTap(worldX: number, worldY: number): void {
@@ -782,6 +953,7 @@ export class LiveMap {
     if (f) {
       const def = furniture(f.type);
       if (def.kind === 'counter') { this.walkToCounter(); this.marker(cell); return; }
+      this.phoneTarget = false;
       if (!goalCells(this.session.state, { kind: 'fixture', uid: f.uid }, this.grid, (l) => this.line(l))) { this.say('Không có lối tới đó'); return; }
       this.toCounter = false;
       this.closeSheet();
@@ -790,11 +962,47 @@ export class LiveMap {
       this.marker(cell);
       return;
     }
+    this.phoneTarget = false;
     if (!this.grid[cell.y * DATA.land.cols + cell.x]) { this.say('Không đi vào đó được'); return; }
     this.toCounter = false;
     this.closeSheet();
     this.playerGoal = { kind: 'cell', x: cell.x, y: cell.y };
     this.marker(cell);
+  }
+
+  /** Keyboard adapter for desktop play; routes through the same tile hit-test as touch. */
+  handlePlayKey(key: string): boolean {
+    if (this.mode !== 'play' || !this.root.visible || this.session.paused || this.sheetFor !== null) return false;
+    const normalized = key.toLowerCase();
+    if (normalized === 'e' || normalized === ' ' || normalized === 'space') {
+      const me = this.agents.get('player');
+      if (!me || me.path.length || this.session.playerAway > 0) return true;
+      const near = this.session.state.fixtures
+        .flatMap((f) => fixtureCells(f).map((cell) => ({ f, cell, d: Math.hypot(cell.x - me.pos.x, cell.y - me.pos.y) })))
+        .filter((item) => item.d <= 1.5)
+        .sort((a, b) => a.d - b.d)[0];
+      if (near) {
+        if (furniture(near.f.type).kind === 'counter') {
+          if (this.session.playerAtCounter) this.opts.onRestock?.();
+          else this.walkToCounter();
+        }
+        else this.openSheet(near.f);
+      }
+      return true;
+    }
+    const delta: Record<string, Cell> = {
+      w: { x: 0, y: -1 }, arrowup: { x: 0, y: -1 },
+      s: { x: 0, y: 1 }, arrowdown: { x: 0, y: 1 },
+      a: { x: -1, y: 0 }, arrowleft: { x: -1, y: 0 },
+      d: { x: 1, y: 0 }, arrowright: { x: 1, y: 0 },
+    };
+    const step = delta[normalized];
+    const me = this.agents.get('player');
+    if (!step || !me || this.session.playerAway > 0) return false;
+    const x = Math.max(0, Math.min(DATA.land.cols - 1, Math.round(me.pos.x + step.x)));
+    const y = Math.max(0, Math.min(DATA.land.rows - 1, Math.round(me.pos.y + step.y)));
+    this.onTapPlay(this.geom.gx + (x + 0.5) * this.geom.cell, this.geom.gy + (y + 0.5) * this.geom.cell);
+    return true;
   }
 
   private tryCatch(thief: Agent): void {
@@ -894,7 +1102,9 @@ export class LiveMap {
       const tag = txt(s, x + 2, y + 2, '', { size: 8, bold: true, color: HEX.white }).setPadding(2, 0, 2, 0);
       const bar = s.add.graphics();
       const plus = new Button(s, x + sw - 8, y + 8, { w: 20, h: 20, label: '+', size: 13, color: C.green, radius: 10, onTap: () => {
-        if (this.session.startRefill(r, i)) { play('step'); this.refreshSheet(); } else this.say('Ô này chưa nạp được');
+        const manual = !!state.settings.carryStock;
+        const ok = manual ? this.session.startRefillFromHand(r, i, slot.productId!) : this.session.startRefill(r, i);
+        if (ok) { play('step'); this.refreshSheet(); } else this.say(manual ? 'Lấy món này ở kho trước nhé' : 'Ô này chưa nạp được');
       } });
       this.sheet.add([qty, tag, bar, plus]);
       this.slotViews.push({ slot: i, qty, tag, plus, bar, x, y });
@@ -928,6 +1138,7 @@ export class LiveMap {
     const s = this.scene;
     const state = this.session.state;
     const lines = warehouseLines({ warehouse: state.warehouse, prices: state.prices })
+      .filter((l) => !state.settings.carryStock || this.session.carriedQty(l.productId) > 0)
       .filter((l) => { const p = product(l.productId); return !p.behindCounter && !p.recipeOnly && placeError(state, r, l.productId) === null; })
       .slice(0, 8);
     const rows = Math.max(1, Math.ceil(lines.length / 2));
@@ -940,7 +1151,9 @@ export class LiveMap {
       const by = y0 + 34 + Math.floor(k / 2) * 34;
       this.sheet.add(new Button(s, bx + 70, by + 14, { w: 140, h: 30, label: `${l.name} (${l.qty})`, size: 10, color: C.wood, onTap: () => {
         try {
-          const qty = assignSlot(state, r, i, l.productId);
+          const qty = state.settings.carryStock
+            ? (this.session.startRefillFromHand(r, i, l.productId) ? this.session.carriedQty(l.productId) : 0)
+            : assignSlot(state, r, i, l.productId);
           play('step');
           this.say(`📦 Bày ${l.name} x${qty}`);
           this.redrawFixtures();
@@ -958,15 +1171,22 @@ export class LiveMap {
     const shown = lines.slice(0, 12);
     const rows = Math.max(1, Math.ceil(shown.length / 2));
     const w = 300;
-    const h = 34 + rows * 22 + (lines.length > shown.length ? 18 : 6);
+    const manual = !!state.settings.carryStock;
+    const h = 34 + rows * (manual ? 36 : 22) + (manual ? 36 : lines.length > shown.length ? 18 : 6);
     const { x0, y0 } = this.sheetFrame(f, w, h, `📦 Kho · ${warehouseCellsUsed(state.warehouse)}/${warehouseCapacity(state)} ô`);
     if (!shown.length) this.sheet.add(txt(s, x0 + 12, y0 + 34, 'Kho trống', { size: 11, color: HEX.muted }));
     shown.forEach((l, k) => {
       const x = x0 + 10 + (k % 2) * 144;
-      const y = y0 + 32 + Math.floor(k / 2) * 22;
+      const y = y0 + 32 + Math.floor(k / 2) * (manual ? 36 : 22);
       this.sheet.add(productIcon(s, x + 8, y + 8, product(l.productId), 16));
       this.sheet.add(txt(s, x + 20, y + 1, `${l.name} x${l.qty}`, { size: 10, wrap: 120 }));
+      if (manual) this.sheet.add(new Button(s, x + 72, y + 25, { w: 138, h: 22, label: `+1 thùng · tay ${this.session.carriedQty(l.productId)}`, size: 9, color: C.green, onTap: () => {
+        const got = this.session.pickUpStock(l.productId);
+        this.say(got ? `📦 Lấy ${l.name} x${got}` : 'Tay đã đầy hoặc kho hết hàng');
+        this.openWarehouseSheet(f);
+      } }));
     });
+    if (manual) this.sheet.add(new Button(s, x0 + w / 2, y0 + h - 16, { w: 122, h: 24, label: 'Cất lại', size: 10, color: C.wood, onTap: () => { this.session.clearCarrying(); this.openWarehouseSheet(f); } }));
     if (lines.length > shown.length) this.sheet.add(txt(s, x0 + w - 12, y0 + h - 16, `+${lines.length - shown.length} món khác`, { size: 9, color: HEX.muted, origin: [1, 0] }));
   }
 
@@ -1014,7 +1234,7 @@ export class LiveMap {
       if (!slot) continue;
       const prog = this.session.isRefilling(r, v.slot);
       v.qty.setText(slot.productId ? `${slot.qty}/${cap}` : '').setColor(slot.productId && slot.qty === 0 ? HEX.red : HEX.ink);
-      v.plus.setVisible(prog === null && canRefill(state, r, v.slot));
+      v.plus.setVisible(prog === null && canRefill(state, r, v.slot) && (!state.settings.carryStock || this.session.carriedQty(slot.productId!) > 0));
       const fresh = slot.productId && slot.qty > 0 ? slotFreshness(slot, state.day) : null;
       if (slot.clearance && slot.qty > 0) v.tag.setText(`-${slot.clearance}%`).setBackgroundColor(HEX.red).setVisible(true);
       else if (fresh === 'today') v.tag.setText('HẠN').setBackgroundColor(HEX.red).setVisible(true);
@@ -1044,7 +1264,22 @@ export class LiveMap {
     const shopping = this.session.shoppers.length + this.session.entrants.length;
     const queued = this.session.queue.length + this.session.ready.length + this.session.lanes.reduce((n, l) => n + l.queue.length, 0);
     const counts = `🛒 ${shopping} đang chọn · 🧾 ${queued} chờ tính tiền · 👥 ${this.session.presentStaff().length} NV`;
+    const landscape = W > H;
     if (this.mode === 'play') {
+      if (landscape) {
+        const txtX = 10;
+        const txtY = 236;
+        if (this.noteLeft > 0) {
+          L.add(txt(s, txtX, txtY, this.note, { size: 9.5, bold: true, color: '#ffe082', wrap: 104 }));
+          L.add(txt(s, txtX, txtY + 34, `🛒 ${shopping} chọn\n🧾 ${queued} chờ`, { size: 9.5, color: '#f5ecd7', wrap: 104 }));
+        } else {
+          L.add(txt(s, txtX, txtY, `🛒 ${shopping} chọn\n🧾 ${queued} chờ quầy`, { size: 10, bold: true, color: '#f5ecd7', wrap: 104 }));
+          if (this.session.presentStaff().length > 0) {
+            L.add(txt(s, txtX, txtY + 36, `👥 ${this.session.presentStaff().length} nhân viên`, { size: 9.5, color: HEX.muted }));
+          }
+        }
+        return;
+      }
       const head = txt(s, 8, this.infoY, this.noteLeft > 0 ? this.note : this.playerStatus(), { size: 11, bold: true, color: HEX.cream, wrap: W - 96 });
       L.add(head);
       // Dải trạng thái chỉ đủ chỗ ~2 dòng: dòng thông báo dài bị xuống dòng thì tạm ẩn dòng đếm để không đè chữ.

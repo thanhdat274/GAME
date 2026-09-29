@@ -1,34 +1,33 @@
 import Phaser from 'phaser';
+import { gameDimensionsForViewport } from './layout';
 
-/**
- * Tự động tính chiều cao theo tỉ lệ màn hình thiết bị:
- * Chuẩn base là 360x640 (16:9).
- * Trên màn hình dọc điện thoại (iPhone/Android tỉ lệ 18:9 ~ 21:9),
- * game tự mở rộng chiều cao (640 -> 840) để lấp đầy 100% màn hình,
- * loại bỏ hoàn toàn dải đen trên/dưới.
- * Màn hình ngang (máy tính) vốn đã có dải hai bên, nên dùng khung cao đủ hiện 4 hàng kệ.
- */
-export function computeGameHeight(): number {
-  if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
-    return 640;
-  }
-  if (typeof window === 'undefined') return 640;
+export interface GameDimensions { width: number; height: number }
+
+/** Logical canvas base chosen from the safe-area-adjusted #game box. */
+export function computeGameDimensions(): GameDimensions {
+  if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) return { width: 360, height: 640 };
+  if (typeof window === 'undefined') return { width: 360, height: 640 };
   const gameEl = typeof document !== 'undefined' ? document.getElementById('game') : null;
   const rect = gameEl?.getBoundingClientRect();
-  const w = (rect && rect.width > 0) ? rect.width : ((gameEl?.clientWidth && gameEl.clientWidth > 0) ? gameEl.clientWidth : window.innerWidth);
-  const h = (rect && rect.height > 0) ? rect.height : ((gameEl?.clientHeight && gameEl.clientHeight > 0) ? gameEl.clientHeight : window.innerHeight);
-  if (!w || !h) return 640;
-  const ratio = h / w;
-  if (ratio >= 1.55) {
-    return Math.max(640, Math.round(W * ratio));
-  }
-  // 720 ≥ 640 + 1 hàng kệ (ROW_PITCH 64): đủ cho hàng kệ thứ 4, dư chút cho ô dưới.
-  if (ratio < 1) return 720;
-  return 640;
+  const w = (gameEl?.clientWidth && gameEl.clientWidth > 0) ? gameEl.clientWidth : (rect?.width || window.innerWidth);
+  const h = (gameEl?.clientHeight && gameEl.clientHeight > 0) ? gameEl.clientHeight : (rect?.height || window.innerHeight);
+  if (!w || !h) return { width: 360, height: 640 };
+  return gameDimensionsForViewport(w, h);
 }
 
-export const W = 360;
-export const H = computeGameHeight();
+/** Compatibility helper for callers that only need the height. */
+export function computeGameHeight(): number { return computeGameDimensions().height; }
+
+const initialDimensions = computeGameDimensions();
+export let W = initialDimensions.width;
+export let H = initialDimensions.height;
+
+/** The one mutation point for logical canvas dimensions; ES module imports stay live. */
+export function setGameSize(width: number, height: number): void {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width < 320 || height < 320) return;
+  W = Math.round(width);
+  H = Math.round(height);
+}
 // Keep a fixed integer render scale: several pixel-art textures and UI badges use it for crisp sizing.
 export const ZOOM = 2;
 

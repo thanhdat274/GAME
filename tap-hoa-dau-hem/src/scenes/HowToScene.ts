@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { DATA } from '../core/data';
+import { landscapePageNavigation } from '../ui/page';
 import { Button, panel } from '../ui/widgets';
-import { C, HEX, W, setupCamera, txt } from '../ui/theme';
+import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
 const PAGES = [
   {
@@ -65,13 +66,14 @@ export class HowToScene extends Phaser.Scene {
   create(): void {
     setupCamera(this);
     this.page = 0;
-    txt(this, W / 2, 34, 'Cách chơi', { size: 22, bold: true, color: HEX.cream, origin: [0.5, 0.5] });
-    panel(this, 20, 70, W - 40, 420);
+    txt(this, W / 2, 22, 'Cách chơi', { size: 18, bold: true, color: HEX.cream, origin: [0.5, 0.5] });
+    landscapePageNavigation(this);
+    panel(this, 20, 44, W - 40, H - 90);
     this.content = this.add.container(0, 0);
-    this.dots = txt(this, W / 2, 510, '', { size: 18, color: HEX.cream, origin: [0.5, 0.5] });
-    this.prev = new Button(this, 90, 560, { w: 120, h: 46, label: '‹ Trước', color: C.wood, onTap: () => this.show(this.page - 1) });
-    this.next = new Button(this, W - 90, 560, { w: 120, h: 46, label: 'Tiếp ›', onTap: () => this.show(this.page + 1) });
-    new Button(this, W / 2, 612, { w: 150, h: 36, label: 'Đóng', color: C.grey, size: 13, onTap: () => this.scene.start('Title') });
+    this.dots = txt(this, W / 2, H - 38, '', { size: 14, color: HEX.cream, origin: [0.5, 0.5] });
+    this.prev = new Button(this, W / 2 - 130, H - 18, { w: 96, h: 28, label: '‹ Trước', color: C.wood, size: 12, onTap: () => this.show(this.page - 1) });
+    this.next = new Button(this, W / 2 + 130, H - 18, { w: 96, h: 28, label: 'Tiếp ›', size: 12, onTap: () => this.show(this.page + 1) });
+    new Button(this, W / 2, H - 18, { w: 80, h: 28, label: 'Đóng', color: C.grey, size: 12, onTap: () => this.scene.start('Title') });
     this.show(0);
   }
 
@@ -83,11 +85,17 @@ export class HowToScene extends Phaser.Scene {
     this.page = Math.max(0, i);
     const p = PAGES[this.page];
     this.content.removeAll(true);
-    this.content.add([
-      txt(this, W / 2, 150, p.icon, { size: 72, emoji: true, origin: [0.5, 0.5] }),
-      txt(this, W / 2, 230, p.title, { size: 20, bold: true, origin: [0.5, 0.5], align: 'center', wrap: 280 }),
-      txt(this, W / 2, 262, p.body, { size: 16, origin: [0.5, 0], align: 'center', wrap: 270, color: HEX.ink }),
-    ]);
+    {
+      const leftColX = Math.round(W * 0.22);
+      const rightColX = Math.round(W * 0.40);
+      const textWrapW = W - rightColX - 36;
+      this.content.add([
+        txt(this, leftColX, Math.round(H * 0.35), p.icon, { size: 52, emoji: true, origin: [0.5, 0.5] }),
+        txt(this, leftColX, Math.round(H * 0.58), p.title, { size: 15, bold: true, origin: [0.5, 0.5], align: 'center', wrap: Math.round(W * 0.28) }),
+        txt(this, rightColX, 62, p.body, { size: 14, origin: [0, 0], align: 'left', wrap: textWrapW, color: HEX.ink }),
+      ]);
+    }
+
     this.dots.setText(PAGES.map((_, k) => (k === this.page ? '●' : '○')).join(' '));
     this.prev.setEnabled(this.page > 0);
     this.next.setText(this.page === PAGES.length - 1 ? 'Xong ✓' : 'Tiếp ›');

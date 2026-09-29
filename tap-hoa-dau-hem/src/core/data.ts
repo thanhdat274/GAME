@@ -111,6 +111,7 @@ export interface Balance {
     playerTilesPerSecond: number;
     /** Hệ số mất kiên nhẫn của khách ở quầy người chơi khi người chơi đang đi nạp kệ. */
     awayPatienceRate: number;
+    carry: { carryStacks: number; carryUnitsPerStack: number };
   };
   zoneWalkSeconds: number;
   pickSeconds: number;
@@ -229,10 +230,12 @@ export interface Balance {
 
 export type TaxKind = 'goods' | 'food' | 'service';
 
-/** Thuế hộ kinh doanh: miễn dưới ngưỡng doanh thu năm, vượt ngưỡng thì nộp VAT + TNCN theo % doanh thu. */
+/** Thuế hộ kinh doanh và doanh nghiệp theo chính sách Việt Nam đang áp dụng năm 2026. */
 export interface TaxBalance {
-  /** Ngưỡng doanh thu mỗi năm game được miễn thuế. */
+  /** Ngưỡng doanh thu năm dưới đó hộ/cá nhân kinh doanh không chịu VAT và TNCN. */
   yearlyThreshold: number;
+  householdPitMethodThreshold: number;
+  householdPitProfitRate: number;
   rates: Record<TaxKind, { vat: number; pit: number }>;
   /** Hạn nộp: số ngày tính từ ngày đầu tháng mới. */
   dueDays: number;
@@ -240,7 +243,7 @@ export interface TaxBalance {
   remindDays: number;
   /** Tiền chậm nộp mỗi ngày quá hạn (tỉ lệ trên số thuế còn nợ). */
   lateInterestPerDay: number;
-  /** Quá hạn bấy nhiêu ngày thì bị cưỡng chế trừ thẳng vào tiền mặt. */
+  /** Quy tắc cưỡng chế là gameplay, không đại diện mốc pháp luật thực tế. */
   enforceAfterDays: number;
   /** Tiền phạt khi bị cưỡng chế (tỉ lệ trên số thuế). */
   enforceFine: number;
@@ -267,7 +270,7 @@ export interface TaxBalance {
   invoiceCustomer: { type: string; chance: number; companyChance: number; bonusExp: number; noInvoiceMaxStars: number };
   /** Khấu trừ thuế TNCN của nhân viên có lương ngày vượt mức. */
   staffPit: { dailyThreshold: number; rate: number };
-  company: { setupCost: number; vatRate: number; citRate: number; supplierDiscount: number; partyRewardMul: number };
+  company: { setupCost: number; vatRate: number; citRate: number; citRateSmall: number; citRateMedium: number; citRevenueSmall: number; citRevenueMedium: number; supplierDiscount: number; partyRewardMul: number };
   /** EXP thưởng khi quyết toán năm không trễ hạn, không bị truy thu. */
   settlementExp: number;
 }
@@ -315,7 +318,7 @@ export interface StaffBalance {
   shifts: { name: string; from: number; to: number }[];
 }
 
-export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'branch_manager' | 'xoi_cook' | 'guard';
+export type StaffRole = 'cashier' | 'refill' | 'stocker' | 'delivery' | 'chef' | 'barista' | 'tea_barista' | 'foam_specialist' | 'branch_manager' | 'xoi_cook' | 'guard';
 export type StatKey = 'speed' | 'accuracy' | 'friendly' | 'stamina';
 export type StaffStats = Record<StatKey, number>;
 export interface Look { shirt: string; pants: string; hair: string; skin: string }

@@ -13,7 +13,8 @@
   "queuePatienceRate": 0.5,
   "topDown": {
     "playerTilesPerSecond": 4,
-    "awayPatienceRate": 0.6
+    "awayPatienceRate": 0.6,
+    "carry": { "carryStacks": 2, "carryUnitsPerStack": 20 }
   },
   "zoneWalkSeconds": 1.2,
   "pickSeconds": 0.8,
@@ -416,7 +417,7 @@
     "maxExtraOrders": 2
   },
   "chain": {
-    "maxStores": 12
+    "maxStores": 11
   },
   "stickyRice": {
     "soakMinMinutes": 360,

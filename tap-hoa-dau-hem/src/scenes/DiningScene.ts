@@ -4,7 +4,7 @@ import { cleanDiningTable, diningTableName, diningTableStatus, ensureDiningTable
 import { G, persist } from '../game';
 import { pageFrame, card } from '../ui/page';
 import { Button, dialog, toast } from '../ui/widgets';
-import { C, HEX, W, setupCamera, txt } from '../ui/theme';
+import { C, H, HEX, W, setupCamera, txt } from '../ui/theme';
 
 export class DiningScene extends Phaser.Scene {
   constructor() { super('Dining'); }
@@ -27,6 +27,31 @@ export class DiningScene extends Phaser.Scene {
     const tables = G.state.diningTables;
     if (!tables.length) {
       txt(this, W / 2, 180, 'Chưa có bàn ăn. Mở Đất E hoặc F rồi đặt bàn trong mục Sắp xếp.', { size: 13, color: HEX.muted, origin: [0.5, 0.5], align: 'center', wrap: W - 44 });
+      return;
+    }
+    const landscape = W > H;
+    if (landscape) {
+      const columns = 2;
+      const gap = 8;
+      const cardW = (W - 24 - gap) / columns;
+      tables.slice(0, 6).forEach((table, index) => {
+        const col = index % columns;
+        const row = Math.floor(index / columns);
+        const x = 8 + col * (cardW + gap);
+        const y = 66 + row * 92;
+        const needsAction = table.status === 'dirty' || table.status === 'occupied';
+        card(this, x, y, cardW, 84, table.status === 'dirty' ? 0xf9e3dd : table.status === 'occupied' ? 0xe5f0f3 : C.panel);
+        txt(this, x + 10, y + 9, diningTableName(G.state, table.fixtureUid), { size: 12, bold: true, wrap: cardW - 20 });
+        txt(this, x + 10, y + 32, diningTableStatus(table), { size: 9, color: table.status === 'dirty' ? HEX.red : HEX.muted, wrap: needsAction ? cardW - 126 : cardW - 20 });
+        if (table.status === 'dirty') {
+          new Button(this, x + cardW - 58, y + 65, { w: 104, h: 28, label: '🧹 Dọn bàn', size: 10, color: C.green, onTap: () => {
+            if (cleanDiningTable(G.state, table.fixtureUid)) { persist(); this.scene.restart(); }
+          } });
+        } else if (table.status === 'occupied') {
+          new Button(this, x + cardW - 58, y + 65, { w: 104, h: 28, label: '🍽 Gọi thêm', size: 10, color: C.blue, onTap: () => this.offerExtras(table.fixtureUid) })
+            .setEnabled(table.extraOrders < DATA.balance.dining.maxExtraOrders && G.state.counter.some((slot) => slot.productId && slot.qty > 0 && DATA.recipes.some((recipe) => recipe.output === slot.productId)));
+        }
+      });
       return;
     }
     tables.slice(0, 5).forEach((table, index) => {

@@ -656,7 +656,8 @@
       "shelves": 3,
       "staffSlots": 16,
       "features": [
-        "shop_tea"
+        "shop_tea",
+        "tea_barista"
       ],
       "label": "Tiệm trà sữa · Quầy pha trà",
       "traffic": 8.7
@@ -745,7 +746,8 @@
       "shelves": 3,
       "staffSlots": 18,
       "features": [
-        "foam_machine"
+        "foam_machine",
+        "foam_specialist"
       ],
       "label": "Máy đánh foam · Hồng trà macchiato",
       "traffic": 9.7

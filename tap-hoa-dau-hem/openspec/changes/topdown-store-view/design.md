@@ -1,6 +1,6 @@
 ## Context
 
-- Mặt bằng tiệm là lưới 8×8 (`land.json`). `layout.ts` đã có `walkableGrid`, `accessCells` và `findPath` (BFS). `DaySession` dùng chúng để tính thời gian khách đi tới kệ, nhưng góc nhìn ngang chỉ vẽ khách đi theo một đường thẳng.
+- Mặt bằng tiệm là lưới 10×10 (`land.json`). `layout.ts` đã có `walkableGrid`, `accessCells` và `findPath` (BFS). `DaySession` dùng chúng để tính thời gian khách đi tới kệ, nhưng góc nhìn ngang chỉ vẽ khách đi theo một đường thẳng.
 - Mỗi tiệm trong chuỗi lưu dữ liệu riêng trong `stores[].data`; tiệm đang đứng nằm trực tiếp trên `GameState`.
 
 ## Decisions
@@ -45,5 +45,5 @@ Tỉ lệ khách bỏ về vì chờ không tăng. Người thật chậm hơn b
 
 - **Khách đi qua nhau:** khách và nhân viên đi xuyên qua nhau vì không có tránh va chạm khi di chuyển. Chỉ những người đứng yên chung một ô mới được dàn ra.
 - **Nội thất chưa vẽ riêng:** nội thất vẫn dùng sprite của màn Sắp xếp. Nhân vật mới có dáng mặt trước, quay lưng và lật trái phải, chưa có sprite nghiêng thật.
-- **Bản đồ cố định 8×8:** mở rộng mặt bằng là thay đổi dữ liệu `land.json` và bố cục màn Sắp xếp, để lại cho một change sau.
+- **Bản đồ cố định 10×10:** mở rộng mặt bằng là thay đổi dữ liệu `land.json` và bố cục màn Sắp xếp, để lại cho một change sau.
 - **Hiệu năng chưa đo được thật:** trong trình duyệt giả lập vẽ bằng CPU, riêng phần cập nhật sơ đồ tốn khoảng 0,1 ms mỗi khung hình, nhưng FPS tuyệt đối thấp ở cả hai góc nhìn khi có khách. Cần đo trên điện thoại thật.

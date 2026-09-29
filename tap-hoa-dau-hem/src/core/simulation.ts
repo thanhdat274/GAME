@@ -1,5 +1,5 @@
 import { DATA, type FurnitureDef, type StaffRole } from './data';
-import { openBranch, visitStore } from './branches';
+import { ACTIVE_BRANCH_IDS, openBranch, visitStore } from './branches';
 import { createNewGame, emptySlots, syncActiveStore, type GameState, type ShelfZone, type Staff } from './state';
 import { ensureDiningTables } from './dining';
 import { ensureDailyQuests } from './quests';
@@ -33,7 +33,7 @@ export function createMaxLevelSimulation(): GameState {
   state.tax.invoiceMachine = true;
 
   // Mở tất cả địa điểm có trong dữ liệu. Tiền và cấp độ dùng chung trong toàn chuỗi.
-  for (const branch of DATA.branches) {
+  for (const branch of DATA.branches.filter((item) => ACTIVE_BRANCH_IDS.includes(item.id as (typeof ACTIVE_BRANCH_IDS)[number]))) {
     const result = openBranch(state, branch.id);
     if (!result.ok) throw new Error(`Không mở được chi nhánh ${branch.id} trong hồ sơ max: ${result.reason}`);
   }
@@ -224,8 +224,8 @@ function placeGroceryFurniture(state: GameState, stores: string[]): void {
 function createFullRoster(state: GameState, storeId: string): Staff[] {
   const shopType = activeShopType(state).def.id;
   const roles: StaffRole[] = shopType === 'xoi'
-    ? ['xoi_cook', 'cashier', 'stocker', 'delivery', 'branch_manager', 'chef', 'barista', 'refill']
-    : ['cashier', 'refill', 'stocker', 'delivery', 'chef', 'barista', 'branch_manager', 'xoi_cook'];
+    ? ['xoi_cook', 'cashier', 'stocker', 'delivery', 'branch_manager', 'chef', 'barista', 'tea_barista', 'foam_specialist', 'refill']
+    : ['cashier', 'refill', 'stocker', 'delivery', 'chef', 'barista', 'tea_barista', 'foam_specialist', 'branch_manager', 'xoi_cook'];
   const count = staffSlots(state.level);
   return Array.from({ length: count }, (_, index) => {
     const role = roles[index % roles.length];

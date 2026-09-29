@@ -808,9 +808,20 @@ describe('chế độ quản lý', () => {
 describe('thu nhập offline', () => {
   function managerShop(): GameState {
     const s = shop(20);
+    s.manager.enabled = true;
     s.managerStats = [{ day: 1, revenue: 0, profit: 0, sold: { mi_goi: 20 } }];
     return s;
   }
+
+  it('không vận hành khi đã tắt chế độ quản lý', () => {
+    const s = managerShop();
+    s.manager.enabled = false;
+    const day = s.day;
+    const money = s.money;
+    expect(applyOfflineIncome(s, 2 * 3_600_000)).toBeNull();
+    expect(s.day).toBe(day);
+    expect(s.money).toBe(money);
+  });
 
   it('vắng 2 giờ: 2 ngày trôi qua, bán 60% nhu cầu, cộng tiền và trừ lương, điện', () => {
     const s = managerShop();

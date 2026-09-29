@@ -719,20 +719,23 @@ export class CityScene extends Phaser.Scene {
   }
 
   private openPersonSheet(npc: Actor): void {
-    const h = SHEET_H;
+    const landscape = W > H;
+    const sheetW = landscape ? 264 : W - 16;
+    const h = landscape ? H - 56 : SHEET_H;
     this.sheetH = h;
-    const top = H - h - 8;
+    const left = landscape ? W - sheetW - 8 : 8;
+    const top = landscape ? 48 : H - h - 8;
     const sheet = this.add.container(0, 0).setDepth(200);
     this.sheet = sheet;
-    const blocker = this.add.rectangle(W / 2, top + h / 2, W - 16, h, 0x000000, 0).setInteractive();
-    sheet.add([blocker, card(this, 8, top, W - 16, h, C.panel)]);
-    sheet.add(txt(this, 18, top + 10, `🧑 ${npc.name} · ${npc.type.name}`, { size: 14, bold: true, wrap: W - 80 }));
-    sheet.add(new Button(this, W - 30, top + 20, { w: 32, h: 28, label: '✕', size: 12, color: C.grey, onTap: () => this.select(null) }));
+    const blocker = this.add.rectangle(left + sheetW / 2, top + h / 2, sheetW, h, 0x000000, 0).setInteractive();
+    sheet.add([blocker, card(this, left, top, sheetW, h, C.panel)]);
+    sheet.add(txt(this, left + 10, top + 10, `🧑 ${npc.name} · ${npc.type.name}`, { size: 13, bold: true, wrap: sheetW - 48 }));
+    sheet.add(new Button(this, left + sheetW - 20, top + 18, { w: 32, h: 28, label: '✕', size: 12, color: C.grey, onTap: () => this.select(null) }));
     const lines = this.personLines(npc);
-    const status = txt(this, 18, top + 36, lines.status, { size: 11, bold: true, color: HEX.ink, wrap: W - 48 });
-    const plan = txt(this, 18, top + 56, lines.plan, { size: 10, color: HEX.ink, wrap: W - 48 });
-    sheet.add([status, plan, txt(this, 18, top + h - 66, lines.likes, { size: 9, color: HEX.muted, wrap: W - 48 })]);
-    sheet.add(new Button(this, W / 2, top + h - 30, { w: 150, h: 34, label: '📍 Theo dõi', size: 12, color: C.blue, onTap: () => { this.follow = true; } }));
+    const status = txt(this, left + 10, top + 38, lines.status, { size: 11, bold: true, color: HEX.ink, wrap: sheetW - 20 });
+    const plan = txt(this, left + 10, top + 64, lines.plan, { size: 10, color: HEX.ink, wrap: sheetW - 20 });
+    sheet.add([status, plan, txt(this, left + 10, top + h - 68, lines.likes, { size: 9, color: HEX.muted, wrap: sheetW - 20 })]);
+    sheet.add(new Button(this, left + sheetW / 2, top + h - 30, { w: Math.min(150, sheetW - 24), h: 34, label: '📍 Theo dõi', size: 12, color: C.blue, onTap: () => { this.follow = true; } }));
     this.personUi = { status, plan };
     this.personTimer = 0;
   }
@@ -756,10 +759,11 @@ export class CityScene extends Phaser.Scene {
   }
 
   private buildZoomButtons(): void {
-    const x = W - 26;
-    new Button(this, x, 86, { w: 36, h: 36, label: '+', size: 20, color: C.wood, onTap: () => this.setZoomIndex(this.zoomIndex + 1) });
-    new Button(this, x, 170, { w: 36, h: 36, label: '◎', size: 16, color: C.blue, onTap: () => { this.select(null); this.follow = true; } });
-    new Button(this, x, 128, { w: 36, h: 36, label: '−', size: 20, color: C.wood, onTap: () => this.setZoomIndex(this.zoomIndex - 1) });
+    const landscape = W > H;
+    const x = landscape ? 24 : W - 26;
+    new Button(this, x, 72, { w: 34, h: 34, label: '+', size: 20, color: C.wood, onTap: () => this.setZoomIndex(this.zoomIndex + 1) });
+    new Button(this, x, 114, { w: 34, h: 34, label: '−', size: 20, color: C.wood, onTap: () => this.setZoomIndex(this.zoomIndex - 1) });
+    new Button(this, x, 156, { w: 34, h: 34, label: '◎', size: 15, color: C.blue, onTap: () => { this.select(null); this.follow = true; } });
   }
 
   // ---- Bảng thông tin -------------------------------------------------------------------------
@@ -776,16 +780,25 @@ export class CityScene extends Phaser.Scene {
     }
   }
 
-  /** Cuộn để tòa nhà nằm giữa vùng trống phía trên bảng thông tin, không bị bảng che. */
+  /** Cuộn để tòa nhà nằm giữa vùng trống bản đồ, không bị bảng che. */
   private revealAboveSheet(lot: CityLot): void {
     this.follow = false;
-    const regionTop = 58;
-    const regionBottom = H - this.sheetH - 16;
+    const landscape = W > H;
     const k = ZOOM / this.zoomScale;
-    this.pan = {
-      x: (lot.x + lot.w / 2) * this.map.tile - (W / 2) * k,
-      y: (lot.y + lot.h / 2) * this.map.tile - ((regionTop + regionBottom) / 2) * k,
-    };
+    if (landscape) {
+      const clearW = W - 276;
+      this.pan = {
+        x: (lot.x + lot.w / 2) * this.map.tile - (clearW / 2) * k,
+        y: (lot.y + lot.h / 2) * this.map.tile - (H / 2) * k,
+      };
+    } else {
+      const regionTop = 58;
+      const regionBottom = H - this.sheetH - 16;
+      this.pan = {
+        x: (lot.x + lot.w / 2) * this.map.tile - (W / 2) * k,
+        y: (lot.y + lot.h / 2) * this.map.tile - ((regionTop + regionBottom) / 2) * k,
+      };
+    }
     this.applyCamera();
   }
 
@@ -793,40 +806,59 @@ export class CityScene extends Phaser.Scene {
     const s = G.state;
     const { lot, def } = view;
     const store = s.stores.find((st) => st.id === lot.storeId);
-    // Đặc điểm riêng của loại tiệm (từ shopTypes.json › mechanics) làm bảng cao thêm.
     const traits = lot.storeId ? describeMechanics(shopTypeDef(def?.shopType ?? 'grocery')) : [];
-    const h = SHEET_H + traits.length * 13;
+    const landscape = W > H;
+    const sheetW = landscape ? 264 : W - 16;
+    const h = landscape ? H - 56 : SHEET_H + traits.length * 13;
     this.sheetH = h;
-    const top = H - h - 8;
+    const left = landscape ? W - sheetW - 8 : 8;
+    const top = landscape ? 48 : H - h - 8;
     const sheet = this.add.container(0, 0).setDepth(200);
     this.sheet = sheet;
-    // Nền bảng chặn chạm xuyên xuống bản đồ.
-    const blocker = this.add.rectangle(W / 2, top + h / 2, W - 16, h, 0x000000, 0).setInteractive();
-    sheet.add([blocker, card(this, 8, top, W - 16, h, C.panel)]);
-    const title = !lot.storeId ? '🌿 Đất trống' : `${def?.icon ?? '🏪'} ${lot.name}`;
-    sheet.add(txt(this, 18, top + 10, title, { size: 14, bold: true }));
-    sheet.add(new Button(this, W - 30, top + 20, { w: 32, h: 28, label: '✕', size: 12, color: C.grey, onTap: () => this.select(null) }));
-    const desc = !lot.storeId ? 'Lô đất chờ khu mới. Sẽ mở khi thành phố mở rộng.' : def?.description ?? 'Cửa hàng gốc của bạn.';
-    sheet.add(txt(this, 18, top + 34, desc, { size: 10, color: HEX.muted, wrap: W - 48 }));
-    if (traits.length) sheet.add(txt(this, 18, top + 78, traits.map((line) => `✦ ${line}`).join('\n'), { size: 9, color: HEX.accentGreen, wrap: W - 48 }));
 
-    const btnY = top + h - 30;
+    const blocker = this.add.rectangle(left + sheetW / 2, top + h / 2, sheetW, h, 0x000000, 0).setInteractive();
+    sheet.add([blocker, card(this, left, top, sheetW, h, C.panel)]);
+    const title = !lot.storeId ? '🌿 Đất trống' : `${def?.icon ?? '🏪'} ${lot.name}`;
+    sheet.add(txt(this, left + 10, top + 10, title, { size: 13, bold: true, wrap: sheetW - 48 }));
+    sheet.add(new Button(this, left + sheetW - 20, top + 18, { w: 32, h: 28, label: '✕', size: 12, color: C.grey, onTap: () => this.select(null) }));
+    const desc = !lot.storeId ? 'Lô đất chờ khu mới. Sẽ mở khi thành phố mở rộng.' : def?.description ?? 'Cửa hàng gốc của bạn.';
+    sheet.add(txt(this, left + 10, top + 34, desc, { size: 9.5, color: HEX.muted, wrap: sheetW - 20 }));
+    if (traits.length) {
+      sheet.add(txt(this, left + 10, top + (landscape ? 74 : 78), traits.map((line) => `✦ ${line}`).join('\n'), { size: 8.5, color: HEX.accentGreen, wrap: sheetW - 20 }));
+    }
+
     if (!lot.storeId) return;
     if (store) {
       const current = s.activeStoreId === lot.storeId;
-      sheet.add(txt(this, 18, top + 62, current ? 'Đang ghé tiệm này' : `Tiệm đã mở · mô phỏng đến ngày ${store.simDay ?? s.branchLastSimDay[lot.storeId] ?? s.day}`, { size: 10, color: current ? HEX.green : HEX.ink, wrap: W - 48 }));
-      const buttons: { label: string; color: number; onTap: () => void }[] = [];
-      if (!current) buttons.push({ label: 'Ghé tiệm', color: C.blue, onTap: () => { visitStore(s, lot.storeId); persist(); this.scene.start('Morning'); } });
-      buttons.push({ label: '🗺️ Xem kệ', color: C.wood, onTap: () => { persist(); this.scene.start('StoreMap', { storeId: lot.storeId, back: 'City' }); } });
-      buttons.push({ label: '📋 Danh sách', color: C.wood, onTap: () => { persist(); this.scene.start('Branches'); } });
-      const bw = Math.min(104, (W - 32 - (buttons.length - 1) * 6) / buttons.length);
-      buttons.forEach((b, i) => sheet.add(new Button(this, 16 + bw / 2 + i * (bw + 6), btnY, { w: bw, h: 36, label: b.label, size: 11, color: b.color, onTap: b.onTap })));
+      const statusY = top + (landscape ? 116 : 62);
+      sheet.add(txt(this, left + 10, statusY, current ? 'Đang ghé tiệm này' : `Tiệm đã mở · mô phỏng đến ngày ${store.simDay ?? s.branchLastSimDay[lot.storeId] ?? s.day}`, { size: 9.5, color: current ? HEX.green : HEX.ink, wrap: sheetW - 20 }));
+
+      if (landscape) {
+        let bY = top + h - 80;
+        if (!current) {
+          sheet.add(new Button(this, left + sheetW / 2, bY, { w: sheetW - 24, h: 32, label: 'Ghé tiệm', size: 11, color: C.blue, onTap: () => { visitStore(s, lot.storeId); persist(); this.scene.start('Morning'); } }));
+        }
+        bY = top + h - 28;
+        const halfBtnW = Math.floor((sheetW - 32) / 2);
+        sheet.add(new Button(this, left + 10 + halfBtnW / 2, bY, { w: halfBtnW, h: 32, label: '🗺️ Xem kệ', size: 10, color: C.wood, onTap: () => { persist(); this.scene.start('StoreMap', { storeId: lot.storeId, back: 'City' }); } }));
+        sheet.add(new Button(this, left + 16 + halfBtnW * 1.5, bY, { w: halfBtnW, h: 32, label: '📋 Danh sách', size: 10, color: C.wood, onTap: () => { persist(); this.scene.start('Branches'); } }));
+      } else {
+        const btnY = top + h - 30;
+        const buttons: { label: string; color: number; onTap: () => void }[] = [];
+        if (!current) buttons.push({ label: 'Ghé tiệm', color: C.blue, onTap: () => { visitStore(s, lot.storeId); persist(); this.scene.start('Morning'); } });
+        buttons.push({ label: '🗺️ Xem kệ', color: C.wood, onTap: () => { persist(); this.scene.start('StoreMap', { storeId: lot.storeId, back: 'City' }); } });
+        buttons.push({ label: '📋 Danh sách', color: C.wood, onTap: () => { persist(); this.scene.start('Branches'); } });
+        const bw = Math.min(104, (W - 32 - (buttons.length - 1) * 6) / buttons.length);
+        buttons.forEach((b, i) => sheet.add(new Button(this, 16 + bw / 2 + i * (bw + 6), btnY, { w: bw, h: 36, label: b.label, size: 11, color: b.color, onTap: b.onTap })));
+      }
       return;
     }
     if (!def) return;
     const available = branchAvailable(s, def);
-    sheet.add(txt(this, 18, top + 62, available ? `Phí mở ${formatMoney(def.cost)}` : `Mở ở Level ${def.unlockLevel}${def.feature && s.level >= def.unlockLevel ? ' (cần mở tính năng)' : ''}`, { size: 10, bold: true, color: available ? HEX.ink : HEX.red, wrap: W - 48 }));
-    const open = new Button(this, W / 2, btnY, { w: 150, h: 36, label: 'Mở tiệm', size: 12, color: C.green, onTap: () => {
+    const costY = top + (landscape ? 116 : 62);
+    sheet.add(txt(this, left + 10, costY, available ? `Phí mở ${formatMoney(def.cost)}` : `Mở ở Level ${def.unlockLevel}${def.feature && s.level >= def.unlockLevel ? ' (cần mở tính năng)' : ''}`, { size: 9.5, bold: true, color: available ? HEX.ink : HEX.red, wrap: sheetW - 20 }));
+    const btnY = top + h - 30;
+    const open = new Button(this, left + sheetW / 2, btnY, { w: Math.min(150, sheetW - 24), h: 36, label: 'Mở tiệm', size: 12, color: C.green, onTap: () => {
       const result = openBranch(s, def.id);
       if (!result.ok) { toast(this, result.reason === 'money' ? 'Chưa đủ tiền mở chi nhánh' : result.reason === 'limit' ? `Đã đạt giới hạn ${maxStores()} cửa hàng` : 'Chưa mở chi nhánh này'); return; }
       persist(); this.scene.start('Morning');

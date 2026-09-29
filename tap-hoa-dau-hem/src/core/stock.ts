@@ -510,6 +510,29 @@ export function refillSlot(state: GameState, shelf: number, slot: number): numbe
   return got;
 }
 
+/** Bày tối đa `limit` món từ kho, giữ thứ tự hạn dùng của các lô. */
+export function refillSlotLimited(state: GameState, shelf: number, slot: number, limit: number): number {
+  const s = slotAt(state, shelf, slot);
+  if (!s.productId || limit <= 0) return 0;
+  let got = 0;
+  for (const lot of takeLots(state, s.productId, Math.min(limit, shelfCapacity(state, shelf) - s.qty))) {
+    putIntoSlot(s, lot.qty, lot.exp);
+    got += lot.qty;
+  }
+  return got;
+}
+
+export function assignSlotLimited(state: GameState, shelf: number, slot: number, productId: string, limit: number): number {
+  const s = slotAt(state, shelf, slot);
+  const error = placeError(state, shelf, productId);
+  if (error) throw new Error(error);
+  if (s.productId !== productId) clearSlot(state, shelf, slot);
+  if (shelfKind(state, shelf) === 'fridge') state.zones[shelf] = null;
+  else if (!zoneOf(state, shelf)) state.zones[shelf] = product(productId).category as ShelfZone;
+  s.productId = productId;
+  return refillSlotLimited(state, shelf, slot, limit);
+}
+
 export function canRefill(state: GameState, shelf: number, slot: number): boolean {
   const s = state.shelves[shelf]?.[slot];
   if (!s || !s.productId || !shelfUsable(state, shelf)) return false;
