@@ -789,6 +789,9 @@ export function storeView(state: GameState, storeId: string): StoreData {
   data.holding ??= [];
   data.storedFixtures ??= [];
   data.counter ??= [];
+  if (data.counter.length < DATA.balance.counterSlots) {
+    data.counter.push(...emptySlots(DATA.balance.counterSlots - data.counter.length));
+  }
   data.soakBatches ??= [];
   data.cookedRice ??= [];
   data.activeRecipes ??= [];
@@ -833,6 +836,9 @@ export function activateStore(state: GameState, id: string): boolean {
     else if (key === 'storedFixtures') state.storedFixtures = [];
     else if (key === 'soakBatches') state.soakBatches = [];
     else if (key === 'cookedRice') state.cookedRice = [];
+  }
+  if (state.counter.length < DATA.balance.counterSlots) {
+    state.counter.push(...emptySlots(DATA.balance.counterSlots - state.counter.length));
   }
   if (state.level >= 21 && DATA.land.plots.some((plot) => plot.id === 'H') && !state.land.includes('H')) {
     state.land.push('H');

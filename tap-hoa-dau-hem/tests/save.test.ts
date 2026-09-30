@@ -172,4 +172,28 @@ describe('lưu game', () => {
     expect(loadGame(broken)).toEqual({ status: 'none' });
     expect(() => deleteSave(broken)).not.toThrow();
   });
+
+  it('bản lưu cũ có 4 ô quầy tự mở rộng thành 12 ô và giữ nguyên hàng cũ', () => {
+    const store = new MemoryStore();
+    const game = createNewGame();
+    game.counter = [
+      { productId: 'the_cao', qty: 5 },
+      { productId: 'gas_mini', qty: 3 },
+      { productId: null, qty: 0 },
+      { productId: 'bat_lua', qty: 2 },
+    ];
+    saveGame(game, store);
+    const loaded = loadGame(store);
+    expect(loaded.status).toBe('ok');
+    if (loaded.status === 'ok') {
+      expect(loaded.state.counter.length).toBe(12);
+      expect(loaded.state.counter[0]).toMatchObject({ productId: 'the_cao', qty: 5 });
+      expect(loaded.state.counter[1]).toMatchObject({ productId: 'gas_mini', qty: 3 });
+      expect(loaded.state.counter[2]).toMatchObject({ productId: null, qty: 0 });
+      expect(loaded.state.counter[3]).toMatchObject({ productId: 'bat_lua', qty: 2 });
+      for (let i = 4; i < 12; i++) {
+        expect(loaded.state.counter[i]).toMatchObject({ productId: null, qty: 0 });
+      }
+    }
+  });
 });
