@@ -94,8 +94,11 @@ const CHIP_GROUPS: { cat: Category; icon: string; name: string; note: string; co
 const GROUP_H = 24;
 /** Giữ bao lâu (ms) thì nhấc món lên để kéo thả (vuốt nhanh là cuộn). */
 const CHIP_HOLD_MS = 280;
-const COUNTER_X0 = 96;
-const COUNTER_DX = 72;
+const COUNTER_COLS = 6;
+const COUNTER_ROWS = 2;
+const COUNTER_X0 = 40;
+const COUNTER_DX = 56;
+const COUNTER_DY = 54;
 
 /**
  * Một hàng trong danh sách nhập hàng. Hàng được dựng một lần rồi tái sử dụng khi cuộn
@@ -196,7 +199,7 @@ export class MorningScene extends Phaser.Scene {
     return this.whTop + 78;
   }
   private get counterChipY(): number {
-    return this.whTop + 138;
+    return this.whTop + 184;
   }
 
   constructor() {
@@ -1145,9 +1148,16 @@ export class MorningScene extends Phaser.Scene {
       }
       play('pick');
       this.afterArrange();
-    } else if (p.behindCounter && this.counterMode && Math.abs(ptr.worldY - this.counterSlotY) <= 26) {
-      const counterSlot = Math.round((ptr.worldX - COUNTER_X0) / COUNTER_DX);
-      if (counterSlot >= 0 && counterSlot < G.state.counter.length) {
+    } else if (p.behindCounter && this.counterMode) {
+      const row = Math.round((ptr.worldY - this.counterSlotY) / COUNTER_DY);
+      const col = Math.round((ptr.worldX - COUNTER_X0) / COUNTER_DX);
+      const counterSlot = row * COUNTER_COLS + col;
+      // Chạm ô thật ưu tiên; kéo thả thì dùng cùng lưới hai hàng.
+      if (!(row >= 0 && row < COUNTER_ROWS && col >= 0 && col < COUNTER_COLS
+        && Math.abs(ptr.worldY - (this.counterSlotY + row * COUNTER_DY)) <= 25
+        && Math.abs(ptr.worldX - (COUNTER_X0 + col * COUNTER_DX)) <= 27
+        && counterSlot < G.state.counter.length)) return;
+      {
         if (G.liveSnapshot) { void this.liveCommand({ type: 'assignCounter', slot: counterSlot, productId: id }); return; }
         assignCounterSlot(G.state, counterSlot, id);
         this.afterArrange();
@@ -1161,27 +1171,28 @@ export class MorningScene extends Phaser.Scene {
     this.counterPanel.setVisible(unlocked && this.counterMode);
     if (!unlocked) return;
     const band = this.add.graphics();
-    band.fillStyle(C.woodDark, 0.35).fillRoundedRect(6, this.counterSlotY - 27, W - 12, 54, 10);
-    band.fillStyle(C.woodDark, 1).fillRect(12, this.counterChipY - 42, W - 24, 2);
+    band.fillStyle(C.woodDark, 0.35).fillRoundedRect(6, this.counterSlotY - 26, W - 12, 110, 8);
+    band.fillStyle(C.woodDark, 1).fillRect(12, this.counterSlotY + 86, W - 24, 2);
     this.counterPanel.add(band);
-    this.counterPanel.add(txt(this, 30, this.counterSlotY, 'SAU\nQUẦY', { size: 10, bold: true, color: HEX.cream, origin: [0.5, 0.5], align: 'center' }));
     G.state.counter.forEach((slot, i) => {
-      const x = COUNTER_X0 + i * COUNTER_DX;
-      const y = this.counterSlotY;
+      const col = i % COUNTER_COLS;
+      const row = Math.floor(i / COUNTER_COLS);
+      const x = COUNTER_X0 + col * COUNTER_DX;
+      const y = this.counterSlotY + row * COUNTER_DY;
       const bg = this.add.graphics();
-      bg.fillStyle(C.slot, 1).fillRoundedRect(x - 29, y - 24, 58, 48, 8);
-      bg.lineStyle(1, C.slotEdge, 1).strokeRoundedRect(x - 29, y - 24, 58, 48, 8);
+      bg.fillStyle(C.slot, 1).fillRoundedRect(x - 26, y - 24, 52, 48, 6);
+      bg.lineStyle(1, C.slotEdge, 1).strokeRoundedRect(x - 26, y - 24, 52, 48, 6);
       this.counterPanel.add(bg);
       if (slot.productId) {
         const p = product(slot.productId);
         this.counterPanel.add(productIcon(this, x, y - 8, p, 22));
-        this.counterPanel.add(productName(this, x, y + 23, p, 56, { lines: 1, origin: [0.5, 1] }));
-        this.counterPanel.add(txt(this, x + 27, y - 22, `x${slot.qty}`, { size: 9, bold: true, color: slot.qty > 0 ? HEX.white : HEX.cream, origin: [1, 0] })
+        this.counterPanel.add(productName(this, x, y + 23, p, 50, { lines: 1, origin: [0.5, 1] }));
+        this.counterPanel.add(txt(this, x + 24, y - 22, `x${slot.qty}`, { size: 9, bold: true, color: slot.qty > 0 ? HEX.white : HEX.cream, origin: [1, 0] })
           .setBackgroundColor(slot.qty > 0 ? '#3b2618cc' : '#c0392bcc').setPadding(2, 0, 2, 0));
       } else {
         this.counterPanel.add(txt(this, x, y, '+', { size: 18, bold: true, color: HEX.muted, origin: [0.5, 0.5] }));
       }
-      const hit = this.add.zone(x, y, 60, 50).setInteractive({ useHandCursor: true });
+      const hit = this.add.zone(x, y, 52, 48).setInteractive({ useHandCursor: true });
       hit.on('pointerup', () => {
         if (this.selected) {
           if (!product(this.selected).behindCounter) {
@@ -1289,7 +1300,7 @@ export class MorningScene extends Phaser.Scene {
       this.renderChips();
     } else {
       this.shelves.render(s, { mode: 'arrange' });
-      this.whLabel.setText(`📦 Kho · ${warehouseCellsUsed(s.warehouse)}/${warehouseCapacity(s)} ô${s.deliveries.length ? ' · 🚚 chờ giao' : ''}`);
+      this.whLabel.setText(this.counterMode ? '🔐 Kệ sau quầy · 12 ô' : `📦 Kho · ${warehouseCellsUsed(s.warehouse)}/${warehouseCapacity(s)} ô${s.deliveries.length ? ' · 🚚 chờ giao' : ''}`);
       this.hint.setText(this.selected ? (this.counterMode ? `Chạm ô quầy để đặt ${product(this.selected).name}` : `Chạm ô kệ để bày ${product(this.selected).name}`) : (this.counterMode ? 'Chạm món sau quầy rồi chọn ô quầy' : 'Chạm món rồi chạm ô kệ (hoặc giữ rồi kéo thả)'));
       this.counterTabBtn.setVisible(s.level >= 3);
       this.counterTabBtn.setText(this.counterMode ? '📦 Kho hàng' : '🔐 Sau quầy');

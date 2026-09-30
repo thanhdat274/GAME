@@ -1299,21 +1299,26 @@ export class ShopScene extends Phaser.Scene {
     if (request) {
       const slots = G.state.counter;
       slots.forEach((slot, i) => {
-        const x = 46 + i * 78;
-        const label = slot.productId ? `${product(slot.productId).name}\n×${slot.qty}` : 'Trống';
-        const counterButton = new Button(this, x, PANEL_Y + 174, {
-          w: 70,
-          h: 44,
+        const col = i % 6;
+        const row = Math.floor(i / 6);
+        const x = 40 + col * 56;
+        const y = PANEL_Y + 162 + row * 38;
+        const pName = slot.productId ? product(slot.productId).name : '';
+        const shortName = pName.length > 7 ? pName.slice(0, 6) + '…' : pName;
+        const label = slot.productId ? `${shortName}\n×${slot.qty}` : 'Trống';
+        const counterButton = new Button(this, x, y, {
+          w: 52,
+          h: 34,
           label,
           color: slot.productId === request.productId ? C.green : C.grey,
-          size: 10,
+          size: 9,
           onTap: () => {
             if (G.liveSnapshot) { void this.liveCommand({ type: 'serveCounter', slot: i }); return; }
             const result = this.session.serveCounterRequest(i);
             if (result === 'wrong' || result === 'empty') this.tweens.add({ targets: counterButton, x: x + 4, yoyo: true, repeat: 3, duration: 40, onComplete: () => counterButton.setX(x) });
           },
         });
-        if (slot.productId === request.productId) this.counterPulseTween = this.tweens.add({ targets: counterButton, scale: 1.04, yoyo: true, repeat: -1, duration: 380 });
+        if (slot.productId === request.productId) this.counterPulseTween = this.tweens.add({ targets: counterButton, scale: 1.05, yoyo: true, repeat: -1, duration: 380 });
         L.add(counterButton);
       });
     }

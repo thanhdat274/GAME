@@ -310,7 +310,15 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
     })(),
     settings: { ...base.settings, ...loaded.settings },
     zones: loaded.zones?.length ? loaded.zones : base.zones,
-    counter: loaded.counter?.length ? loaded.counter : base.counter,
+    counter: (() => {
+      const existing = loaded.counter ?? base.counter;
+      const targetLen = DATA.balance.counterSlots;
+      if (!Array.isArray(existing)) return emptySlots(targetLen);
+      if (existing.length < targetLen) {
+        return [...existing, ...emptySlots(targetLen - existing.length)];
+      }
+      return existing;
+    })(),
     fixtures: loaded.fixtures?.length ? loaded.fixtures : base.fixtures,
     storedFixtures: Array.isArray(loaded.storedFixtures) ? loaded.storedFixtures : [],
     diningTables: Array.isArray(loaded.diningTables) ? loaded.diningTables : [],
@@ -325,7 +333,14 @@ export function migrate(file: { version: number; state: Record<string, unknown> 
       money: loaded.money ?? base.money,
     },
     manager: { ...base.manager, ...loaded.manager },
-    stores: (loaded.stores?.length ? loaded.stores : base.stores).map((store) => ({ ...store, shopType: store.shopType ?? 'grocery' })),
+    stores: (loaded.stores?.length ? loaded.stores : base.stores).map((store) => {
+      const shopType = store.shopType ?? 'grocery';
+      const data = store.data ? { ...(store.data as Record<string, unknown>) } : {};
+      if (Array.isArray(data.counter) && data.counter.length < DATA.balance.counterSlots) {
+        data.counter = [...data.counter, ...emptySlots(DATA.balance.counterSlots - data.counter.length)];
+      }
+      return { ...store, shopType, data };
+    }),
     activeStoreId: loaded.activeStoreId ?? 'main',
     calendarStartMonth: loaded.calendarStartMonth ?? base.calendarStartMonth,
     calendarStartYear: loaded.calendarStartYear ?? base.calendarStartYear,

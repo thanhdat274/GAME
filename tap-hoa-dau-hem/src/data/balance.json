@@ -26,7 +26,7 @@
   "scanTipBonus": 1000,
   "cashlessChance": 0.67,
   "uncarriedAskChance": 0.1,
-  "counterSlots": 4,
+  "counterSlots": 12,
   "counterCapacity": 5,
   "counterRequestSeconds": 6,
   "counterWrongPenalty": 2,
